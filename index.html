@@ -1,0 +1,2626 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Salón de Fiestas - Panel DJ/Técnica</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background-color: #f8fafc;
+            color: #1e293b;
+            line-height: 1.6;
+        }
+
+        /* Video Background */
+        .video-background {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -2;
+            overflow: hidden;
+        }
+
+        .video-background video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            position: absolute;
+            top: 0;
+            left: 0;
+            opacity: 0;
+            transition: opacity 1s ease-in-out;
+        }
+
+        .video-background video.loaded {
+            opacity: 1;
+        }
+
+        .video-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: -1;
+        }
+
+        .video-loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            z-index: -2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.2rem;
+            opacity: 1;
+            transition: opacity 0.5s ease-in-out;
+        }
+
+        .video-loading.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        /* Login Styles */
+        .login-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        .login-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 1rem;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
+            padding: 2.5rem;
+            width: 100%;
+            max-width: 400px;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .login-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #3b82f6, #8b5cf6, #ec4899);
+        }
+
+        .logo {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+
+
+        .logo h1 {
+            font-size: 1.875rem;
+            font-weight: 700;
+            color: #1e293b;
+            margin-bottom: 0.5rem;
+        }
+
+        .logo img {
+            max-width: 200px;
+            height: auto;
+            margin-bottom: 0.5rem;
+            transition: transform 0.3s ease-in-out;
+        }
+
+        .logo img:hover {
+            transform: scale(1.05);
+        }
+
+        .logo p {
+            color: #64748b;
+            font-size: 0.875rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: #374151;
+            font-size: 0.875rem;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 2px solid #e5e7eb;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            transition: all 0.2s ease-in-out;
+            background: #f9fafb;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #3b82f6;
+            background: white;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .login-btn {
+            width: 100%;
+            padding: 0.875rem;
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            color: white;
+            border: none;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+        }
+
+        .login-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 10px 20px rgba(59, 130, 246, 0.3);
+        }
+
+        .demo-credentials {
+            background: #f0f9ff;
+            border: 1px solid #bae6fd;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .demo-credentials h4 {
+            color: #0369a1;
+            font-size: 0.875rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .demo-credentials p {
+            color: #0c4a6e;
+            font-size: 0.75rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .demo-credentials h4 {
+            color: #0369a1;
+            font-size: 0.875rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+        }
+
+        /* Dashboard Styles */
+        .dashboard {
+            display: none;
+            min-height: 100vh;
+        }
+
+        .sidebar {
+            width: 280px;
+            height: 100vh;
+            background: linear-gradient(180deg, #1e293b 0%, #334155 100%);
+            color: white;
+            position: fixed;
+            left: 0;
+            top: 0;
+            overflow-y: auto;
+            z-index: 1000;
+            box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .sidebar-header {
+            padding: 2rem 1.5rem 1.5rem;
+            border-bottom: 1px solid #475569;
+        }
+
+        .sidebar-logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+            flex-direction: column;
+            text-align: center;
+        }
+
+
+
+        .sidebar-logo h2 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: white;
+        }
+
+        .sidebar-logo img {
+            max-width: 150px;
+            height: auto;
+            margin-top: 0.5rem;
+            transition: transform 0.3s ease-in-out;
+        }
+
+        .sidebar-logo img:hover {
+            transform: scale(1.05);
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem;
+            background: rgba(59, 130, 246, 0.1);
+            border-radius: 0.5rem;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+        }
+
+        .user-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #3b82f6;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
+
+        .user-details .user-name {
+            font-weight: 600;
+            font-size: 0.875rem;
+            color: white;
+            margin-bottom: 0.25rem;
+        }
+
+        .user-details .user-role {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            text-transform: capitalize;
+        }
+
+        .nav-menu {
+            padding: 1.5rem 0;
+        }
+
+        .nav-section {
+            margin-bottom: 2rem;
+        }
+
+        .section-title {
+            padding: 0 1.5rem 0.75rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem 1.5rem;
+            color: #cbd5e1;
+            text-decoration: none;
+            transition: all 0.2s ease-in-out;
+            cursor: pointer;
+        }
+
+        .nav-item:hover {
+            background: rgba(59, 130, 246, 0.1);
+            color: white;
+        }
+
+        .nav-item.active {
+            background: rgba(59, 130, 246, 0.15);
+            color: #3b82f6;
+            border-right: 3px solid #3b82f6;
+        }
+
+        .nav-icon {
+            font-size: 1.125rem;
+            width: 20px;
+            text-align: center;
+        }
+
+        .nav-text {
+            font-weight: 500;
+            font-size: 0.875rem;
+        }
+
+        .logout-btn {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            width: 100%;
+            padding: 0.75rem 1.5rem;
+            background: none;
+            border: none;
+            color: #ef4444;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+            margin-top: auto;
+        }
+
+        .logout-btn:hover {
+            background: rgba(239, 68, 68, 0.1);
+            color: #dc2626;
+        }
+
+        .main-content {
+            flex: 1;
+            margin-left: 280px;
+            background: #f8fafc;
+            min-height: 100vh;
+        }
+
+        .content-wrapper {
+            padding: 1rem 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .page-header {
+            margin-bottom: 1rem;
+        }
+
+        .events-page .page-header {
+            margin-top: 0;
+            padding-top: 0;
+        }
+
+        .page-header h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #1e293b;
+            margin-bottom: 0.5rem;
+        }
+
+        .page-header p {
+            color: #64748b;
+            font-size: 1rem;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            border-left: 4px solid #3b82f6;
+        }
+
+        .stat-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+        }
+
+        .stat-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+            color: white;
+            background: #3b82f6;
+        }
+
+        .stat-trend {
+            font-size: 0.875rem;
+            color: #10b981;
+            font-weight: 500;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #1e293b;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-label {
+            color: #64748b;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .content-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 1.5rem;
+        }
+
+        .section {
+            background: white;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1.5rem;
+        }
+
+        .section-header h3 {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: #1e293b;
+        }
+
+        .view-all {
+            color: #3b82f6;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+        }
+
+        .view-all:hover {
+            text-decoration: underline;
+        }
+
+        .event-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .event-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            background: #f8fafc;
+            border-left: 3px solid #10b981;
+        }
+
+        .event-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            color: white;
+            background: #10b981;
+        }
+
+        .event-details {
+            flex: 1;
+        }
+
+        .event-title {
+            font-weight: 600;
+            color: #1e293b;
+            margin-bottom: 0.25rem;
+        }
+
+        .event-info {
+            font-size: 0.875rem;
+            color: #64748b;
+        }
+
+        .event-status {
+            font-size: 0.75rem;
+            font-weight: 500;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            text-transform: uppercase;
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .alert-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .alert-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            background: #fef3c7;
+            border-left: 3px solid #f59e0b;
+        }
+
+        .alert-icon {
+            color: #f59e0b;
+            font-size: 1rem;
+        }
+
+        .alert-content {
+            flex: 1;
+        }
+
+        .alert-title {
+            font-weight: 500;
+            color: #1e293b;
+            font-size: 0.875rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .alert-description {
+            font-size: 0.75rem;
+            color: #64748b;
+        }
+
+        .quick-actions {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .quick-action-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 1rem;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+        }
+
+        .quick-action-btn:hover {
+            background: #e2e8f0;
+            transform: translateY(-1px);
+        }
+
+        .action-icon {
+            font-size: 1.5rem;
+            color: #3b82f6;
+        }
+
+        .action-text {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #374151;
+        }
+
+        .error-message {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #dc2626;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            margin-bottom: 1rem;
+            display: none;
+        }
+
+        /* Eventos Page Styles */
+        .events-page {
+            display: none;
+            min-height: 100vh;
+            padding-top: 0;
+            margin-top: 0;
+        }
+
+        .filters-section {
+            background: white;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+        }
+
+        /* Calendar Styles */
+        .calendar-container {
+            background: white;
+            border-radius: 0.75rem;
+            padding: 1.25rem;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+        }
+
+        .calendar-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .calendar-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #1e293b;
+        }
+
+        .calendar-nav {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .calendar-nav-btn {
+            padding: 0.5rem 1rem;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.375rem;
+            background: white;
+            color: #374151;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+        }
+
+        .calendar-nav-btn:hover {
+            background: #f9fafb;
+            border-color: #d1d5db;
+        }
+
+        .calendar-nav-btn.active {
+            background: #3b82f6;
+            color: white;
+            border-color: #3b82f6;
+        }
+
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1.5rem;
+        }
+
+        .month-calendar {
+            background: #f8fafc;
+            border-radius: 0.5rem;
+            padding: 0.75rem;
+        }
+
+        .month-header {
+            text-align: center;
+            margin-bottom: 0.75rem;
+            padding-bottom: 0.375rem;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .month-name {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #1e293b;
+        }
+
+        .calendar-days {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 0.125rem;
+        }
+
+        .day-header {
+            text-align: center;
+            font-size: 0.625rem;
+            font-weight: 600;
+            color: #64748b;
+            padding: 0.25rem 0;
+        }
+
+        .calendar-day {
+            aspect-ratio: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: #374151;
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.25rem;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+            position: relative;
+            min-width: 28px;
+            min-height: 28px;
+            max-width: 32px;
+            max-height: 32px;
+        }
+
+        .calendar-day:hover {
+            background: #f1f5f9;
+            border-color: #cbd5e1;
+        }
+
+        .calendar-day.other-month {
+            color: #cbd5e1;
+            background: #f8fafc;
+        }
+
+        .calendar-day.today {
+            background: #3b82f6;
+            color: white;
+            border-color: #3b82f6;
+            font-weight: 600;
+        }
+
+        .calendar-day.has-event {
+            background: #fef3c7;
+            border-color: #f59e0b;
+            color: #92400e;
+            font-weight: 600;
+            box-shadow: 0 2px 4px rgba(245, 158, 11, 0.2);
+            position: relative;
+        }
+
+        .calendar-day.has-event::before {
+            content: '';
+            position: absolute;
+            top: 1px;
+            right: 1px;
+            width: 4px;
+            height: 4px;
+            background: #f59e0b;
+            border-radius: 50%;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+        }
+
+        .calendar-day.has-event::after {
+            content: '';
+            position: absolute;
+            bottom: 1px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 6px;
+            height: 1px;
+            background: #f59e0b;
+            border-radius: 1px;
+        }
+
+        /* Estados de coordinación para fechas con eventos - FONDO COMPLETO */
+        .calendar-day.has-event.coordinado {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            border-color: #047857;
+            color: white;
+            font-weight: 700;
+            box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+        }
+
+        .calendar-day.has-event.no-coordinado {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            border-color: #b91c1c;
+            color: white;
+            font-weight: 700;
+            box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+        }
+
+        /* Eliminar los indicadores pequeños ya que ahora el fondo completo indica el estado */
+        .calendar-day.has-event.coordinado::before,
+        .calendar-day.has-event.no-coordinado::before,
+        .calendar-day.has-event.coordinado::after,
+        .calendar-day.has-event.no-coordinado::after {
+            display: none;
+        }
+
+        .calendar-day.has-event:hover {
+            transform: scale(1.1);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .calendar-day.has-event.coordinado:hover {
+            background: linear-gradient(135deg, #059669 0%, #047857 100%);
+            border-color: #065f46;
+            transform: scale(1.1);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+        }
+
+        .calendar-day.has-event.no-coordinado:hover {
+            background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+            border-color: #991b1b;
+            transform: scale(1.1);
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+        }
+
+        .calendar-day.selected {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            border-color: #10b981;
+            box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+            transform: scale(1.05);
+            font-weight: 600;
+        }
+
+        .calendar-day.selected:hover {
+            background: linear-gradient(135deg, #059669 0%, #047857 100%);
+            border-color: #047857;
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+        }
+
+        .calendar-legend {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+            color: #64748b;
+            margin-bottom: 0.25rem;
+        }
+
+        .legend-item strong {
+            color: #374151;
+        }
+
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+        }
+
+        .legend-color.event {
+            background: #fef3c7;
+            border: 1px solid #f59e0b;
+        }
+
+        .legend-color.today {
+            background: #3b82f6;
+        }
+
+        .legend-color.selected {
+            background: #10b981;
+        }
+
+        .legend-color.coordinado {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            border: 1px solid #047857;
+        }
+
+        .legend-color.no-coordinado {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            border: 1px solid #b91c1c;
+        }
+
+        @media (max-width: 1024px) {
+            .calendar-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .filters-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+        }
+
+        .filters-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: #1e293b;
+        }
+
+        .clear-filters {
+            color: #3b82f6;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            background: none;
+            border: none;
+            padding: 0;
+        }
+
+        .clear-filters:hover {
+            text-decoration: underline;
+        }
+
+        .filters-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .filter-label {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #374151;
+            margin-bottom: 0.5rem;
+        }
+
+        .filter-select {
+            padding: 0.75rem;
+            border: 2px solid #e5e7eb;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            background: #f9fafb;
+            transition: all 0.2s ease-in-out;
+        }
+
+        .filter-select:focus {
+            outline: none;
+            border-color: #3b82f6;
+            background: white;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .events-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .event-card {
+            background: white;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            border-left: 4px solid #10b981;
+            transition: all 0.2s ease-in-out;
+            display: block;
+        }
+
+        .event-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        .event-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+        }
+
+        .event-type {
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 0.25rem 0.75rem;
+            border-radius: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .event-type.boda {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .event-type.cumpleanos {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .event-type.corporativo {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .event-type.quince {
+            background: #fce7f3;
+            color: #be185d;
+        }
+
+        .event-status {
+            font-size: 0.75rem;
+            font-weight: 500;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            text-transform: uppercase;
+        }
+
+        .event-status.confirmed {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .event-status.pending {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .event-status.cancelled {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .event-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: #1e293b;
+            margin-bottom: 0.5rem;
+        }
+
+        .event-details {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .event-detail {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+            color: #64748b;
+        }
+
+        .event-detail i {
+            width: 16px;
+            color: #94a3b8;
+        }
+
+        .event-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .event-action-btn {
+            padding: 0.5rem 1rem;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.375rem;
+            background: white;
+            color: #374151;
+            font-size: 0.75rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+        }
+
+        .event-action-btn:hover {
+            background: #f9fafb;
+            border-color: #d1d5db;
+        }
+
+        .event-action-btn.primary {
+            background: #3b82f6;
+            color: white;
+            border-color: #3b82f6;
+        }
+
+        .event-action-btn.primary:hover {
+            background: #2563eb;
+            border-color: #2563eb;
+        }
+
+        .no-events {
+            text-align: center;
+            padding: 3rem;
+            color: #64748b;
+        }
+
+        .no-events i {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            color: #cbd5e1;
+        }
+
+        @media (max-width: 1024px) {
+            .content-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .filters-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .events-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Video Loading Screen -->
+    <div class="video-loading" id="videoLoading">
+        <div style="text-align: center;">
+            <div>Cargando experiencia...</div>
+        </div>
+    </div>
+
+    <!-- Video Background -->
+    <div class="video-background">
+        <video autoplay muted loop playsinline>
+            <!-- Video institucional del salón de fiestas -->
+            <source src="INSTITUCIONAL JANO'S.mp4" type="video/mp4">
+            <!-- Video de respaldo -->
+            <source src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4" type="video/mp4">
+            <!-- Fallback para navegadores que no soportan video -->
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); width: 100%; height: 100%;"></div>
+        </video>
+    </div>
+    <div class="video-overlay"></div>
+
+    <!-- Login Screen -->
+    <div id="loginScreen" class="login-container">
+        <div class="login-card">
+            <div class="logo">
+                <img src="LOGO JANOS.png" alt="Logo Jano's" />
+                <p>Panel DJ/Técnica</p>
+            </div>
+
+            <form id="loginForm">
+                <div id="errorMessage" class="error-message"></div>
+                
+                <div class="form-group">
+                    <label for="email" class="form-label">Correo Electrónico (Opcional)</label>
+                    <input type="email" id="email" class="form-input" placeholder="tu@email.com">
+                </div>
+
+                <div class="form-group">
+                    <label for="password" class="form-label">Contraseña (Opcional)</label>
+                    <input type="password" id="password" class="form-input" placeholder="••••••••">
+                </div>
+
+                <button type="submit" class="login-btn">Acceder al Sistema</button>
+            </form>
+
+            <div class="demo-credentials">
+                <h4>🚀 Acceso Rápido:</h4>
+                <p><strong>Opción 1 (Recomendada):</strong> Deja los campos vacíos y haz click en "Acceder al Sistema"</p>
+                <p><strong>Opción 2:</strong> Usa las credenciales de demo para roles específicos:</p>
+                <p style="margin-left: 1rem;"><strong>Admin:</strong> admin@salon.com / 123456</p>
+                <p style="margin-left: 1rem;"><strong>DJ:</strong> dj@salon.com / 123456</p>
+                <p style="margin-left: 1rem;"><strong>Técnico:</strong> tecnico@salon.com / 123456</p>
+                <p style="margin-top: 0.5rem; font-size: 0.8rem; color: #6b7280;"><em>💡 Tip: Para desarrollo rápido, usa la Opción 1</em></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="dashboard" class="dashboard">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">
+                    <img src="LOGO JANOS.png" alt="Logo Jano's" />
+                </div>
+                
+                <div class="user-info">
+                    <div class="user-avatar" id="userAvatar">A</div>
+                    <div class="user-details">
+                        <div class="user-name" id="userName">Administrador</div>
+                        <div class="user-role" id="userRole">Administrador</div>
+                    </div>
+                </div>
+            </div>
+
+            <nav class="nav-menu">
+                <div class="nav-section">
+                    <div class="section-title">Principal</div>
+                    <div class="nav-item active" data-page="dashboard">
+                        <i class="fas fa-home nav-icon"></i>
+                        <span class="nav-text">Dashboard</span>
+                    </div>
+                    <div class="nav-item" data-page="events">
+                        <i class="fas fa-calendar-alt nav-icon"></i>
+                        <span class="nav-text">Eventos</span>
+                    </div>
+                </div>
+
+                <div class="nav-section">
+                    <div class="section-title">DJ & Música</div>
+                    <div class="nav-item" data-page="playlists">
+                        <i class="fas fa-music nav-icon"></i>
+                        <span class="nav-text">Playlists</span>
+                    </div>
+                    <div class="nav-item" data-page="songs">
+                        <i class="fas fa-music nav-icon"></i>
+                        <span class="nav-text">Biblioteca de Música</span>
+                    </div>
+                </div>
+
+                <div class="nav-section">
+                    <div class="section-title">Técnica</div>
+                    <div class="nav-item" data-page="equipment">
+                        <i class="fas fa-tools nav-icon"></i>
+                        <span class="nav-text">Equipamiento</span>
+                    </div>
+                    <div class="nav-item" data-page="maintenance">
+                        <i class="fas fa-tools nav-icon"></i>
+                        <span class="nav-text">Mantenimiento</span>
+                    </div>
+                </div>
+
+                <div class="nav-section" id="adminSection" style="display: none;">
+                    <div class="section-title">Administración</div>
+                    <div class="nav-item" data-page="users">
+                        <i class="fas fa-users nav-icon"></i>
+                        <span class="nav-text">Usuarios</span>
+                    </div>
+                    <div class="nav-item" data-page="reports">
+                        <i class="fas fa-chart-bar nav-icon"></i>
+                        <span class="nav-text">Reportes</span>
+                    </div>
+                    <div class="nav-item" data-page="settings">
+                        <i class="fas fa-cog nav-icon"></i>
+                        <span class="nav-text">Configuración</span>
+                    </div>
+                </div>
+            </nav>
+
+            <button class="logout-btn" onclick="logout()">
+                <i class="fas fa-sign-out-alt nav-icon"></i>
+                <span class="nav-text">Cerrar Sesión</span>
+            </button>
+        </div>
+
+                 <!-- Main Content -->
+         <div class="main-content">
+             <!-- Dashboard Content -->
+             <div class="content-wrapper" id="dashboardContent">
+                <div class="page-header">
+                    <h1>Dashboard</h1>
+                    <p id="welcomeMessage">Bienvenido de vuelta. Aquí tienes un resumen de las actividades del día.</p>
+                </div>
+
+                <!-- Stats Grid -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div class="stat-icon">
+                                <i class="fas fa-calendar-alt"></i>
+                            </div>
+                            <div class="stat-trend">+12%</div>
+                        </div>
+                        <div class="stat-value">8</div>
+                        <div class="stat-label">Eventos Hoy</div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div class="stat-icon">
+                                <i class="fas fa-music"></i>
+                            </div>
+                            <div class="stat-trend">+5%</div>
+                        </div>
+                        <div class="stat-value">24</div>
+                        <div class="stat-label">Playlists Activas</div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div class="stat-icon">
+                                <i class="fas fa-tools"></i>
+                            </div>
+                            <div class="stat-trend">+8%</div>
+                        </div>
+                        <div class="stat-value">15</div>
+                        <div class="stat-label">Equipos Disponibles</div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div class="stat-icon">
+                                <i class="fas fa-exclamation-triangle"></i>
+                            </div>
+                            <div class="stat-trend">-2</div>
+                        </div>
+                        <div class="stat-value">3</div>
+                        <div class="stat-label">Mantenimientos Pendientes</div>
+                    </div>
+                </div>
+
+                <!-- Content Grid -->
+                <div class="content-grid">
+                    <div class="section">
+                        <div class="section-header">
+                            <h3>Próximos Eventos</h3>
+                            <span class="view-all">Ver todos</span>
+                        </div>
+                        <div class="event-list">
+                            <div class="event-item">
+                                <div class="event-icon">
+                                    <i class="fas fa-check-circle"></i>
+                                </div>
+                                <div class="event-details">
+                                    <div class="event-title">Boda María & Juan</div>
+                                    <div class="event-info">Hoy, 20:00 • María González</div>
+                                </div>
+                                <div class="event-status">confirmed</div>
+                            </div>
+                            <div class="event-item">
+                                <div class="event-icon">
+                                    <i class="fas fa-clock"></i>
+                                </div>
+                                <div class="event-details">
+                                    <div class="event-title">Cumpleaños 15 Años</div>
+                                    <div class="event-info">Mañana, 19:00 • Ana Rodríguez</div>
+                                </div>
+                                <div class="event-status">pending</div>
+                            </div>
+                            <div class="event-item">
+                                <div class="event-icon">
+                                    <i class="fas fa-check-circle"></i>
+                                </div>
+                                <div class="event-details">
+                                    <div class="event-title">Evento Corporativo TechCorp</div>
+                                    <div class="event-info">15 Dic, 18:00 • TechCorp S.A.</div>
+                                </div>
+                                <div class="event-status">confirmed</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+                        <div class="section">
+                            <div class="section-header">
+                                <h3>Alertas</h3>
+                            </div>
+                            <div class="alert-list">
+                                <div class="alert-item">
+                                    <div class="alert-icon">
+                                        <i class="fas fa-exclamation-triangle"></i>
+                                    </div>
+                                    <div class="alert-content">
+                                        <div class="alert-title">Mantenimiento Programado</div>
+                                        <div class="alert-description">Altavoz principal necesita revisión</div>
+                                    </div>
+                                </div>
+                                <div class="alert-item">
+                                    <div class="alert-icon">
+                                        <i class="fas fa-check-circle"></i>
+                                    </div>
+                                    <div class="alert-content">
+                                        <div class="alert-title">Nueva Playlist Creada</div>
+                                        <div class="alert-description">DJ Carlos creó playlist para boda</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="section">
+                            <div class="section-header">
+                                <h3>Acciones Rápidas</h3>
+                            </div>
+                            <div class="quick-actions">
+                                <div class="quick-action-btn">
+                                    <div class="action-icon">
+                                        <i class="fas fa-music"></i>
+                                    </div>
+                                    <div class="action-text">Crear Playlist</div>
+                                </div>
+                                <div class="quick-action-btn">
+                                    <div class="action-icon">
+                                        <i class="fas fa-calendar-alt"></i>
+                                    </div>
+                                    <div class="action-text">Nuevo Evento</div>
+                                </div>
+                                <div class="quick-action-btn">
+                                    <div class="action-icon">
+                                        <i class="fas fa-tools"></i>
+                                    </div>
+                                    <div class="action-text">Reportar Problema</div>
+                                </div>
+                                <div class="quick-action-btn">
+                                    <div class="action-icon">
+                                        <i class="fas fa-users"></i>
+                                    </div>
+                                    <div class="action-text">Ver Equipo</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Events Page -->
+        <div class="events-page" id="eventsContent">
+            <div class="content-wrapper">
+                <div class="page-header">
+                    <h1>Eventos</h1>
+                    <p>Gestiona y visualiza todos los eventos programados</p>
+                </div>
+
+            <!-- Filters Section -->
+            <div class="filters-section">
+                <div class="filters-header">
+                    <h3 class="filters-title">Filtros</h3>
+                    <button class="clear-filters" onclick="clearFilters()">Limpiar Filtros</button>
+                </div>
+                <div class="filters-grid">
+                    <div class="filter-group">
+                        <label class="filter-label">Salón</label>
+                        <select class="filter-select" id="salonFilter" onchange="filterEvents()">
+                            <option value="">Todos los salones</option>
+                            <option value="salon-a">Salón A - Principal</option>
+                            <option value="salon-b">Salón B - Intimo</option>
+                            <option value="salon-c">Salón C - Terraza</option>
+                            <option value="salon-d">Salón D - VIP</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label class="filter-label">Zona</label>
+                        <select class="filter-select" id="zonaFilter" onchange="filterEvents()">
+                            <option value="">Todas las zonas</option>
+                            <option value="norte">Zona Norte</option>
+                            <option value="sur">Zona Sur</option>
+                            <option value="este">Zona Este</option>
+                            <option value="oeste">Zona Oeste</option>
+                            <option value="centro">Zona Centro</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label class="filter-label">Año</label>
+                        <select class="filter-select" id="yearFilter" onchange="filterEvents()">
+                            <option value="">Todos los años</option>
+                            <option value="2024">2024</option>
+                            <option value="2025">2025</option>
+                            <option value="2026">2026</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label class="filter-label">Estado de Coordinación</label>
+                        <select class="filter-select" id="coordinationFilter" onchange="filterEvents()">
+                            <option value="">Todos los estados</option>
+                            <option value="coordinado">🟢 Coordinado</option>
+                            <option value="no-coordinado">🔴 No Coordinado</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Calendar Container -->
+            <div class="calendar-container">
+                <div class="calendar-header">
+                    <h2 class="calendar-title" id="calendarTitle">Salón A - Principal - 2024</h2>
+                    <div class="calendar-nav">
+                        <button class="calendar-nav-btn" onclick="switchView('cards')">Tarjetas</button>
+                        <button class="calendar-nav-btn active" onclick="switchView('calendar')">Calendario</button>
+                    </div>
+                </div>
+
+                <!-- Calendar View -->
+                <div id="calendarView">
+                    <div class="calendar-grid" id="calendarGrid">
+                        <!-- Calendar months will be populated by JavaScript -->
+                    </div>
+                    
+                    <div class="calendar-legend">
+                        <div class="legend-item">
+                            <div class="legend-color coordinado"></div>
+                            <span><strong>✓ Coordinado</strong> - DJ ya coordinó</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color no-coordinado"></div>
+                            <span><strong>! No Coordinado</strong> - Pendiente de coordinación</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color today"></div>
+                            <span>Hoy</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color selected"></div>
+                            <span>Seleccionado</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Cards View (Hidden by default) -->
+                <div id="cardsView" style="display: none;">
+                    <div class="events-grid" id="eventsGrid">
+                        <div class="no-events" id="loadingEvents">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            <h3>Cargando eventos...</h3>
+                            <p>Por favor espera mientras se cargan los eventos.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            </div>
+        </div>
+
+    <script>
+        // Mock users data
+        const users = [
+            {
+                id: '1',
+                email: 'admin@salon.com',
+                name: 'Administrador',
+                role: 'admin',
+                password: '123456'
+            },
+            {
+                id: '2',
+                email: 'dj@salon.com',
+                name: 'DJ Carlos',
+                role: 'dj',
+                password: '123456'
+            },
+            {
+                id: '3',
+                email: 'tecnico@salon.com',
+                name: 'Técnico Juan',
+                role: 'technician',
+                password: '123456'
+            }
+        ];
+
+        let currentUser = null;
+
+        // Función para agregar campo de coordinación a eventos que no lo tengan
+        function addCoordinationToEvents() {
+            events.forEach(event => {
+                if (!event.coordination) {
+                    // Asignar coordinación de manera más permanente y realista
+                    const eventDate = new Date(event.date);
+                    const daysUntilEvent = Math.ceil((eventDate - new Date()) / (1000 * 60 * 60 * 24));
+                    
+                    // Eventos más cercanos tienen mayor probabilidad de estar coordinados
+                    if (daysUntilEvent <= 7) {
+                        // Eventos en la próxima semana: 90% coordinados
+                        event.coordination = Math.random() > 0.1 ? 'coordinado' : 'no-coordinado';
+                    } else if (daysUntilEvent <= 30) {
+                        // Eventos en el próximo mes: 70% coordinados
+                        event.coordination = Math.random() > 0.3 ? 'coordinado' : 'no-coordinado';
+                    } else if (daysUntilEvent <= 90) {
+                        // Eventos en los próximos 3 meses: 50% coordinados
+                        event.coordination = Math.random() > 0.5 ? 'coordinado' : 'no-coordinado';
+                    } else {
+                        // Eventos más lejanos: 30% coordinados
+                        event.coordination = Math.random() > 0.7 ? 'coordinado' : 'no-coordinado';
+                    }
+                    
+                    // Eventos confirmados tienen mayor probabilidad de estar coordinados
+                    if (event.status === 'confirmed' && event.coordination === 'no-coordinado') {
+                        event.coordination = Math.random() > 0.4 ? 'coordinado' : 'no-coordinado';
+                    }
+                }
+            });
+        }
+
+        // Función para generar estado de coordinación para eventos ficticios
+        function getFictitiousEventCoordination(date) {
+            const daysUntilEvent = Math.ceil((date - new Date()) / (1000 * 60 * 60 * 24));
+            
+            // Distribución más realista para eventos ficticios
+            if (daysUntilEvent <= 7) {
+                // Eventos próximos: 85% coordinados
+                return Math.random() > 0.15 ? 'coordinado' : 'no-coordinado';
+            } else if (daysUntilEvent <= 30) {
+                // Eventos del mes: 65% coordinados
+                return Math.random() > 0.35 ? 'coordinado' : 'no-coordinado';
+            } else if (daysUntilEvent <= 90) {
+                // Eventos trimestrales: 45% coordinados
+                return Math.random() > 0.55 ? 'coordinado' : 'no-coordinado';
+            } else {
+                // Eventos lejanos: 25% coordinados
+                return Math.random() > 0.75 ? 'coordinado' : 'no-coordinado';
+            }
+        }
+
+        // Login functionality
+        document.getElementById('loginForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const errorMessage = document.getElementById('errorMessage');
+            
+            // Permitir acceso directo si los campos están vacíos o con credenciales válidas
+            if ((email === '' && password === '') || email === 'admin@salon.com' || email === 'dj@salon.com' || email === 'tecnico@salon.com') {
+                // Si los campos están vacíos, usar usuario admin por defecto
+                if (email === '' && password === '') {
+                    currentUser = users[0]; // Usuario admin
+                } else {
+                    // Buscar usuario con las credenciales proporcionadas
+                    const user = users.find(u => u.email === email && u.password === password);
+                    if (user) {
+                        currentUser = user;
+                    } else {
+                        // Si las credenciales no coinciden, usar admin por defecto
+                        currentUser = users[0];
+                    }
+                }
+                
+                login();
+                errorMessage.style.display = 'none';
+            } else {
+                // Para credenciales inválidas específicas, mostrar error
+                if (email !== '' || password !== '') {
+                    errorMessage.textContent = 'Credenciales inválidas. Usando modo demo con usuario administrador.';
+                    errorMessage.style.display = 'block';
+                    
+                    // Después de 2 segundos, ingresar con admin por defecto
+                    setTimeout(() => {
+                        currentUser = users[0];
+                        login();
+                        errorMessage.style.display = 'none';
+                    }, 2000);
+                } else {
+                    // Si los campos están vacíos, ingresar directamente
+                    currentUser = users[0];
+                    login();
+                    errorMessage.style.display = 'none';
+                }
+            }
+        });
+
+        function login() {
+            document.getElementById('loginScreen').style.display = 'none';
+            document.getElementById('dashboard').style.display = 'block';
+            
+            // Update user info
+            document.getElementById('userName').textContent = currentUser.name;
+            document.getElementById('userRole').textContent = getRoleLabel(currentUser.role);
+            document.getElementById('userAvatar').textContent = getInitials(currentUser.name);
+            document.getElementById('welcomeMessage').textContent = `Bienvenido de vuelta, ${currentUser.name}. Aquí tienes un resumen de las actividades del día.`;
+            
+            // Show/hide admin section
+            if (currentUser.role === 'admin') {
+                document.getElementById('adminSection').style.display = 'block';
+            }
+        }
+
+        function logout() {
+            currentUser = null;
+            document.getElementById('loginScreen').style.display = 'flex';
+            document.getElementById('dashboard').style.display = 'none';
+            document.getElementById('email').value = '';
+            document.getElementById('password').value = '';
+            document.getElementById('errorMessage').style.display = 'none';
+        }
+
+        function getInitials(name) {
+            return name.split(' ').map(n => n[0]).join('').toUpperCase();
+        }
+
+        function getRoleLabel(role) {
+            const labels = {
+                admin: 'Administrador',
+                dj: 'DJ',
+                technician: 'Técnico'
+            };
+            return labels[role] || role;
+        }
+
+        // Mock events data
+        const events = [
+            {
+                id: 1,
+                title: 'Boda María & Juan',
+                type: 'boda',
+                salon: 'salon-a',
+                zona: 'norte',
+                year: '2024',
+                date: '2024-12-15',
+                time: '20:00',
+                client: 'María González',
+                status: 'confirmed',
+                coordination: 'coordinado',
+                guests: 150,
+                dj: 'DJ Carlos',
+                technician: 'Técnico Juan'
+            },
+            {
+                id: 2,
+                title: 'Cumpleaños 15 Años',
+                type: 'quince',
+                salon: 'salon-b',
+                zona: 'sur',
+                year: '2024',
+                date: '2024-12-16',
+                time: '19:00',
+                client: 'Ana Rodríguez',
+                status: 'pending',
+                coordination: 'no-coordinado',
+                guests: 80,
+                dj: 'DJ María',
+                technician: 'Técnico Pedro'
+            },
+            {
+                id: 3,
+                title: 'Evento Corporativo TechCorp',
+                type: 'corporativo',
+                salon: 'salon-c',
+                zona: 'centro',
+                year: '2024',
+                date: '2024-12-20',
+                time: '18:00',
+                client: 'TechCorp S.A.',
+                status: 'confirmed',
+                coordination: 'coordinado',
+                guests: 200,
+                dj: 'DJ Carlos',
+                technician: 'Técnico Juan'
+            },
+            {
+                id: 23,
+                title: 'Boda Test Coordinación',
+                type: 'boda',
+                salon: 'salon-a',
+                zona: 'norte',
+                year: '2024',
+                date: '2024-12-25',
+                time: '21:00',
+                client: 'Test Coordinado',
+                status: 'confirmed',
+                coordination: 'coordinado',
+                guests: 120,
+                dj: 'DJ Carlos',
+                technician: 'Técnico Juan'
+            },
+            {
+                id: 24,
+                title: 'Evento Test No Coordinado',
+                type: 'corporativo',
+                salon: 'salon-b',
+                zona: 'sur',
+                year: '2024',
+                date: '2024-12-28',
+                time: '19:00',
+                client: 'Test No Coordinado',
+                status: 'pending',
+                coordination: 'no-coordinado',
+                guests: 80,
+                dj: 'DJ María',
+                technician: 'Técnico Pedro'
+            },
+            {
+                id: 4,
+                title: 'Boda Carlos & Laura',
+                type: 'boda',
+                salon: 'salon-d',
+                zona: 'este',
+                year: '2025',
+                date: '2025-01-15',
+                time: '21:00',
+                client: 'Carlos Martínez',
+                status: 'confirmed',
+                guests: 120,
+                dj: 'DJ María',
+                technician: 'Técnico Pedro'
+            },
+            {
+                id: 5,
+                title: 'Cumpleaños Empresarial',
+                type: 'corporativo',
+                salon: 'salon-a',
+                zona: 'oeste',
+                year: '2025',
+                date: '2025-02-10',
+                time: '19:30',
+                client: 'Empresa XYZ',
+                status: 'pending',
+                guests: 100,
+                dj: 'DJ Carlos',
+                technician: 'Técnico Juan'
+            },
+            // Eventos adicionales para 2024
+            {
+                id: 6,
+                title: 'Boda Sofía & Miguel',
+                type: 'boda',
+                salon: 'salon-a',
+                zona: 'norte',
+                year: '2024',
+                date: '2024-01-05',
+                time: '21:00',
+                client: 'Sofía López',
+                status: 'confirmed',
+                guests: 180,
+                dj: 'DJ Carlos',
+                technician: 'Técnico Juan'
+            },
+            {
+                id: 7,
+                title: 'Evento Corporativo Microsoft',
+                type: 'corporativo',
+                salon: 'salon-c',
+                zona: 'centro',
+                year: '2024',
+                date: '2024-02-14',
+                time: '19:00',
+                client: 'Microsoft Argentina',
+                status: 'confirmed',
+                guests: 250,
+                dj: 'DJ María',
+                technician: 'Técnico Pedro'
+            },
+            {
+                id: 8,
+                title: 'Cumpleaños 18 Años',
+                type: 'cumpleanos',
+                salon: 'salon-b',
+                zona: 'sur',
+                year: '2024',
+                date: '2024-03-08',
+                time: '20:00',
+                client: 'Lucía Fernández',
+                status: 'pending',
+                guests: 90,
+                dj: 'DJ Carlos',
+                technician: 'Técnico Juan'
+            },
+            {
+                id: 9,
+                title: 'Boda Patricia & Roberto',
+                type: 'boda',
+                salon: 'salon-d',
+                zona: 'este',
+                year: '2024',
+                date: '2024-04-20',
+                time: '20:30',
+                client: 'Patricia Silva',
+                status: 'confirmed',
+                guests: 140,
+                dj: 'DJ María',
+                technician: 'Técnico Pedro'
+            },
+            {
+                id: 10,
+                title: 'Evento Corporativo Google',
+                type: 'corporativo',
+                salon: 'salon-a',
+                zona: 'oeste',
+                year: '2024',
+                date: '2024-05-15',
+                time: '18:30',
+                client: 'Google Argentina',
+                status: 'confirmed',
+                guests: 300,
+                dj: 'DJ Carlos',
+                technician: 'Técnico Juan'
+            },
+            // Eventos para 2025
+            {
+                id: 11,
+                title: 'Boda Valentina & Diego',
+                type: 'boda',
+                salon: 'salon-a',
+                zona: 'norte',
+                year: '2025',
+                date: '2025-03-22',
+                time: '21:00',
+                client: 'Valentina Morales',
+                status: 'confirmed',
+                guests: 160,
+                dj: 'DJ María',
+                technician: 'Técnico Pedro'
+            },
+            {
+                id: 12,
+                title: 'Cumpleaños 25 Años',
+                type: 'cumpleanos',
+                salon: 'salon-b',
+                zona: 'sur',
+                year: '2025',
+                date: '2025-04-10',
+                time: '19:30',
+                client: 'Martín Rodríguez',
+                status: 'pending',
+                guests: 70,
+                dj: 'DJ Carlos',
+                technician: 'Técnico Juan'
+            },
+            // Eventos ficticios adicionales para mostrar más actividad en el calendario
+            {
+                id: 13,
+                title: 'Evento Corporativo Apple',
+                type: 'corporativo',
+                salon: 'salon-c',
+                zona: 'centro',
+                year: '2024',
+                date: '2024-06-20',
+                time: '19:00',
+                client: 'Apple Argentina',
+                status: 'confirmed',
+                guests: 180,
+                dj: 'DJ María',
+                technician: 'Técnico Pedro'
+            },
+            {
+                id: 14,
+                title: 'Boda Camila & Andrés',
+                type: 'boda',
+                salon: 'salon-d',
+                zona: 'este',
+                year: '2024',
+                date: '2024-07-15',
+                time: '20:30',
+                client: 'Camila Torres',
+                status: 'confirmed',
+                guests: 120,
+                dj: 'DJ Carlos',
+                technician: 'Técnico Juan'
+            },
+            {
+                id: 15,
+                title: 'Cumpleaños 30 Años',
+                type: 'cumpleanos',
+                salon: 'salon-b',
+                zona: 'sur',
+                year: '2024',
+                date: '2024-08-08',
+                time: '21:00',
+                client: 'Roberto Silva',
+                status: 'pending',
+                guests: 85,
+                dj: 'DJ María',
+                technician: 'Técnico Pedro'
+            },
+            {
+                id: 16,
+                title: 'Evento Corporativo Samsung',
+                type: 'corporativo',
+                salon: 'salon-a',
+                zona: 'oeste',
+                year: '2024',
+                date: '2024-09-12',
+                time: '18:30',
+                client: 'Samsung Argentina',
+                status: 'confirmed',
+                guests: 220,
+                dj: 'DJ Carlos',
+                technician: 'Técnico Juan'
+            },
+            {
+                id: 17,
+                title: 'Boda Fernanda & Lucas',
+                type: 'boda',
+                salon: 'salon-c',
+                zona: 'centro',
+                year: '2024',
+                date: '2024-10-25',
+                time: '21:00',
+                client: 'Fernanda López',
+                status: 'confirmed',
+                guests: 150,
+                dj: 'DJ María',
+                technician: 'Técnico Pedro'
+            },
+            {
+                id: 18,
+                title: 'Cumpleaños 18 Años',
+                type: 'quince',
+                salon: 'salon-d',
+                zona: 'este',
+                year: '2024',
+                date: '2024-11-30',
+                time: '20:00',
+                client: 'Valeria Morales',
+                status: 'pending',
+                guests: 95,
+                dj: 'DJ Carlos',
+                technician: 'Técnico Juan'
+            },
+            {
+                id: 19,
+                title: 'Evento Corporativo Netflix',
+                type: 'corporativo',
+                salon: 'salon-a',
+                zona: 'norte',
+                year: '2025',
+                date: '2025-01-20',
+                time: '19:00',
+                client: 'Netflix Argentina',
+                status: 'confirmed',
+                guests: 280,
+                dj: 'DJ María',
+                technician: 'Técnico Pedro'
+            },
+            {
+                id: 20,
+                title: 'Boda Gabriela & Tomás',
+                type: 'boda',
+                salon: 'salon-b',
+                zona: 'sur',
+                year: '2025',
+                date: '2025-02-14',
+                time: '20:30',
+                client: 'Gabriela Fernández',
+                status: 'confirmed',
+                guests: 130,
+                dj: 'DJ Carlos',
+                technician: 'Técnico Juan'
+            },
+            {
+                id: 21,
+                title: 'Cumpleaños 40 Años',
+                type: 'cumpleanos',
+                salon: 'salon-c',
+                zona: 'centro',
+                year: '2025',
+                date: '2025-05-18',
+                time: '19:30',
+                client: 'Alejandro Ruiz',
+                status: 'pending',
+                guests: 75,
+                dj: 'DJ María',
+                technician: 'Técnico Pedro'
+            },
+            {
+                id: 22,
+                title: 'Evento Corporativo Mercado Libre',
+                type: 'corporativo',
+                salon: 'salon-d',
+                zona: 'oeste',
+                year: '2025',
+                date: '2025-06-25',
+                time: '18:00',
+                client: 'Mercado Libre',
+                status: 'confirmed',
+                guests: 300,
+                dj: 'DJ Carlos',
+                technician: 'Técnico Juan'
+            }
+        ];
+
+        // Navigation functionality
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', function() {
+                // Remove active class from all items
+                document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
+                // Add active class to clicked item
+                this.classList.add('active');
+                
+                // Load different content based on the page
+                const page = this.getAttribute('data-page');
+                loadPage(page);
+            });
+        });
+
+        function loadPage(page) {
+            console.log('Cargando página:', page);
+            
+            // Hide all content
+            document.getElementById('dashboardContent').style.display = 'none';
+            document.getElementById('eventsContent').style.display = 'none';
+            
+            // Show selected page
+            switch(page) {
+                case 'dashboard':
+                    document.getElementById('dashboardContent').style.display = 'block';
+                    break;
+                case 'events':
+                    console.log('Mostrando página de eventos');
+                    const eventsContent = document.getElementById('eventsContent');
+                    eventsContent.style.display = 'block';
+                    console.log('Events content display:', eventsContent.style.display);
+                    // Pequeño delay para asegurar que el DOM esté listo
+                    setTimeout(() => {
+                        loadEvents();
+                    }, 100);
+                    break;
+                default:
+                    document.getElementById('dashboardContent').style.display = 'block';
+            }
+        }
+
+        function loadEvents() {
+            const eventsGrid = document.getElementById('eventsGrid');
+            eventsGrid.innerHTML = '';
+            
+            console.log('Cargando eventos:', events.length);
+            
+            events.forEach(event => {
+                const eventCard = createEventCard(event);
+                eventsGrid.appendChild(eventCard);
+            });
+            
+            // Forzar el filtrado inicial para mostrar todos los eventos
+            filterEvents();
+            
+            // Cargar también el calendario
+            loadCalendar();
+            
+            console.log('Eventos cargados exitosamente');
+        }
+
+        function switchView(view) {
+            const calendarView = document.getElementById('calendarView');
+            const cardsView = document.getElementById('cardsView');
+            const calendarBtn = document.querySelector('.calendar-nav-btn[onclick="switchView(\'calendar\')"]');
+            const cardsBtn = document.querySelector('.calendar-nav-btn[onclick="switchView(\'cards\')"]');
+            
+            if (view === 'calendar') {
+                calendarView.style.display = 'block';
+                cardsView.style.display = 'none';
+                calendarBtn.classList.add('active');
+                cardsBtn.classList.remove('active');
+            } else {
+                calendarView.style.display = 'none';
+                cardsView.style.display = 'block';
+                calendarBtn.classList.remove('active');
+                cardsBtn.classList.add('active');
+            }
+        }
+
+        function loadCalendar() {
+            const calendarGrid = document.getElementById('calendarGrid');
+            calendarGrid.innerHTML = '';
+            
+            // Asegurar que los eventos tengan coordinación
+            addCoordinationToEvents();
+            
+            const currentYear = new Date().getFullYear();
+            const selectedYear = document.getElementById('yearFilter').value || currentYear;
+            const selectedSalon = document.getElementById('salonFilter').value || 'salon-a';
+            
+            // Actualizar título del calendario
+            const salonName = getSalonName(selectedSalon);
+            document.getElementById('calendarTitle').textContent = `${salonName} - ${selectedYear}`;
+            
+            // Generar calendarios para todos los meses del año
+            for (let month = 0; month < 12; month++) {
+                const monthCalendar = createMonthCalendar(selectedYear, month, selectedSalon);
+                calendarGrid.appendChild(monthCalendar);
+            }
+        }
+
+        function createMonthCalendar(year, month, salon) {
+            const monthContainer = document.createElement('div');
+            monthContainer.className = 'month-calendar';
+            
+            const monthNames = [
+                'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+            ];
+            
+            const dayNames = ['Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab', 'Dom'];
+            
+            // Crear encabezado del mes
+            const monthHeader = document.createElement('div');
+            monthHeader.className = 'month-header';
+            monthHeader.innerHTML = `<div class="month-name">${monthNames[month]}</div>`;
+            
+            // Crear días de la semana
+            const daysHeader = document.createElement('div');
+            daysHeader.className = 'calendar-days';
+            dayNames.forEach(day => {
+                const dayHeader = document.createElement('div');
+                dayHeader.className = 'day-header';
+                dayHeader.textContent = day;
+                daysHeader.appendChild(dayHeader);
+            });
+            
+            // Crear días del calendario
+            const daysContainer = document.createElement('div');
+            daysContainer.className = 'calendar-days';
+            
+            const firstDay = new Date(year, month, 1);
+            const lastDay = new Date(year, month + 1, 0);
+            const startDate = new Date(firstDay);
+            
+            // Ajustar para que la semana empiece en lunes
+            const dayOfWeek = firstDay.getDay();
+            const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+            startDate.setDate(startDate.getDate() - mondayOffset);
+            
+            const today = new Date();
+            const currentMonth = today.getMonth();
+            const currentYear = today.getFullYear();
+            const currentDay = today.getDate();
+            
+            // Generar días del calendario
+            for (let i = 0; i < 42; i++) { // 6 semanas * 7 días
+                const currentDate = new Date(startDate);
+                currentDate.setDate(startDate.getDate() + i);
+                
+                const dayElement = document.createElement('div');
+                dayElement.className = 'calendar-day';
+                dayElement.textContent = currentDate.getDate();
+                
+                // Verificar si es hoy
+                if (currentDate.getDate() === currentDay && 
+                    currentDate.getMonth() === currentMonth && 
+                    currentDate.getFullYear() === currentYear) {
+                    dayElement.classList.add('today');
+                }
+                
+                // Verificar si es de otro mes
+                if (currentDate.getMonth() !== month) {
+                    dayElement.classList.add('other-month');
+                }
+                
+                // Verificar si tiene eventos
+                const dateString = currentDate.toISOString().split('T')[0];
+                const dayEvents = events.filter(event => 
+                    event.date === dateString && 
+                    event.salon === salon &&
+                    event.year === year.toString()
+                );
+                const hasEvent = dayEvents.length > 0;
+                
+                // Agregar algunos eventos ficticios adicionales para mostrar más actividad
+                const dayOfMonth = currentDate.getDate();
+                const monthOfYear = currentDate.getMonth();
+                const yearOfDate = currentDate.getFullYear();
+                
+                // Eventos ficticios basados en patrones (fines de semana, días específicos, etc.)
+                const isWeekend = currentDate.getDay() === 0 || currentDate.getDay() === 6;
+                const isPopularDay = dayOfMonth === 15 || dayOfMonth === 20 || dayOfMonth === 25;
+                const isHolidaySeason = (monthOfYear === 11 && dayOfMonth >= 15) || (monthOfYear === 0 && dayOfMonth <= 15);
+                const isSummerSeason = monthOfYear >= 11 || monthOfYear <= 2;
+                
+                // Generar eventos ficticios adicionales
+                let hasFictitiousEvent = false;
+                if (yearOfDate === 2024 || yearOfDate === 2025) {
+                    // Eventos en fines de semana (mayor probabilidad)
+                    if (isWeekend && !hasEvent && Math.random() > 0.5) {
+                        hasFictitiousEvent = true;
+                    }
+                    // Eventos en días populares
+                    else if (isPopularDay && !hasEvent && Math.random() > 0.4) {
+                        hasFictitiousEvent = true;
+                    }
+                    // Eventos en temporada alta
+                    else if (isHolidaySeason && !hasEvent && Math.random() > 0.6) {
+                        hasFictitiousEvent = true;
+                    }
+                    // Eventos en verano
+                    else if (isSummerSeason && !hasEvent && Math.random() > 0.65) {
+                        hasFictitiousEvent = true;
+                    }
+                    // Eventos aleatorios para llenar más el calendario
+                    else if (!hasEvent && Math.random() > 0.85) {
+                        hasFictitiousEvent = true;
+                    }
+                }
+                
+                if (hasEvent || hasFictitiousEvent) {
+                    dayElement.classList.add('has-event');
+                    
+                    let eventCoordination = null;
+                    
+                    // Si hay eventos reales, usar su estado de coordinación
+                    if (hasEvent && dayEvents.length > 0) {
+                        eventCoordination = dayEvents[0].coordination;
+                    }
+                    // Si no hay eventos reales pero hay ficticios, asignar estado usando la función
+                    else if (hasFictitiousEvent && !hasEvent) {
+                        eventCoordination = getFictitiousEventCoordination(currentDate);
+                    }
+                    
+                    // Aplicar la clase de coordinación y el indicador visual
+                    if (eventCoordination) {
+                        dayElement.classList.add(eventCoordination);
+                        
+                        // Agregar indicador visual adicional
+                        const dayNumber = dayElement.textContent;
+                        dayElement.innerHTML = `
+                            <span style="font-size: 0.7rem; font-weight: 700;">${dayNumber}</span>
+                            <div style="position: absolute; top: 1px; right: 1px; font-size: 0.5rem; line-height: 1;">
+                                ${eventCoordination === 'coordinado' ? '✓' : '!'}
+                            </div>
+                        `;
+                        
+                        // Debug: verificar que se están aplicando los colores
+                        console.log(`Fecha ${currentDate.toDateString()}: ${eventCoordination} (${hasEvent ? 'real' : 'ficticio'})`);
+                    }
+                }
+                
+                // Agregar evento click
+                dayElement.addEventListener('click', () => {
+                    selectDate(currentDate, salon);
+                });
+                
+                daysContainer.appendChild(dayElement);
+            }
+            
+            monthContainer.appendChild(monthHeader);
+            monthContainer.appendChild(daysHeader);
+            monthContainer.appendChild(daysContainer);
+            
+            return monthContainer;
+        }
+
+        function selectDate(date, salon) {
+            // Remover selección anterior solo del mes actual
+            const currentMonthContainer = event.target.closest('.month-calendar');
+            if (currentMonthContainer) {
+                currentMonthContainer.querySelectorAll('.calendar-day.selected').forEach(day => {
+                    day.classList.remove('selected');
+                });
+            }
+            
+            // Seleccionar solo el día clickeado
+            event.target.classList.add('selected');
+            
+            // Mostrar eventos del día seleccionado
+            const dateString = date.toISOString().split('T')[0];
+            const dayEvents = events.filter(event => 
+                event.date === dateString && 
+                event.salon === salon
+            );
+            
+            if (dayEvents.length > 0) {
+                const eventList = dayEvents.map(event => {
+                    const typeLabels = {
+                        'boda': '💒 Boda',
+                        'quince': '🎂 15 Años',
+                        'corporativo': '🏢 Corporativo',
+                        'cumpleanos': '🎉 Cumpleaños'
+                    };
+                    const statusColors = {
+                        'confirmed': '✅',
+                        'pending': '⏳',
+                        'cancelled': '❌'
+                    };
+                    const coordinationColors = {
+                        'coordinado': '🟢',
+                        'no-coordinado': '🔴'
+                    };
+                    return `${statusColors[event.status]} ${typeLabels[event.type] || event.type}\n   ${event.title}\n   ${event.time} • ${event.client}\n   ${getSalonName(event.salon)} • ${event.guests} invitados\n   ${coordinationColors[event.coordination] || '⚪'} ${event.coordination === 'coordinado' ? 'Coordinado' : 'No Coordinado'}`;
+                }).join('\n\n');
+                
+                alert(`📅 Eventos del ${date.toLocaleDateString('es-ES', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                })}\n\n${eventList}`);
+            } else {
+                alert(`📅 ${date.toLocaleDateString('es-ES', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                })}\n\nNo hay eventos programados para esta fecha.`);
+            }
+        }
+
+        function createEventCard(event) {
+            const card = document.createElement('div');
+            card.className = 'event-card';
+            card.setAttribute('data-salon', event.salon);
+            card.setAttribute('data-zona', event.zona);
+            card.setAttribute('data-year', event.year);
+            card.setAttribute('data-coordination', event.coordination || 'no-coordinado');
+            
+            const typeLabels = {
+                'boda': 'Boda',
+                'quince': '15 Años',
+                'corporativo': 'Corporativo',
+                'cumpleanos': 'Cumpleaños'
+            };
+            
+            const statusLabels = {
+                'confirmed': 'Confirmado',
+                'pending': 'Pendiente',
+                'cancelled': 'Cancelado'
+            };
+            
+            card.innerHTML = `
+                <div class="event-card-header">
+                    <span class="event-type ${event.type}">${typeLabels[event.type]}</span>
+                    <span class="event-status ${event.status}">${statusLabels[event.status]}</span>
+                </div>
+                <h3 class="event-title">${event.title}</h3>
+                <div class="event-details">
+                    <div class="event-detail">
+                        <i class="fas fa-calendar"></i>
+                        <span>${formatDate(event.date)} - ${event.time}</span>
+                    </div>
+                    <div class="event-detail">
+                        <i class="fas fa-user"></i>
+                        <span>${event.client}</span>
+                    </div>
+                    <div class="event-detail">
+                        <i class="fas fa-map-marker-alt"></i>
+                        <span>${getSalonName(event.salon)}</span>
+                    </div>
+                    <div class="event-detail">
+                        <i class="fas fa-users"></i>
+                        <span>${event.guests} invitados</span>
+                    </div>
+                </div>
+                <div class="event-actions">
+                    <button class="event-action-btn" onclick="viewEvent(${event.id})">Ver Detalles</button>
+                    <button class="event-action-btn primary" onclick="editEvent(${event.id})">Editar</button>
+                </div>
+            `;
+            
+            return card;
+        }
+
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('es-ES', {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric'
+            });
+        }
+
+        function getSalonName(salonCode) {
+            const salones = {
+                'salon-a': 'Salón A - Principal',
+                'salon-b': 'Salón B - Intimo',
+                'salon-c': 'Salón C - Terraza',
+                'salon-d': 'Salón D - VIP'
+            };
+            return salones[salonCode] || salonCode;
+        }
+
+        function filterEvents() {
+            const salonFilter = document.getElementById('salonFilter').value;
+            const zonaFilter = document.getElementById('zonaFilter').value;
+            const yearFilter = document.getElementById('yearFilter').value;
+            const coordinationFilter = document.getElementById('coordinationFilter').value;
+            
+            const eventCards = document.querySelectorAll('.event-card');
+            let visibleCount = 0;
+            
+            eventCards.forEach(card => {
+                const salon = card.getAttribute('data-salon');
+                const zona = card.getAttribute('data-zona');
+                const year = card.getAttribute('data-year');
+                const coordination = card.getAttribute('data-coordination');
+                
+                const salonMatch = !salonFilter || salon === salonFilter;
+                const zonaMatch = !zonaFilter || zona === zonaFilter;
+                const yearMatch = !yearFilter || year === yearFilter;
+                const coordinationMatch = !coordinationFilter || coordination === coordinationFilter;
+                
+                if (salonMatch && zonaMatch && yearMatch && coordinationMatch) {
+                    card.style.display = 'block';
+                    visibleCount++;
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+            
+            console.log('Eventos visibles:', visibleCount);
+            
+            // Show no events message if no events are visible
+            const noEventsMessage = document.getElementById('noEventsMessage');
+            
+            if (visibleCount === 0) {
+                if (!noEventsMessage) {
+                    const message = document.createElement('div');
+                    message.className = 'no-events';
+                    message.id = 'noEventsMessage';
+                    message.innerHTML = `
+                        <i class="fas fa-calendar-times"></i>
+                        <h3>No se encontraron eventos</h3>
+                        <p>No hay eventos que coincidan con los filtros seleccionados.</p>
+                    `;
+                    document.getElementById('eventsGrid').appendChild(message);
+                }
+            } else {
+                if (noEventsMessage) {
+                    noEventsMessage.remove();
+                }
+            }
+            
+            // Actualizar calendario cuando cambian los filtros
+            loadCalendar();
+        }
+
+        function clearFilters() {
+            document.getElementById('salonFilter').value = '';
+            document.getElementById('zonaFilter').value = '';
+            document.getElementById('yearFilter').value = '';
+            document.getElementById('coordinationFilter').value = '';
+            filterEvents();
+        }
+
+        function viewEvent(eventId) {
+            alert(`Ver detalles del evento ${eventId} - Esta funcionalidad estará disponible próximamente.`);
+        }
+
+        function editEvent(eventId) {
+            alert(`Editar evento ${eventId} - Esta funcionalidad estará disponible próximamente.`);
+        }
+
+        // Quick action buttons
+        document.querySelectorAll('.quick-action-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const action = this.querySelector('.action-text').textContent;
+                alert(`Acción: ${action} - Esta funcionalidad estará disponible próximamente.`);
+            });
+        });
+
+        // Video background functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            // Agregar coordinación a eventos
+            addCoordinationToEvents();
+            
+            const video = document.querySelector('.video-background video');
+            const videoLoading = document.getElementById('videoLoading');
+            
+            // Mostrar mensaje de carga específico para el video institucional
+            videoLoading.querySelector('div').innerHTML = `
+                <div>Cargando video institucional de Jano's...</div>
+            `;
+            
+            // Ocultar pantalla de carga cuando el video esté listo
+            video.addEventListener('loadeddata', function() {
+                console.log('Video institucional cargado exitosamente');
+                
+                // Aplicar transición suave al video
+                video.classList.add('loaded');
+                
+                setTimeout(() => {
+                    videoLoading.classList.add('hidden');
+                }, 1500); // Mostrar por al menos 1.5 segundos
+                
+                video.play().catch(function(error) {
+                    console.log('Video autoplay was prevented:', error);
+                    videoLoading.classList.add('hidden');
+                });
+            });
+
+            // Manejar errores de carga del video
+            video.addEventListener('error', function() {
+                console.log('Error cargando video institucional, usando fallback');
+                videoLoading.classList.add('hidden');
+            });
+
+            // Fallback para navegadores que no soportan autoplay
+            video.addEventListener('canplay', function() {
+                if (video.paused) {
+                    video.play().catch(function(error) {
+                        console.log('Video play failed:', error);
+                    });
+                }
+            });
+
+            // Ocultar pantalla de carga después de 5 segundos máximo
+            setTimeout(() => {
+                videoLoading.classList.add('hidden');
+            }, 5000);
+
+            // Pausar video cuando el usuario está en el dashboard para mejorar rendimiento
+            function handleVisibilityChange() {
+                if (document.hidden) {
+                    video.pause();
+                } else {
+                    video.play().catch(function(error) {
+                        console.log('Video play failed:', error);
+                    });
+                }
+            }
+
+            document.addEventListener('visibilitychange', handleVisibilityChange);
+        });
+    </script>
+</body>
+</html>
