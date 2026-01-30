@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { tasksService } from '../services/tasksService';
 import { cropsService } from '../services/cropsService';
-import { Task, Crop } from '../types';
+import { Crop } from '../types';
 
 import styled from 'styled-components';
 
@@ -10,10 +10,8 @@ import {
   FaSeedling,
   FaExclamationTriangle,
   FaCalendarCheck,
-  FaLeaf,
   FaChartLine,
   FaCheck,
-  FaTimes,
   FaCheckCircle,
   FaStickyNote,
   FaPlus,
@@ -22,6 +20,7 @@ import {
 import { WeatherWidget } from '../components/WeatherWidget';
 import { stickiesService } from '../services/stickiesService';
 import { useAuth } from '../context/AuthContext';
+import { LoadingSpinner } from '../components/LoadingSpinner';
 
 
 // --- Styled Components (Premium Eco-Tech Theme) ---
@@ -153,71 +152,9 @@ const SectionTitle = styled.h2`
   gap: 0.75rem;
 `;
 
-const MainCard = styled.div`
-  background: white;
-  border-radius: 1.5rem;
-  padding: 2rem;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-  border: 1px solid #edf2f7;
-`;
 
-const CropRow = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 1rem 0;
-  border-bottom: 1px solid #edf2f7;
 
-  &:last-child {
-    border-bottom: none;
-  }
 
-  .crop-info {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-
-    .crop-icon {
-      width: 48px;
-      height: 48px;
-      background: #c6f6d5;
-      color: #2f855a;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1.25rem;
-    }
-
-    .details {
-      h4 { margin: 0; color: #2d3748; font-size: 1rem; font-weight: 600; }
-      p { margin: 0; color: #718096; font-size: 0.85rem; }
-    }
-  }
-
-  .crop-stats {
-    display: flex;
-    gap: 1.5rem;
-    
-    .stat {
-      text-align: right;
-      .val { font-weight: 600; color: #2d3748; }
-      .lbl { font-size: 0.75rem; color: #a0aec0; }
-    }
-  }
-
-  .status-badge {
-    padding: 0.35rem 0.75rem;
-    border-radius: 999px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    background: #e6fffa;
-    color: #2c7a7b;
-
-    &.warning { background: #fffaf0; color: #c05621; }
-    &.danger { background: #fff5f5; color: #c53030; }
-  }
-`;
 
 const AlertItem = styled.div`
   background: #fffaf0;
@@ -455,11 +392,16 @@ const Dashboard: React.FC = () => {
   const [newStickyContent, setNewStickyContent] = useState('');
   const [newStickyColor, setNewStickyColor] = useState<'yellow' | 'blue' | 'pink' | 'green'>('yellow');
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  const getIconForType = (type: string) => {
+    switch (type) {
+      case 'warning': return <FaExclamationTriangle />;
+      case 'info': return <FaCalendarCheck />;
+      case 'danger': return <FaExclamationTriangle />;
+      default: return <FaCheckCircle />;
+    }
+  };
 
-  const loadData = async () => {
+  const loadData = React.useCallback(async () => {
     try {
       const [tasks, loadedCrops, loadedStickies] = await Promise.all([
         tasksService.getPendingTasks(),
@@ -483,7 +425,11 @@ const Dashboard: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []); // items are dependencies? No, services are imported.
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const handleCreateSticky = async () => {
     if (!newStickyContent.trim()) return;
@@ -505,14 +451,7 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const getIconForType = (type: string) => {
-    switch (type) {
-      case 'warning': return <FaExclamationTriangle />;
-      case 'info': return <FaCalendarCheck />;
-      case 'danger': return <FaExclamationTriangle />;
-      default: return <FaCheckCircle />;
-    }
-  };
+
 
   const removeAlert = async (id: string, action: 'done' | 'dismissed') => {
     setAlerts(prev => prev.filter(a => a.id !== id));
@@ -527,10 +466,11 @@ const Dashboard: React.FC = () => {
   const activeCrops = crops.filter(c => c.status === 'active');
 
   // Helper to calculate days since start (Stage mockup)
-  const getStage = (dateStr: string) => {
-    const days = Math.floor((new Date().getTime() - new Date(dateStr).getTime()) / (1000 * 3600 * 24));
-    return `Día ${days}`;
-  };
+
+
+  if (loading) {
+    return <LoadingSpinner text="Cargando panel..." fullScreen />;
+  }
 
   return (
     <Container>
@@ -633,7 +573,7 @@ const Dashboard: React.FC = () => {
                     <FaCheck />
                   </ActionButtonSmall>
                   <ActionButtonSmall type="danger" onClick={() => handleAction(alert.id, 'dismissed')} title="Descartar">
-                    <FaTimes />
+                    <FaTrash />
                   </ActionButtonSmall>
                 </AlertActions>
 

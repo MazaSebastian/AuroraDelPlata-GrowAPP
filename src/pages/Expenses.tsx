@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import { FaMoneyBillWave, FaArrowDown, FaArrowUp, FaTrash } from 'react-icons/fa';
+import { FaMoneyBillWave, FaTrash } from 'react-icons/fa';
 import { expensesService, CashMovement } from '../services/expensesService';
 import { format } from 'date-fns';
 

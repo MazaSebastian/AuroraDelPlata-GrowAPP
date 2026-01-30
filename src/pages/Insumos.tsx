@@ -1,27 +1,20 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import styled from 'styled-components';
-import { 
-  FaPlus, 
-  FaEdit, 
-  FaTrash, 
-  FaChartLine, 
-  FaBoxes, 
-  FaDollarSign,
-  FaExclamationTriangle,
-  FaCheckCircle,
+import {
+  FaPlus,
+  FaEdit,
+  FaTrash,
+  FaBoxes,
   FaTimesCircle,
-  FaFilter,
   FaDownload
 } from 'react-icons/fa';
-import type { Insumo, HistorialPrecio, InsumoConHistorial } from '../types';
-import { 
-  getInsumos, 
-  createInsumo, 
-  updateInsumo, 
-  deleteInsumo, 
-  getInsumosStats,
-  searchInsumos,
-  getInsumosByCategory
+import type { Insumo } from '../types';
+import {
+  getInsumos,
+  createInsumo,
+  updateInsumo,
+  deleteInsumo,
+  getInsumosStats
 } from '../services/insumosService';
 
 const Page = styled.div`
@@ -348,7 +341,7 @@ const Insumos: React.FC = () => {
     let filtered = insumos;
 
     if (searchTerm) {
-      filtered = filtered.filter(insumo => 
+      filtered = filtered.filter(insumo =>
         insumo.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
         insumo.proveedor?.toLowerCase().includes(searchTerm.toLowerCase())
       );
@@ -384,7 +377,7 @@ const Insumos: React.FC = () => {
         console.error('Error al cargar estadísticas:', error);
       }
     };
-    
+
     loadStats();
   }, []);
 
@@ -419,7 +412,7 @@ const Insumos: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       const newInsumo: Omit<Insumo, 'id' | 'created_at' | 'updated_at'> = {
         nombre: formData.nombre,
@@ -438,7 +431,7 @@ const Insumos: React.FC = () => {
         // Actualizar insumo existente
         const updated = await updateInsumo(editingInsumo.id, newInsumo);
         if (updated) {
-          setInsumos(prev => prev.map(i => 
+          setInsumos(prev => prev.map(i =>
             i.id === editingInsumo.id ? updated : i
           ));
         }
@@ -614,21 +607,21 @@ const Insumos: React.FC = () => {
                 {insumo.proveedor || '—'}
               </div>
               <div>
-                {insumo.fecha_ultima_compra ? 
-                  new Date(insumo.fecha_ultima_compra).toLocaleDateString('es-AR') : 
+                {insumo.fecha_ultima_compra ?
+                  new Date(insumo.fecha_ultima_compra).toLocaleDateString('es-AR') :
                   '—'
                 }
               </div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <Button 
-                  variant="secondary" 
+                <Button
+                  variant="secondary"
                   onClick={() => handleOpenModal(insumo)}
                   style={{ padding: '0.5rem' }}
                 >
                   <FaEdit />
                 </Button>
-                <Button 
-                  variant="danger" 
+                <Button
+                  variant="danger"
                   onClick={() => handleDelete(insumo.id)}
                   style={{ padding: '0.5rem' }}
                 >
@@ -641,9 +634,9 @@ const Insumos: React.FC = () => {
       </Table>
 
       {filteredInsumos.length === 0 && (
-        <div style={{ 
-          textAlign: 'center', 
-          padding: '3rem', 
+        <div style={{
+          textAlign: 'center',
+          padding: '3rem',
           color: '#64748b',
           background: 'white',
           border: '1px solid #e2e8f0',
@@ -661,8 +654,8 @@ const Insumos: React.FC = () => {
         <ModalContent onClick={(e) => e.stopPropagation()}>
           <ModalHeader>
             <h2>{editingInsumo ? 'Editar Insumo' : 'Nuevo Insumo'}</h2>
-            <Button 
-              variant="secondary" 
+            <Button
+              variant="secondary"
               onClick={() => setIsModalOpen(false)}
               style={{ padding: '0.5rem' }}
             >
@@ -771,9 +764,9 @@ const Insumos: React.FC = () => {
             </FormGroup>
 
             <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
-              <Button 
-                type="button" 
-                variant="secondary" 
+              <Button
+                type="button"
+                variant="secondary"
                 onClick={() => setIsModalOpen(false)}
               >
                 Cancelar

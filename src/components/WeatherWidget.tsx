@@ -7,7 +7,6 @@ import { es } from 'date-fns/locale';
 import {
   WiDaySunny,
   WiDayCloudy,
-  WiCloud,
   WiRain,
   WiThunderstorm,
   WiSnow,

@@ -1,6 +1,5 @@
 
-import { format } from 'date-fns';
-import { es } from 'date-fns/locale';
+
 
 export interface DailyWeather {
     date: string;

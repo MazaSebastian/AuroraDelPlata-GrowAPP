@@ -1,10 +1,14 @@
 import React, { useEffect } from 'react';
-import { Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import styled from 'styled-components';
 // import LiveChat from './components/LiveChat'; // Disabling LiveChat for CRM cleanup
 import Dashboard from './pages/Dashboard';
 import Crops from './pages/Crops';
 import CropDetail from './pages/CropDetail';
+import Rooms from './pages/Rooms';
+import RoomDetail from './pages/RoomDetail';
+import Genetics from './pages/Genetics';
+import Clones from './pages/Clones';
 
 import Stock from './pages/Stock';
 import Compras from './pages/Compras';
@@ -79,7 +83,34 @@ function App() {
           </RequireAuth>
         } />
 
-
+        <Route path="/rooms" element={
+          <RequireAuth>
+            <MainContent>
+              <Rooms />
+            </MainContent>
+          </RequireAuth>
+        } />
+        <Route path="/rooms/:id" element={
+          <RequireAuth>
+            <MainContent>
+              <RoomDetail />
+            </MainContent>
+          </RequireAuth>
+        } />
+        <Route path="/genetics" element={
+          <RequireAuth>
+            <MainContent>
+              <Genetics />
+            </MainContent>
+          </RequireAuth>
+        } />
+        <Route path="/clones" element={
+          <RequireAuth>
+            <MainContent>
+              <Clones />
+            </MainContent>
+          </RequireAuth>
+        } />
 
         <Route path="/stock" element={
           <RequireAuth>

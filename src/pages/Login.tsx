@@ -2,7 +2,12 @@ import React, { useEffect, useState } from 'react';
 import styled from 'styled-components';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { FaEye, FaEyeSlash, FaLeaf } from 'react-icons/fa';
+import { FaEye, FaEyeSlash } from 'react-icons/fa';
+
+// ... (skipping styled components that don't need change, wait, replace_file_content replaces chunks)
+// I should only replace the necessary parts. 
+// Part 1: Imports
+
 
 const LoginContainer = styled.div`
   min-height: 100vh;
@@ -47,17 +52,18 @@ const Logo = styled.div`
   margin-bottom: 2rem;
   
   .icon-wrapper {
-    width: 64px;
-    height: 64px;
-    background: #dcfce7; /* Green-100 */
-    color: #16a34a; /* Green-600 */
-    border-radius: 1rem;
+    width: 240px;
+    height: 240px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 2rem;
-    margin: 0 auto 1rem;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    margin: 0 auto 1.5rem;
+    
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
   }
   
   h1 {
@@ -238,9 +244,9 @@ const Login: React.FC = () => {
       <LoginCard>
         <Logo>
           <div className="icon-wrapper">
-            <FaLeaf />
+            <img src="/logo.png" alt="Aurora Del Plata Logo" />
           </div>
-          <h1>Chakra GrowApp</h1>
+          <h1>Bienvenido/a a Aurora Del Plata</h1>
           <p>Gestión de Cultivos</p>
         </Logo>
 
@@ -283,7 +289,7 @@ const Login: React.FC = () => {
         </Form>
 
         <FooterLink>
-          ¿No tienes acceso? <a href="#">Contacta al administrador</a>
+          ¿No tienes acceso? <button onClick={() => alert('Contacta a Seba Maza o al administrador del sistema.')} style={{ background: 'none', border: 'none', color: '#16a34a', fontWeight: 600, cursor: 'pointer', padding: 0, fontSize: 'inherit' }}>Contacta al administrador</button>
         </FooterLink>
       </LoginCard>
     </LoginContainer>

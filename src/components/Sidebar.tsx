@@ -1,21 +1,19 @@
-import React, { useState, useEffect } from 'react';
-import OneSignal from 'react-onesignal';
+import React, { useState } from 'react';
+
 import styled from 'styled-components';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
-  FaLeaf,
   FaChartLine,
-  FaClipboardList,
-  FaTint,
-  FaTasks,
+
   FaBoxes,
   FaShoppingBag,
   FaBars,
-  FaTimes,
   FaSeedling,
   FaSignOutAlt,
   FaMoneyBillWave,
-  FaBell
+  FaWarehouse,
+  FaDna,
+  FaCut
 } from 'react-icons/fa';
 import { useAuth } from '../context/AuthContext';
 import { notificationService } from '../services/notificationService';
@@ -201,7 +199,7 @@ const Sidebar: React.FC = () => {
     <>
       <MobileHeader>
         <div className="brand">
-          <FaLeaf /> Chakra CRM
+          <img src="/logo.png" alt="Logo" style={{ height: '32px' }} /> Aurora App
         </div>
         <HamburgerButton onClick={() => setIsOpen(true)}>
           <FaBars />
@@ -212,8 +210,8 @@ const Sidebar: React.FC = () => {
 
       <SidebarContainer isOpen={isOpen}>
         <LogoSection>
-          <FaLeaf />
-          <h2>Chakra</h2>
+          <img src="/logo.png" alt="Logo" style={{ height: '40px' }} />
+          <h2>Aurora</h2>
         </LogoSection>
 
         <NavList>
@@ -221,7 +219,16 @@ const Sidebar: React.FC = () => {
             <FaChartLine /> Dashboard
           </StyledNavLink>
           <StyledNavLink to="/crops">
-            <FaSeedling /> Mis Cultivos
+            <FaSeedling /> Spots
+          </StyledNavLink>
+          <StyledNavLink to="/rooms">
+            <FaWarehouse /> Salas de Cultivo
+          </StyledNavLink>
+          <StyledNavLink to="/genetics">
+            <FaDna /> Madres
+          </StyledNavLink>
+          <StyledNavLink to="/clones">
+            <FaCut /> Esquejes
           </StyledNavLink>
 
 

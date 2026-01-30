@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import { FaPlus, FaEdit, FaTrash, FaBox, FaSearch, FaDownload } from 'react-icons/fa';
+import { FaPlus, FaEdit, FaTrash, FaSearch, FaDownload } from 'react-icons/fa';
 import { StockItem, syncStockItemsFromSupabase, createStockItemSupabase, updateStockQtySupabase, deleteStockItemSupabase } from '../services/stockService';
 
 const PageContainer = styled.div`

@@ -8,7 +8,7 @@ export const cropsService = {
 
         const { data, error } = await supabase
             .from('chakra_crops')
-            .select('*')
+            .select('*, rooms(*)')
             .order('start_date', { ascending: false });
 
         if (error) {
@@ -25,7 +25,8 @@ export const cropsService = {
             photoUrl: c.photo_url,
             partners: [], // Not yet implemented in DB fully
             status: c.status,
-            color: c.color || 'green'
+            color: c.color || 'green',
+            rooms: c.rooms || []
         }));
     },
 
@@ -80,7 +81,7 @@ export const cropsService = {
 
         if (error) {
             console.error('Error creating crop:', error);
-            return null;
+            throw error; // Throw to let the component handle/display it
         }
 
         if (data) {

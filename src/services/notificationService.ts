@@ -2,7 +2,6 @@
 import OneSignal from 'react-onesignal';
 
 const ONESIGNAL_APP_ID = process.env.REACT_APP_ONESIGNAL_APP_ID || '';
-const ONESIGNAL_API_KEY = process.env.REACT_APP_ONESIGNAL_API_KEY || '';
 
 export const notificationService = {
     async init() {

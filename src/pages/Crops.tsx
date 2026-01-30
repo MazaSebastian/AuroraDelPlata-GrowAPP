@@ -1,19 +1,23 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import {
   FaSeedling,
-  FaThermometerHalf,
-  FaTint,
-  FaTasks,
   FaPlus,
   FaCalendarAlt,
   FaMapMarkerAlt,
-  FaClock
+  FaClock,
+  FaEdit,
+  FaTrash
 } from 'react-icons/fa';
-import type { Crop, Task } from '../types';
 import { dailyLogsService } from '../services/dailyLogsService';
+import { cropsService } from '../services/cropsService';
 import { LoadingSpinner } from '../components/LoadingSpinner';
+import type { Crop } from '../types';
+import { PromptModal } from '../components/PromptModal';
+import { ConfirmModal } from '../components/ConfirmModal';
+import { ColorPickerModal } from '../components/ColorPickerModal';
+import { FaPalette } from 'react-icons/fa';
 
 
 
@@ -124,35 +128,7 @@ const Badge = styled.span<{ variant?: 'green' | 'yellow' | 'gray' }>`
   letter-spacing: 0.05em;
 `;
 
-const ActionBar = styled.div`
-  padding: 1rem 1.25rem;
-  border-top: 1px solid #edf2f7;
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 0.75rem;
-  background: #fafafa;
-`;
 
-const ActionButton = styled.button`
-  padding: 0.5rem;
-  border-radius: 0.5rem;
-  border: 1px solid #e2e8f0;
-  background: white;
-  color: #4a5568;
-  font-size: 0.875rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  transition: all 0.2s;
-
-  &:hover {
-    background: #ebf8ff;
-    color: #3182ce;
-    border-color: #bee3f8;
-  }
-`;
 
 const CreateButton = styled.button`
   background: #3182ce;
@@ -278,6 +254,7 @@ const getColorHex = (colorName?: string) => {
 
 const Crops: React.FC = () => {
   const [crops, setCrops] = useState<Crop[]>([]);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [lastActivityMap, setLastActivityMap] = useState<Record<string, string>>({});
@@ -288,16 +265,11 @@ const Crops: React.FC = () => {
     startDate: new Date().toISOString().split('T')[0],
     estimatedHarvestDate: '',
     location: '',
-    color: 'green'
+    color: 'green',
+    geneticId: ''
   });
 
-  // Load initial data
-  // Using useState + useEffect instead of useMemo to allow async fetching
-  React.useEffect(() => {
-    loadCrops();
-  }, []);
-
-  const loadLastActivities = async (cropsData: Crop[]) => {
+  const loadLastActivities = React.useCallback(async (cropsData: Crop[]) => {
     const activityMap: Record<string, string> = {};
 
     await Promise.all(cropsData.map(async (crop) => {
@@ -336,14 +308,10 @@ const Crops: React.FC = () => {
     }));
 
     setLastActivityMap(activityMap);
-  };
+  }, []);
 
-  const loadCrops = async () => {
+  const loadCrops = React.useCallback(async () => {
     setLoading(true);
-    // Dynamic import to avoid circular dependency issues if any, or just standard import
-    // Assuming cropsService is imported or import it on top. 
-    // Ideally update imports above.
-    const { cropsService } = await import('../services/cropsService');
     const data = await cropsService.getCrops();
     setCrops(data);
 
@@ -351,36 +319,131 @@ const Crops: React.FC = () => {
     loadLastActivities(data);
 
     setLoading(false);
-  };
+  }, [loadLastActivities]);
+
+  // Load initial data
+  // Using useState + useEffect instead of useMemo to allow async fetching
+  React.useEffect(() => {
+    loadCrops();
+  }, [loadCrops]);
+
+
 
   const handleCreate = async () => {
-    if (!formData.name || !formData.startDate || !formData.location) return;
+    if (!formData.name) {
+      alert("Por favor ingresa un nombre para el Spot.");
+      return;
+    }
 
-    // Fix: Force date to noon to avoid timezone shifts (e.g., 20th 00:00 becoming 19th 21:00 in Argentina/UTC-3)
-    const normalizedDate = new Date(formData.startDate);
-    normalizedDate.setHours(12, 0, 0, 0);
+    try {
+      // Default values for simplified "Spot" creation
+      const normalizedDate = new Date(); // Current date as default start
+      normalizedDate.setHours(12, 0, 0, 0);
 
-    const { cropsService } = await import('../services/cropsService');
-    const newCrop = await cropsService.createCrop({
-      name: formData.name,
-      location: formData.location,
-      startDate: normalizedDate.toISOString(), // Send as ISO string but normalized to noon
-      estimatedHarvestDate: formData.estimatedHarvestDate || undefined,
-      color: formData.color
-    });
-
-    if (newCrop) {
-      setCrops(prev => [newCrop, ...prev]);
-      setIsModalOpen(false);
-      setFormData({
-        name: '',
-        startDate: new Date().toISOString().split('T')[0],
-        estimatedHarvestDate: '',
-        location: '',
-        color: 'green'
+      const newCrop = await cropsService.createCrop({
+        name: formData.name,
+        location: 'Spot General', // Default location
+        startDate: normalizedDate.toISOString(),
+        estimatedHarvestDate: undefined,
+        color: 'green' // Default color
       });
+
+      if (newCrop) {
+        setCrops(prev => [newCrop, ...prev]);
+        setIsModalOpen(false);
+        setFormData({
+          name: '',
+          startDate: new Date().toISOString().split('T')[0],
+          estimatedHarvestDate: '',
+          location: '',
+          color: 'green',
+          geneticId: ''
+        });
+      } else {
+        alert("Error al crear el spot. El servicio devolvió null.");
+      }
+    } catch (error: any) {
+      console.error("Error creating spot:", error);
+      alert(`Ocurrió un error al crear el spot: ${error.message || JSON.stringify(error)}`);
     }
   };
+
+  // Confirm Modal State
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [cropToDelete, setCropToDelete] = useState<Crop | null>(null);
+
+  const handleDeleteCrop = (e: React.MouseEvent, id: string, name: string) => {
+    e.stopPropagation();
+    setCropToDelete({ id, name, location: '', startDate: '', status: 'active', partners: [], photoUrl: '' }); // Minimal crop obj
+    setConfirmOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!cropToDelete) return;
+
+    const success = await cropsService.deleteCrop(cropToDelete.id);
+    if (success) {
+      loadCrops();
+      setConfirmOpen(false);
+      setCropToDelete(null);
+    } else {
+      alert("Error al eliminar el Spot.");
+    }
+  };
+
+  // Edit Modal State
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editingCrop, setEditingCrop] = useState<Crop | null>(null);
+
+  const handleEditCropName = (e: React.MouseEvent, crop: Crop) => {
+    e.stopPropagation();
+    setEditingCrop(crop);
+    setIsEditOpen(true);
+  };
+
+  const handleSaveCropName = async (newName: string) => {
+    if (!editingCrop || !newName.trim()) return;
+
+    const success = await cropsService.updateCrop(editingCrop.id, { name: newName });
+    if (success) {
+      loadCrops();
+      setIsEditOpen(false);
+      setEditingCrop(null);
+    } else {
+      alert("Error al renombrar el Spot.");
+    }
+  };
+
+  // Color Picker State
+  const [colorPickerOpen, setColorPickerOpen] = useState(false);
+  const [cropForColor, setCropForColor] = useState<Crop | null>(null);
+
+  const handleOpenColorPicker = (e: React.MouseEvent, crop: Crop) => {
+    e.stopPropagation();
+    setCropForColor(crop);
+    setColorPickerOpen(true);
+  };
+
+  const handleUpdateColor = async (color: string) => {
+    if (!cropForColor) return;
+    const success = await cropsService.updateCrop(cropForColor.id, { color });
+    if (success) {
+      loadCrops();
+      // Modal closes automatically in ColorPickerModal onSelect calls (or we can close it here if we change the component logic)
+      // But component calls onClose only if we didn't pass logic inside.
+      // Wait, my component calls onSelectColor then onClose.
+    } else {
+      alert("Error al actualizar el color.");
+    }
+    // Actually my component calls onSelectColor then onClose?
+    // Let's check the component code I just wrote.
+    // Yes: onClick={() => { onSelectColor(color); onClose(); }} in the component.
+    // So I don't need to manually close it here if I just want to rely on that.
+    // BUT, usually it is better to control it:
+    // Let's assume onSelectColor does the logic.
+  };
+
+  const availableColors = ['green', 'blue', 'purple', 'orange', 'red', 'pink', 'teal', 'cyan', 'yellow', 'gray'];
 
   const statusVariant = (s: Crop['status']): 'green' | 'yellow' | 'gray' => {
     if (s === 'active') return 'green';
@@ -388,10 +451,7 @@ const Crops: React.FC = () => {
     return 'gray';
   };
 
-  const getDaysSince = (dateStr: string) => {
-    const diff = new Date().getTime() - new Date(dateStr).getTime();
-    return Math.floor(diff / (1000 * 60 * 60 * 24));
-  };
+
 
   const navigate = useNavigate();
 
@@ -406,16 +466,41 @@ const Crops: React.FC = () => {
   return (
     <Container>
       <Header>
-        <h1>Mis Cultivos</h1>
-        <CreateButton onClick={() => setIsModalOpen(true)}><FaPlus /> Nuevo Cultivo</CreateButton>
+        <h1>Spots</h1>
+        <CreateButton onClick={() => setIsModalOpen(true)}><FaPlus /> Nuevo Spot</CreateButton>
       </Header>
 
       <Grid>
         {crops.map(c => (
           <Card key={c.id} onClick={() => handleCardClick(c.id)} style={{ cursor: 'pointer', borderTop: `4px solid ${getColorHex(c.color)}` }}>
-            <CardHeader style={{ background: `${getColorHex(c.color)}15` }}>
-              <div className="icon" style={{ color: getColorHex(c.color) }}><FaSeedling /></div>
-              <div className="title">{c.name}</div>
+            <CardHeader style={{ background: `${getColorHex(c.color)}15`, justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <div className="icon" style={{ color: getColorHex(c.color) }}><FaSeedling /></div>
+                <div className="title">{c.name}</div>
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button
+                  onClick={(e) => handleOpenColorPicker(e, c)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#718096', padding: '0.25rem', display: 'flex' }}
+                  title="Cambiar Color"
+                >
+                  <FaPalette />
+                </button>
+                <button
+                  onClick={(e) => handleEditCropName(e, c)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#718096', padding: '0.25rem', display: 'flex' }}
+                  title="Editar Nombre"
+                >
+                  <FaEdit />
+                </button>
+                <button
+                  onClick={(e) => handleDeleteCrop(e, c.id, c.name)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#718096', padding: '0.25rem', display: 'flex' }}
+                  title="Eliminar Spot"
+                >
+                  <FaTrash />
+                </button>
+              </div>
             </CardHeader>
             <CardBody>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -426,9 +511,7 @@ const Crops: React.FC = () => {
               <InfoRow>
                 <FaMapMarkerAlt /> {c.location ?? 'Sin ubicación'}
               </InfoRow>
-              <InfoRow>
-                <FaCalendarAlt /> Inicio: {new Date(c.startDate).toLocaleDateString('es-AR')} ({getDaysSince(c.startDate)} días)
-              </InfoRow>
+
               {c.estimatedHarvestDate && (
                 <InfoRow>
                   <FaCalendarAlt /> Fin Previsto: {new Date(c.estimatedHarvestDate).toLocaleDateString('es-AR')}
@@ -437,6 +520,38 @@ const Crops: React.FC = () => {
               <InfoRow style={{ marginTop: '0.5rem', borderTop: '1px solid #edf2f7', paddingTop: '0.5rem' }}>
                 <FaClock /> Última actividad: {lastActivityMap[c.id] || '-'}
               </InfoRow>
+
+              {/* Rooms Summary */}
+              {c.rooms && c.rooms.length > 0 && (
+                <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #edf2f7', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  {(() => {
+                    const vegeCount = c.rooms.filter(r => r.type === 'vegetation').length;
+                    const floraCount = c.rooms.filter(r => r.type === 'flowering').length;
+                    const dryingCount = c.rooms.filter(r => r.type === 'drying').length;
+                    // Using filter directly on type
+
+                    return (
+                      <>
+                        {vegeCount > 0 && (
+                          <span style={{ fontSize: '0.75rem', background: '#f0fff4', color: '#2f855a', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                            {vegeCount} Vege
+                          </span>
+                        )}
+                        {floraCount > 0 && (
+                          <span style={{ fontSize: '0.75rem', background: '#fffaf0', color: '#dd6b20', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                            {floraCount} Flora
+                          </span>
+                        )}
+                        {dryingCount > 0 && (
+                          <span style={{ fontSize: '0.75rem', background: '#e6fffa', color: '#38b2ac', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                            {dryingCount} Secado
+                          </span>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
             </CardBody>
           </Card>
         ))}
@@ -444,81 +559,61 @@ const Crops: React.FC = () => {
 
       {/* Create Modal */}
       {isModalOpen && (
-        <ModalOverlay onClick={(e) => { if (e.target === e.currentTarget) setIsModalOpen(false) }}>
+        <ModalOverlay>
           <ModalContent>
-            <h2>Nuevo Cultivo</h2>
+            <h2>Nuevo Spot</h2>
 
             <FormGroup>
-              <label>Nombre del Cultivo</label>
+              <label>Nombre del Spot</label>
               <input
                 type="text"
-                placeholder="Ej: Gorilla Glue #4"
+                placeholder="Ej: Carpa Indoor 120x120"
                 value={formData.name}
                 onChange={e => setFormData({ ...formData, name: e.target.value })}
               />
             </FormGroup>
 
-            <FormGroup>
-              <label>Color Identificativo</label>
-              <div style={{ display: 'flex', gap: '1rem' }}>
-                {['green', 'purple', 'blue', 'orange', 'red'].map(color => (
-                  <button
-                    key={color}
-                    onClick={() => setFormData({ ...formData, color })}
-                    style={{
-                      width: '32px',
-                      height: '32px',
-                      borderRadius: '50%',
-                      background: getColorHex(color),
-                      border: formData.color === color ? '3px solid #cbd5e0' : 'none',
-                      cursor: 'pointer',
-                      transform: formData.color === color ? 'scale(1.1)' : 'scale(1)',
-                      transition: 'all 0.2s'
-                    }}
-                  />
-                ))}
-              </div>
-            </FormGroup>
-
-            <FormGroup>
-              <label>Ubicación</label>
-              <input
-                type="text"
-                placeholder="Ej: Carpa Indoor 1, Exterior..."
-                value={formData.location}
-                onChange={e => setFormData({ ...formData, location: e.target.value })}
-              />
-            </FormGroup>
-
-            <FormGroup>
-              <label>Fecha de Inicio</label>
-              <input
-                type="date"
-                value={formData.startDate}
-                onChange={e => setFormData({ ...formData, startDate: e.target.value })}
-              />
-            </FormGroup>
-
-            <FormGroup>
-              <label>Fecha Finalización (Estimada)</label>
-              <input
-                type="date"
-                value={formData.estimatedHarvestDate}
-                onChange={e => setFormData({ ...formData, estimatedHarvestDate: e.target.value })}
-              />
-            </FormGroup>
-
             <ModalActions>
               <Button variant="secondary" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
-              <Button onClick={handleCreate}>Crear Cultivo</Button>
+              <Button onClick={handleCreate}>Crear Spot</Button>
             </ModalActions>
           </ModalContent>
         </ModalOverlay>
       )
       }
+      {/* Prompt Modal for Renaming */}
+      <PromptModal
+        isOpen={isEditOpen}
+        title="Renombrar Spot"
+        initialValue={editingCrop?.name || ''}
+        placeholder="Nuevo nombre..."
+        onClose={() => setIsEditOpen(false)}
+        onConfirm={handleSaveCropName}
+      />
+
+      {/* Confirm Delete Modal */}
+      <ConfirmModal
+        isOpen={confirmOpen}
+        title="Eliminar Spot"
+        message={`¿Estás seguro de que deseas eliminar el Spot "${cropToDelete?.name}"? Esta acción no se puede deshacer y borrará todas las salas y datos asociados.`}
+        onClose={() => setConfirmOpen(false)}
+        onConfirm={handleConfirmDelete}
+        confirmText="Eliminar"
+        isDanger
+      />
+
+      {/* Color Picker Modal */}
+      <ColorPickerModal
+        isOpen={colorPickerOpen}
+        title={`Color para ${cropForColor?.name || 'Spot'}`}
+        colors={availableColors}
+        selectedColor={cropForColor?.color}
+        onSelectColor={handleUpdateColor}
+        onClose={() => setColorPickerOpen(false)}
+        getColorHex={getColorHex}
+      />
     </Container >
   );
 };
 
 export default Crops;
-

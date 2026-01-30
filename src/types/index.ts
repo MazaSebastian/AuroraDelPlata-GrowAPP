@@ -29,6 +29,8 @@ export interface CropPartner {
   email: string;
 }
 
+import { Room } from './rooms';
+
 export interface Crop {
   id: string;
   name: string;
@@ -39,6 +41,7 @@ export interface Crop {
   partners: CropPartner[]; // pensado para 2 personas
   status: 'active' | 'paused' | 'completed';
   color?: string; // New field for color
+  rooms?: Room[]; // Joined rooms
 }
 
 export interface EnvParams {
