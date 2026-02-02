@@ -627,7 +627,12 @@ const Dashboard: React.FC = () => {
                 return (
                   <CountdownCard key={room.id} stage={room.type}>
                     <div className="header">
-                      <span className="room-name">{room.name}</span>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span className="room-name">{room.name}</span>
+                        <span style={{ fontSize: '0.75rem', color: '#718096', fontWeight: 500 }}>
+                          {crops.find(c => c.id === room.spot_id)?.name || 'Sin Crop Asignado'}
+                        </span>
+                      </div>
                       <span className="stage-badge">{room.type === 'vegetation' ? 'Vegetativo' : 'Floración'}</span>
                     </div>
 
