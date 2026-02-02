@@ -220,9 +220,8 @@ const Sidebar: React.FC = () => {
       <Overlay isOpen={isOpen} onClick={() => setIsOpen(false)} />
 
       <SidebarContainer isOpen={isOpen}>
-        <LogoSection>
-          <img src="/logo.png" alt="Logo" style={{ height: '40px' }} />
-
+        <LogoSection style={{ justifyContent: 'center', padding: '1.5rem' }}>
+          <img src="/logo.png" alt="Logo" style={{ height: 'auto', width: '100%', maxWidth: '180px' }} />
         </LogoSection>
 
         <NavList>
