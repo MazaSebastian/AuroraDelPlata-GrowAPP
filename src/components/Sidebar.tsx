@@ -210,7 +210,7 @@ const Sidebar: React.FC = () => {
     <>
       <MobileHeader>
         <div className="brand">
-          <img src="/logo.png" alt="Logo" style={{ height: '32px' }} /> Aurora App
+          <img src="/logo.png" alt="Logo" style={{ height: '32px' }} />
         </div>
         <HamburgerButton onClick={() => setIsOpen(true)}>
           <FaBars />
@@ -222,7 +222,7 @@ const Sidebar: React.FC = () => {
       <SidebarContainer isOpen={isOpen}>
         <LogoSection>
           <img src="/logo.png" alt="Logo" style={{ height: '40px' }} />
-          <h2>Aurora</h2>
+
         </LogoSection>
 
         <NavList>
