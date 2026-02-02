@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import { FaHandHoldingMedical, FaBoxOpen, FaQrcode, FaEdit, FaTrash, FaBoxes, FaPrint } from 'react-icons/fa';
+import { FaHandHoldingMedical, FaBoxOpen, FaQrcode, FaEdit, FaTrash, FaPrint } from 'react-icons/fa';
 import QRCode from 'react-qr-code';
 import { dispensaryService, DispensaryBatch } from '../services/dispensaryService';
 import { patientsService } from '../services/patientsService';
@@ -372,6 +372,7 @@ const Dispensary: React.FC = () => {
 
     return (
         <PageContainer>
+            <PrintStyles />
             <Header>
                 <h1><FaHandHoldingMedical style={{ marginRight: '10px' }} />Dispensario</h1>
             </Header>

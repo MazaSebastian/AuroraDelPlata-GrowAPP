@@ -185,7 +185,7 @@ export const patientsService = {
             .getPublicUrl(filePath);
 
         return publicUrl;
-        return publicUrl;
+
     },
 
     // Delete a patient record

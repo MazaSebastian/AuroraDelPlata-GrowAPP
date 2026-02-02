@@ -169,7 +169,7 @@ const RoomDetail: React.FC = () => {
     const [isStickyModalOpen, setIsStickyModalOpen] = useState(false);
     const [stickyContent, setStickyContent] = useState('');
     const [stickyColor, setStickyColor] = useState<StickyNote['color']>('yellow');
-    const [selectedSticky, setSelectedSticky] = useState<StickyNote | null>(null);
+    const [selectedSticky, /** setSelectedSticky unused */] = useState<StickyNote | null>(null);
 
 
     // Interactive Calendar State
@@ -209,13 +209,7 @@ const RoomDetail: React.FC = () => {
     // ... (keep existing Task Handlers) ...
 
     // Sticky Handlers
-    const handleAddSticky = (day: Date) => {
-        setSelectedDayForSummary(day); // Keep context of day
-        setStickyContent('');
-        setStickyColor('yellow');
-        setSelectedSticky(null);
-        setIsStickyModalOpen(true);
-    };
+
 
     const handleSaveSticky = async () => {
         if (!id) return;
@@ -601,7 +595,7 @@ const RoomDetail: React.FC = () => {
 
                             // Phase Calculation Logic
                             let phaseBar = null;
-                            const dayStickies = stickies.filter(s => s.target_date === dateStr || (!s.target_date && isSameDay(new Date(s.created_at), dayItem)));
+
 
 
                             if (room?.start_date && isCurrentMonth) {

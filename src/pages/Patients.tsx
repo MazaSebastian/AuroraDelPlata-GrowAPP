@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { patientsService, Patient } from '../services/patientsService';
-import { usersService, Profile } from '../services/usersService';
+
 import { ConfirmModal } from '../components/ConfirmModal';
 import { LoadingSpinner } from '../components/LoadingSpinner';
-import { FaUserPlus, FaIdCard, FaEdit, FaSearch, FaFileUpload, FaCheckCircle, FaExclamationCircle, FaFileAlt } from 'react-icons/fa';
+import { FaUserPlus, FaIdCard, FaFileUpload, FaCheckCircle, FaFileAlt } from 'react-icons/fa';
 
 // Styled Components
 const PageContainer = styled.div`
@@ -204,7 +204,7 @@ const Patients: React.FC = () => {
     });
 
     // Form Data
-    const [users, setUsers] = useState<Profile[]>([]); // Candidates
+
 
     // Registration Form State
     const [regForm, setRegForm] = useState({
@@ -234,8 +234,7 @@ const Patients: React.FC = () => {
         const patientsData = await patientsService.getPatients();
         setPatients(patientsData);
 
-        const usersData = await usersService.getUsers();
-        setUsers(usersData);
+
 
         setIsLoading(false);
     };

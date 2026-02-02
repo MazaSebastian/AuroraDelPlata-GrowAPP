@@ -3,7 +3,7 @@ import styled from 'styled-components';
 import { KPICard } from '../components/charts/KPICard';
 import { TrendChart } from '../components/charts/TrendChart';
 import { metricsService, MonthlyMetric, GeneticPerformance, CostCategory } from '../services/metricsService';
-import { FaChartLine, FaLeaf, FaDollarSign, FaBolt, FaExclamationTriangle } from 'react-icons/fa';
+import { FaChartLine, FaLeaf, FaDollarSign, FaBolt } from 'react-icons/fa';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 
 const Container = styled.div`
@@ -42,10 +42,11 @@ const Metrics: React.FC = () => {
     const [monthlyMetrics, setMonthlyMetrics] = useState<MonthlyMetric[]>([]);
     const [genetics, setGenetics] = useState<GeneticPerformance[]>([]);
     const [costs, setCosts] = useState<CostCategory[]>([]);
-    const [year, setYear] = useState(new Date().getFullYear());
+    const [year] = useState(new Date().getFullYear());
 
     useEffect(() => {
         loadData();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [year]);
 
     const loadData = async () => {
@@ -74,7 +75,7 @@ const Metrics: React.FC = () => {
     const totalRevenue = monthlyMetrics.reduce((acc, m) => acc + (Number(m.total_revenue) || 0), 0);
     const totalExpenses = monthlyMetrics.reduce((acc, m) => acc + (Number(m.total_expenses) || 0), 0);
     const costPerGram = totalYield > 0 ? (totalExpenses / totalYield).toFixed(2) : '0.00';
-    const profit = totalRevenue - totalExpenses;
+
 
     return (
         <Container>

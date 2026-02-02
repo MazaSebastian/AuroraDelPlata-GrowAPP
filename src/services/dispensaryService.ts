@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-import { configService } from './configService';
+
 
 export interface DispensaryBatch {
     id: string;

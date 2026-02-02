@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import { FaCog, FaSave, FaHandHoldingMedical, FaDna } from 'react-icons/fa';
+import { FaCog, FaSave, FaDna } from 'react-icons/fa';
 import { geneticsService } from '../services/geneticsService';
 import { ToastModal } from '../components/ToastModal';
 import { Genetic } from '../types/genetics';
@@ -54,61 +54,28 @@ const SectionHeader = styled.h2`
   gap: 0.5rem;
 `;
 
-const FormGroup = styled.div`
-  margin-bottom: 1.5rem;
-  
-  label {
-    display: block;
-    font-weight: 500;
-    color: #4a5568;
-    margin-bottom: 0.5rem;
-  }
-  
-  input {
-    width: 100%;
-    max-width: 300px;
-    padding: 0.75rem;
-    border: 1px solid #cbd5e0;
-    border-radius: 0.5rem;
-    font-size: 1rem;
-    
-    &:focus {
-      outline: none;
-      border-color: #3b82f6;
-      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-    }
-  }
-
-  small {
-    display: block;
-    margin-top: 0.5rem;
-    color: #718096;
-    font-size: 0.875rem;
-  }
-`;
-
 const SaveButton = styled.button`
-  background: #3182ce;
-  color: white;
-  border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: 0.5rem;
-  font-weight: 600;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  transition: all 0.2s;
+background: #3182ce;
+color: white;
+border: none;
+padding: 0.75rem 1.5rem;
+border - radius: 0.5rem;
+font - weight: 600;
+cursor: pointer;
+display: flex;
+align - items: center;
+gap: 0.5rem;
+transition: all 0.2s;
   
   &:hover {
-    background: #2b6cb0;
-    transform: translateY(-1px);
-  }
+  background: #2b6cb0;
+  transform: translateY(-1px);
+}
   
   &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
+  opacity: 0.5;
+  cursor: not - allowed;
+}
 `;
 
 const Settings: React.FC = () => {
@@ -146,7 +113,7 @@ const Settings: React.FC = () => {
     if (errorCount === 0) {
       setToast({ isOpen: true, message: 'Precios de genéticas actualizados', type: 'success' });
     } else {
-      setToast({ isOpen: true, message: `Actualizados: ${successCount}. Errores: ${errorCount}`, type: 'error' });
+      setToast({ isOpen: true, message: `Actualizados: ${successCount}.Errores: ${errorCount} `, type: 'error' });
     }
     setSaving(false);
   };
