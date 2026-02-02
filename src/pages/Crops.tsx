@@ -5,7 +5,6 @@ import {
   FaSeedling,
   FaPlus,
   FaCalendarAlt,
-  FaMapMarkerAlt,
   FaClock,
   FaEdit,
   FaTrash

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import styled from 'styled-components';
+import styled, { createGlobalStyle } from 'styled-components';
 import { FaCut, FaHistory, FaPlus, FaBarcode, FaEdit, FaTrash, FaTimes, FaExchangeAlt, FaCheckCircle, FaLevelUpAlt, FaMinusCircle, FaThermometerHalf, FaTint } from 'react-icons/fa';
 import { Tooltip } from '../components/Tooltip';
 import { roomsService } from '../services/roomsService';
@@ -11,6 +11,7 @@ import { ConfirmModal } from '../components/ConfirmModal';
 import { ToastModal } from '../components/ToastModal';
 
 import { Room } from '../types/rooms';
+import QRCode from 'react-qr-code';
 
 const Container = styled.div`
   padding: 2rem;
@@ -244,6 +245,8 @@ const FormGroup = styled.div`
   input, select, textarea { width: 100%; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 0.5rem; font-size: 0.95rem; }
 `;
 
+
+
 const BarcodeDisplay = styled.div`
     background: white;
     padding: 2rem;
@@ -267,6 +270,78 @@ const BarcodeDisplay = styled.div`
         color: #718096;
         margin-top: 0.5rem;
     }
+`;
+
+const PrintableCloneLabel = styled.div`
+  display: none;
+
+  @media print {
+    display: flex;
+    flex-direction: row; /* Horizontal layout for wide small label */
+    align-items: center;
+    justify-content: space-between;
+    width: 50mm;
+    height: 30mm;
+    page-break-after: always;
+    padding: 2mm;
+    box-sizing: border-box;
+    overflow: hidden;
+    
+    /* Ensure only this is printed */
+    position: relative;
+    
+    .qr-side {
+        width: 22mm;
+        height: 22mm;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .info-side {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: flex-start;
+        padding-left: 2mm;
+        font-family: Arial, sans-serif;
+    }
+
+    .name {
+        font-size: 10pt;
+        font-weight: 800;
+        color: black;
+        margin-bottom: 2px;
+    }
+
+    .meta {
+        font-size: 7pt;
+        color: black;
+        line-height: 1.1;
+    }
+  }
+`;
+
+const PrintStyles = createGlobalStyle`
+  @media print {
+    @page {
+      size: 50mm 30mm;
+      margin: 0;
+    }
+    body * {
+      visibility: hidden;
+    }
+    #printable-clones-area, #printable-clones-area * {
+      visibility: visible;
+    }
+    #printable-clones-area {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+    }
+  }
 `;
 
 const Clones: React.FC = () => {
@@ -548,8 +623,8 @@ const Clones: React.FC = () => {
     };
 
     const handlePrintTickets = () => {
-        // Placeholder for future printer integration
-        showToast(`Imprimiendo ${printQuantity} ticket(s) para el lote ${viewingBatch?.name}`, 'info');
+        if (!viewingBatch) return;
+        window.print();
     };
 
     const handleDiscardClick = (batch: any) => {
@@ -1055,6 +1130,28 @@ const Clones: React.FC = () => {
                     </ModalOverlay>
                 )
             }
+
+            {/* Print Area */}
+            <PrintStyles />
+            <div id="printable-clones-area">
+                {viewingBatch && Array.from({ length: printQuantity }).map((_, i) => (
+                    <PrintableCloneLabel key={i}>
+                        <div className="qr-side">
+                            <QRCode
+                                value={viewingBatch.name}
+                                size={64} // sized for 22mm roughly (approx 80px)
+                                style={{ height: "auto", maxWidth: "100%", width: "100%" }}
+                                viewBox={`0 0 256 256`}
+                            />
+                        </div>
+                        <div className="info-side">
+                            <div className="name">{viewingBatch.name}</div>
+                            <div className="meta">{viewingBatch.genetic?.name?.substring(0, 15)}</div>
+                            <div className="meta">{new Date(viewingBatch.start_date || viewingBatch.created_at).toLocaleDateString()}</div>
+                        </div>
+                    </PrintableCloneLabel>
+                ))}
+            </div>
 
             <ToastModal
                 isOpen={toastOpen}

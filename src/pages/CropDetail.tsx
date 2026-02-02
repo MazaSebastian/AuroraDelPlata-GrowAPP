@@ -546,14 +546,12 @@ const CropDetail: React.FC = () => {
     const { dispensaryService } = await import('../services/dispensaryService');
     const { roomsService } = await import('../services/roomsService');
 
-    let totalAmount = 0;
+
 
     // Process each batch
     for (const batch of batches) {
       const amount = parseFloat(harvestForm.batchYields[batch.id]);
       if (isNaN(amount) || amount < 0) continue;
-
-      totalAmount += amount;
 
       // 1. Log Harvest (One per batch to keep track of mechanics/genetics)
       const harvestLogId = await cropsService.logHarvest({
