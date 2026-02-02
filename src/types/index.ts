@@ -81,10 +81,15 @@ export interface Task {
   id: string;
   title: string;
   description?: string;
-  type: 'info' | 'warning' | 'danger' | 'fertilizante' | 'defoliacion' | 'poda_apical' | 'hst' | 'lst' | 'enmienda' | 'te_compost' | 'agua' | 'esquejes';
+  type: 'info' | 'warning' | 'danger' | 'fertilizar' | 'riego' | 'poda_apical' | 'hst' | 'lst' | 'entrenamiento' | 'defoliacion' | 'esquejes' | 'enmienda' | 'te_compost';
   status: 'pending' | 'done' | 'dismissed';
   due_date?: string;
   created_at: string;
+  room_id?: string;
+  assigned_to?: string;
+  observations?: string;
+  photos?: string[];
+  completed_at?: string;
 }
 
 
@@ -138,4 +143,6 @@ export interface StickyNote {
   created_at: string;
   created_by?: string;
   user_id?: string;
+  room_id?: string;
+  target_date?: string; // ISO Date "YYYY-MM-DD"
 }

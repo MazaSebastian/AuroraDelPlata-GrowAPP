@@ -11,6 +11,7 @@ export interface Room {
     current_humidity?: number;
     spot_id?: string;
     created_at: string;
+    start_date?: string; // Added for user-defined start date
     batches?: Batch[];
 }
 

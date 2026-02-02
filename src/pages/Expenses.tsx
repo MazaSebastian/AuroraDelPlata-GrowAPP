@@ -177,7 +177,7 @@ const Expenses: React.FC = () => {
 
             <Grid>
                 <BalanceCard>
-                    <h2>Saldo Chakra Total</h2>
+                    <h2>Saldo Total</h2>
                     <p className="balance" style={{ color: totalBalance >= 0 ? '#2f855a' : '#c53030' }}>
                         {formatMoney(totalBalance)}
                     </p>

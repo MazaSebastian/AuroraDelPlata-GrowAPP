@@ -1,11 +1,14 @@
 
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import { FaCut, FaHistory, FaPlus, FaBarcode, FaEdit, FaTrash, FaTimes } from 'react-icons/fa';
+import { FaCut, FaHistory, FaPlus, FaBarcode, FaEdit, FaTrash, FaTimes, FaExchangeAlt, FaCheckCircle, FaLevelUpAlt, FaMinusCircle, FaThermometerHalf, FaTint } from 'react-icons/fa';
+import { Tooltip } from '../components/Tooltip';
 import { roomsService } from '../services/roomsService';
 import { geneticsService } from '../services/geneticsService';
+import { environmentService } from '../services/environmentService';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ConfirmModal } from '../components/ConfirmModal';
+import { ToastModal } from '../components/ToastModal';
 
 import { Room } from '../types/rooms';
 
@@ -14,6 +17,100 @@ const Container = styled.div`
   padding-top: 5rem;
   max-width: 1400px;
   margin: 0 auto;
+`;
+
+// --- New Environment Components ---
+const EnvironmentSection = styled.div`
+  display: flex;
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+`;
+
+const EnvCard = styled.div<{ type: 'temp' | 'humidity' }>`
+  flex: 1;
+  min-width: 180px;
+  background: white;
+  border-radius: 1rem;
+  padding: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+  border-left: 4px solid ${p => p.type === 'temp' ? '#e53e3e' : '#3182ce'};
+  
+  .info {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .label {
+    font-size: 0.75rem;
+    color: #718096;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.15rem;
+  }
+
+  .value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #2d3748;
+  }
+
+  .icon {
+    font-size: 1.75rem;
+    opacity: 0.15;
+    color: ${p => p.type === 'temp' ? '#e53e3e' : '#3182ce'};
+  }
+`;
+
+const SummaryGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+`;
+
+const SummaryCard = styled.div<{ isTotal?: boolean }>`
+  background: white;
+  padding: 1.25rem;
+  border-radius: 1rem;
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+  border: 1px solid ${p => p.isTotal ? '#b2f5ea' : '#edf2f7'};
+  position: relative;
+  overflow: hidden;
+
+  ${p => p.isTotal && `
+    background: linear-gradient(135deg, #e6fffa 0%, #ffffff 100%);
+  `}
+
+  h3 {
+    margin: 0 0 0.25rem 0;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #718096;
+    font-weight: 700;
+  }
+
+  .value {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: ${p => p.isTotal ? '#2c7a7b' : '#2d3748'};
+    line-height: 1.2;
+  }
+
+  .icon {
+    position: absolute;
+    right: 1.25rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 1.75rem;
+    opacity: 0.1;
+    color: ${p => p.isTotal ? '#319795' : '#4a5568'};
+  }
 `;
 
 const Header = styled.div`
@@ -177,13 +274,16 @@ const Clones: React.FC = () => {
     const [mothersStates, setMothersStates] = useState<any[]>([]);
     const [cloneBatches, setCloneBatches] = useState<any[]>([]);
     const [rooms, setRooms] = useState<Room[]>([]);
+    const [stats, setStats] = useState({ total: 0, byGenetic: {} as Record<string, number> });
+
+    // Environment Data
+    const [envData, setEnvData] = useState<{ temperature: number, humidity: number } | null>(null);
 
     // Create Modal State
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [newBatch, setNewBatch] = useState({
         geneticId: '',
         quantity: '',
-        roomId: '',
         date: new Date().toISOString().split('T')[0]
     });
 
@@ -199,6 +299,34 @@ const Clones: React.FC = () => {
     // Barcode Modal State
     const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
     const [viewingBatch, setViewingBatch] = useState<any>(null);
+    const [allBatchesHistory, setAllBatchesHistory] = useState<any[]>([]); // To calculate sequences
+
+    // Move Modal State
+    const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
+    const [batchToMove, setBatchToMove] = useState<any>(null);
+    const [moveToRoomId, setMoveToRoomId] = useState('');
+    const [moveQuantity, setMoveQuantity] = useState<number>(0);
+    const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false); // Success Modal State
+
+    // Print State
+    const [printQuantity, setPrintQuantity] = useState(1);
+
+    // Discard Modal State
+    const [isDiscardModalOpen, setIsDiscardModalOpen] = useState(false);
+    const [batchToDiscard, setBatchToDiscard] = useState<any>(null);
+    const [discardQuantity, setDiscardQuantity] = useState<number>(0);
+    const [discardReason, setDiscardReason] = useState('');
+
+    // Toast State
+    const [toastOpen, setToastOpen] = useState(false);
+    const [toastMessage, setToastMessage] = useState('');
+    const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('info');
+
+    const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+        setToastMessage(message);
+        setToastType(type);
+        setToastOpen(true);
+    };
 
 
     useEffect(() => {
@@ -207,42 +335,120 @@ const Clones: React.FC = () => {
 
     const loadData = async () => {
         setLoading(true);
-        const genetics = await geneticsService.getGenetics();
-        const batches = await roomsService.getBatches();
-        const allRooms = await roomsService.getRooms();
+
+        // Parallel data loading
+        const [genetics, batches, allRooms, env] = await Promise.all([
+            geneticsService.getGenetics(),
+            roomsService.getBatches(),
+            roomsService.getRooms(),
+            environmentService.getEnvironmentData()
+        ]);
+
+        setEnvData(env);
 
         const validRooms = allRooms.filter(r => ['clones', 'vegetation', 'general'].includes(r.type));
         setRooms(validRooms);
 
-        const allClones = batches.filter(b => b.parent_batch_id || (b.name && b.name.startsWith('CL-')));
+        const allClones = batches.filter(b =>
+            b.parent_batch_id ||
+            (b.name && b.name.startsWith('CL-')) ||
+            (b.stage === 'seedling') || // New batches are seedlings
+            /^[A-Z]{3}-\d{4}$/.test(b.name) // Match new sequential format
+        );
+
+        // Calculate Stats
+        let totalQty = 0;
+        const geneticBreakdown: Record<string, number> = {};
+
+        allClones.forEach(b => {
+            const qty = Number(b.quantity) || 0;
+            totalQty += qty;
+            const geneticName = b.genetic?.name || 'Desconocida';
+            geneticBreakdown[geneticName] = (geneticBreakdown[geneticName] || 0) + qty;
+        });
+
+        setStats({ total: totalQty, byGenetic: geneticBreakdown });
 
         setMothersStates(genetics);
-        setCloneBatches(allClones);
+        // Sort grouping logic:
+        // 1. Identify Roots (no parent or parent not in this list)
+        // 2. Map children to parents
+        // 3. Flatten list
+        const batchMap = new Map();
+        allClones.forEach(b => batchMap.set(b.id, { ...b, children: [] }));
+
+        const roots: any[] = [];
+        const orphans: any[] = []; // Sub-batches whose parents are not in the 'clones' view (e.g. parent moved to diff room or deleted)
+
+        allClones.forEach(b => {
+            if (b.parent_batch_id && batchMap.has(b.parent_batch_id)) {
+                batchMap.get(b.parent_batch_id).children.push(b);
+            } else {
+                // Check if it's strictly a child (has parent_id) but parent not here
+                if (b.parent_batch_id) orphans.push(b);
+                else roots.push(batchMap.get(b.id)); // It's a root
+            }
+        });
+
+        // Sort roots by date desc
+        roots.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+        // Flatten logic change: Keep as groups { root, children }
+        const groups: any[] = [];
+        roots.forEach(root => {
+            // Sort children by date desc
+            root.children.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+            groups.push({ root, children: root.children });
+        });
+
+        // Wrap orphans in groups
+        orphans.forEach(o => groups.push({ root: o, children: [] }));
+
+        // Sort groups by root date desc
+        groups.sort((a, b) => new Date(b.root.created_at).getTime() - new Date(a.root.created_at).getTime());
+
+        setMothersStates(genetics);
+        setCloneBatches(groups);
+        setAllBatchesHistory(batches); // Store full history
         setLoading(false);
     };
 
-    const generateBarcode = (geneticName: string) => {
-        const prefix = "CL";
-        const genCode = (geneticName || 'UNK').substring(0, 3).toUpperCase().replace(/[^A-Z]/g, '');
-        const date = new Date().toISOString().slice(2, 10).replace(/-/g, ''); // YYMMDD
-        const random = Math.random().toString(36).substring(2, 6).toUpperCase();
-        return `${prefix}-${genCode}-${date}-${random}`;
+    const generateSequenceName = (geneticName: string) => {
+        const prefix = (geneticName || 'UNK').substring(0, 3).toUpperCase().replace(/[^A-Z]/g, '');
+
+        // Filter all batches that start with this Genetic Prefix
+        // Note: We check specifically for the pattern PREFIX-xxxx
+        const pattern = new RegExp(`^${prefix}-\\d{4}$`);
+
+        const existing = allBatchesHistory.filter(b => pattern.test(b.name));
+
+        let maxSeq = 0;
+        existing.forEach(b => {
+            const parts = b.name.split('-');
+            if (parts.length === 2) {
+                const seq = parseInt(parts[1]);
+                if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+            }
+        });
+
+        const nextSeq = (maxSeq + 1).toString().padStart(4, '0');
+        return `${prefix}-${nextSeq}`;
     };
 
     const handleCreateCloneBatch = async () => {
-        if (!newBatch.geneticId || !newBatch.quantity || !newBatch.roomId) {
-            alert("Por favor completa todos los campos.");
+        if (!newBatch.geneticId || !newBatch.quantity) {
+            showToast("Por favor completa todos los campos.", 'error');
             return;
         }
 
         const selectedGenetic = mothersStates.find(m => m.id === newBatch.geneticId);
-        const barcodeName = generateBarcode(selectedGenetic?.name || 'GEN');
+        const barcodeName = generateSequenceName(selectedGenetic?.name || 'GEN');
 
         const batchData = {
             name: barcodeName,
             quantity: parseInt(newBatch.quantity),
             stage: 'seedling' as const,
-            current_room_id: newBatch.roomId,
+            current_room_id: undefined,
             genetic_id: newBatch.geneticId,
             start_date: newBatch.date,
             parent_batch_id: undefined
@@ -256,11 +462,10 @@ const Clones: React.FC = () => {
             setNewBatch({
                 geneticId: '',
                 quantity: '',
-                roomId: '',
                 date: new Date().toISOString().split('T')[0]
             });
         } else {
-            alert("Error al crear el lote.");
+            showToast("Error al crear el lote.", 'error');
         }
     };
 
@@ -286,8 +491,9 @@ const Clones: React.FC = () => {
             loadData();
             setIsEditModalOpen(false);
             setEditingBatch(null);
+            setEditingBatch(null);
         } else {
-            alert("Error al actualizar el lote.");
+            showToast("Error al actualizar el lote.", 'error');
         }
     };
 
@@ -304,18 +510,92 @@ const Clones: React.FC = () => {
             loadData();
             setIsDeleteModalOpen(false);
             setBatchToDelete(null);
+            setBatchToDelete(null);
         } else {
-            alert("Error al eliminar el lote.");
+            showToast("Error al eliminar el lote.", 'error');
+        }
+    };
+
+    const handleMoveClick = (batch: any) => {
+        setBatchToMove(batch);
+        setMoveToRoomId('');
+        setMoveQuantity(batch.quantity); // Default to all
+        setIsMoveModalOpen(true);
+    };
+
+    const handleConfirmMove = async () => {
+        if (!batchToMove || !moveToRoomId || !moveQuantity) return;
+
+        const success = await roomsService.moveBatch(batchToMove.id, batchToMove.current_room_id, moveToRoomId, "Movimiento desde Gestión de Esquejes", moveQuantity);
+        if (success) {
+            // alert("✅ Lote movido correctamente"); // Removed native alert
+            loadData();
+            setIsMoveModalOpen(false);
+            setIsSuccessModalOpen(true); // Trigger Success Modal
+            setBatchToMove(null);
+            setMoveToRoomId('');
+            setBatchToMove(null);
+            setMoveToRoomId('');
+        } else {
+            showToast("Error al mover el lote", 'error');
         }
     };
 
     const handleBarcodeClick = (batch: any) => {
         setViewingBatch(batch);
+        setPrintQuantity(1); // Reset default
         setIsBarcodeModalOpen(true);
     };
 
+    const handlePrintTickets = () => {
+        // Placeholder for future printer integration
+        showToast(`Imprimiendo ${printQuantity} ticket(s) para el lote ${viewingBatch?.name}`, 'info');
+    };
 
-    if (loading) return <LoadingSpinner text="Cargando esquejes..." fullScreen />;
+    const handleDiscardClick = (batch: any) => {
+        setBatchToDiscard(batch);
+        setDiscardQuantity(0);
+        setDiscardReason('');
+        setIsDiscardModalOpen(true);
+    };
+
+    const handleConfirmDiscard = async () => {
+        if (!batchToDiscard || discardQuantity <= 0) return;
+
+        if (discardQuantity > batchToDiscard.quantity) {
+            showToast("No puedes descartar más de la cantidad disponible.", 'error');
+            return;
+        }
+
+        const newQuantity = batchToDiscard.quantity - discardQuantity;
+        let success = false;
+
+        if (newQuantity === 0) {
+            // Option: Delete batch if 0? Or just set to 0. 
+            // Let's set to 0 strictly, or ask user?
+            // For now, update to 0. It might disappear from list if filter > 0, but here we don't filter > 0 strictly in active lists usually?
+            // Actually, usually 0 means empty. Let's update.
+            success = await roomsService.updateBatch(batchToDiscard.id, {
+                quantity: newQuantity
+            });
+        } else {
+            success = await roomsService.updateBatch(batchToDiscard.id, {
+                quantity: newQuantity
+            });
+        }
+
+        if (success) {
+            // Ideally log the reason
+            console.log(`Discarded ${discardQuantity} from ${batchToDiscard.name}. Reason: ${discardReason}`);
+            loadData();
+            setIsDiscardModalOpen(false);
+            setBatchToDiscard(null);
+            setBatchToDiscard(null);
+        } else {
+            showToast("Error al descartar esquejes.", 'error');
+        }
+    };
+
 
     return (
         <Container>
@@ -326,61 +606,150 @@ const Clones: React.FC = () => {
                 </CreateButton>
             </Header>
 
-            <HistorySection>
-                <HistoryHeader>
-                    <FaHistory /> Lotes de Esquejes Activos
-                </HistoryHeader>
-                <div style={{ overflowX: 'auto' }}>
-                    <HistoryTable>
-                        <thead>
-                            <tr>
-                                <th>Fecha</th>
-                                <th>Lote (Código)</th>
-                                <th>Genética</th>
-                                <th>Cantidad</th>
-                                <th>Destino</th>
-                                <th style={{ textAlign: 'center' }}>Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {cloneBatches.map(batch => (
-                                <tr key={batch.id}>
-                                    <td>{new Date(batch.start_date || batch.created_at).toLocaleDateString()}</td>
-                                    <td>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                            <FaBarcode style={{ color: '#718096' }} />
-                                            <strong>{batch.name}</strong>
-                                        </div>
-                                    </td>
-                                    <td>{batch.genetic?.name || 'Desconocida'}</td>
-                                    <td>{batch.quantity} u.</td>
-                                    <td>{batch.room?.name || 'Desconocido'}</td>
-                                    <td style={{ textAlign: 'center' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'center' }}>
-                                            <ActionButton color="#4a5568" onClick={() => handleBarcodeClick(batch)} title="Ver Código">
-                                                <FaBarcode />
-                                            </ActionButton>
-                                            <ActionButton color="#3182ce" onClick={() => handleEditClick(batch)} title="Editar">
-                                                <FaEdit />
-                                            </ActionButton>
-                                            <ActionButton color="#e53e3e" onClick={() => handleDeleteClick(batch)} title="Eliminar">
-                                                <FaTrash />
-                                            </ActionButton>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
-                            {cloneBatches.length === 0 && (
-                                <tr>
-                                    <td colSpan={6} style={{ textAlign: 'center', color: '#a0aec0', padding: '2rem' }}>
-                                        No hay registros de esquejes.
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </HistoryTable>
+            {loading ? (
+                <div style={{ position: 'relative', height: '300px', background: 'white', borderRadius: '1rem', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                    <LoadingSpinner text="Cargando esquejes..." />
                 </div>
-            </HistorySection>
+            ) : (
+                <>
+                    {/* Environmental Conditions */}
+                    {envData && (
+                        <EnvironmentSection>
+                            <EnvCard type="temp">
+                                <div className="info">
+                                    <span className="label">Temperatura</span>
+                                    <span className="value">{envData.temperature}°C</span>
+                                </div>
+                                <div className="icon"><FaThermometerHalf /></div>
+                            </EnvCard>
+                            <EnvCard type="humidity">
+                                <div className="info">
+                                    <span className="label">Humedad</span>
+                                    <span className="value">{envData.humidity}%</span>
+                                </div>
+                                <div className="icon"><FaTint /></div>
+                            </EnvCard>
+                        </EnvironmentSection>
+                    )}
+
+                    {/* Summary Section */}
+                    <SummaryGrid>
+                        <SummaryCard isTotal>
+                            <h3>Total Esquejes</h3>
+                            <div className="value">{stats.total}</div>
+                            <div className="icon"><FaCut /></div>
+                        </SummaryCard>
+                        {Object.entries(stats.byGenetic).map(([name, qty]) => (
+                            <SummaryCard key={name}>
+                                <h3>{name}</h3>
+                                <div className="value">{qty}</div>
+                            </SummaryCard>
+                        ))}
+                    </SummaryGrid>
+
+                    <HistorySection>
+                        <HistoryHeader>
+                            <FaHistory /> Lotes de Esquejes Activos
+                        </HistoryHeader>
+                        <div style={{ overflowX: 'auto' }}>
+                            <HistoryTable>
+                                <thead>
+                                    <tr>
+                                        <th>Fecha</th>
+                                        <th>Lote (Código)</th>
+                                        <th>Genética</th>
+                                        <th>Cantidad</th>
+                                        <th>Destino</th>
+                                        <th style={{ textAlign: 'center' }}>Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {/* RENDER BY GROUPS */}
+                                    {cloneBatches.map(group => {
+                                        const { root, children } = group;
+                                        const rows = [root, ...children];
+
+                                        return (
+                                            <React.Fragment key={root.id}>
+                                                {rows.map((batch, index) => {
+                                                    const isRoot = batch === root;
+                                                    const isLast = index === rows.length - 1;
+
+                                                    // Style to remove border if connected
+                                                    const rowStyle: React.CSSProperties = {
+                                                        borderBottom: !isLast ? 'none' : undefined,
+                                                        fontSize: !isRoot ? '0.9rem' : undefined,
+                                                        color: !isRoot ? '#4a5568' : undefined
+                                                    };
+                                                    const cellStyle = !isLast ? { borderBottom: 'none' } : undefined;
+
+                                                    return (
+                                                        <tr key={batch.id} style={rowStyle}>
+                                                            <td style={cellStyle}>{new Date(batch.start_date || batch.created_at).toLocaleDateString()}</td>
+                                                            <td style={cellStyle}>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', paddingLeft: batch.parent_batch_id ? '1.5rem' : '0' }}>
+                                                                    {batch.parent_batch_id && (
+                                                                        <FaLevelUpAlt
+                                                                            style={{ transform: 'rotate(90deg)', color: '#a0aec0', fontSize: '1rem', minWidth: '1rem' }}
+                                                                            title="Sub-lote derivado"
+                                                                        />
+                                                                    )}
+                                                                    <FaBarcode style={{ color: batch.parent_batch_id ? '#718096' : '#2d3748' }} />
+                                                                    <strong>{batch.name}</strong>
+                                                                    {batch.parent_batch_id && <span style={{ fontSize: '0.7rem', color: '#a0aec0', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '0 4px' }}>Sub-lote</span>}
+                                                                </div>
+                                                            </td>
+                                                            <td style={cellStyle}>{batch.genetic?.name || 'Desconocida'}</td>
+                                                            <td style={cellStyle}>{batch.quantity} u.</td>
+                                                            <td style={cellStyle}>{batch.room?.name || 'Desconocido'}</td>
+                                                            <td style={{ textAlign: 'center', ...cellStyle }}>
+                                                                <div style={{ display: 'flex', justifyContent: 'center' }}>
+                                                                    <Tooltip text="Ver Código de Barras">
+                                                                        <ActionButton color="#4a5568" onClick={() => handleBarcodeClick(batch)}>
+                                                                            <FaBarcode />
+                                                                        </ActionButton>
+                                                                    </Tooltip>
+                                                                    <Tooltip text="Mover a Sala (Transplante)">
+                                                                        <ActionButton color="#ed8936" onClick={() => handleMoveClick(batch)}>
+                                                                            <FaExchangeAlt />
+                                                                        </ActionButton>
+                                                                    </Tooltip>
+                                                                    <Tooltip text="Dar de Baja (Descarte)">
+                                                                        <ActionButton color="#e53e3e" onClick={() => handleDiscardClick(batch)}>
+                                                                            <FaMinusCircle />
+                                                                        </ActionButton>
+                                                                    </Tooltip>
+                                                                    <Tooltip text="Editar Lote">
+                                                                        <ActionButton color="#3182ce" onClick={() => handleEditClick(batch)}>
+                                                                            <FaEdit />
+                                                                        </ActionButton>
+                                                                    </Tooltip>
+                                                                    <Tooltip text="Eliminar Lote">
+                                                                        <ActionButton color="#e53e3e" onClick={() => handleDeleteClick(batch)}>
+                                                                            <FaTrash />
+                                                                        </ActionButton>
+                                                                    </Tooltip>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </React.Fragment>
+                                        );
+                                    })}
+                                    {cloneBatches.length === 0 && (
+                                        <tr>
+                                            <td colSpan={6} style={{ textAlign: 'center', color: '#a0aec0', padding: '2rem' }}>
+                                                No hay registros de esquejes.
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </HistoryTable>
+                        </div>
+                    </HistorySection>
+                </>
+            )}
 
             {/* Create Clone Batch Modal */}
             {isCreateModalOpen && (
@@ -425,18 +794,7 @@ const Clones: React.FC = () => {
                             </FormGroup>
                         </div>
 
-                        <FormGroup>
-                            <label>Sala de Destino</label>
-                            <select
-                                value={newBatch.roomId}
-                                onChange={e => setNewBatch({ ...newBatch, roomId: e.target.value })}
-                            >
-                                <option value="">Seleccionar Sala...</option>
-                                {rooms.map(r => (
-                                    <option key={r.id} value={r.id}>{r.name} ({r.type})</option>
-                                ))}
-                            </select>
-                        </FormGroup>
+
 
                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem' }}>
                             <button
@@ -496,7 +854,66 @@ const Clones: React.FC = () => {
                 </ModalOverlay>
             )}
 
-            {/* Barcode Modal */}
+
+            {/* Move Batch Modal */}
+            {isMoveModalOpen && batchToMove && (
+                <ModalOverlay>
+                    <ModalContent>
+                        <CloseIcon onClick={() => setIsMoveModalOpen(false)}><FaTimes /></CloseIcon>
+                        <h2 style={{ marginBottom: '1.5rem', color: '#2d3748', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <FaExchangeAlt /> Mover Lote
+                        </h2>
+                        <p style={{ marginBottom: '1rem' }}>Mover <strong>{batchToMove.name}</strong> a otra sala:</p>
+
+                        <FormGroup>
+                            <label>Sala de Destino</label>
+                            <select
+                                value={moveToRoomId}
+                                onChange={e => setMoveToRoomId(e.target.value)}
+                            >
+                                <option value="">Seleccionar Sala...</option>
+                                {rooms.filter(r => r.id !== batchToMove.current_room_id).map(r => (
+                                    <option key={r.id} value={r.id}>{r.name} ({r.type})</option>
+                                ))}
+                            </select>
+                        </FormGroup>
+
+                        <FormGroup>
+                            <label>Cantidad a Mover (Total: {batchToMove.quantity})</label>
+                            <input
+                                type="number"
+                                min="1"
+                                max={batchToMove.quantity}
+                                value={moveQuantity}
+                                onChange={e => setMoveQuantity(Math.min(batchToMove.quantity, Math.max(1, parseInt(e.target.value) || 1)))}
+                            />
+                            <div style={{ fontSize: '0.8rem', color: '#718096', marginTop: '0.25rem' }}>
+                                {moveQuantity < batchToMove.quantity
+                                    ? `Se moverán ${moveQuantity} esquejes. Quedarán ${batchToMove.quantity - moveQuantity} en el lote original.`
+                                    : 'Se moverá todo el lote.'}
+                            </div>
+                        </FormGroup>
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem' }}>
+                            <button
+                                onClick={() => setIsMoveModalOpen(false)}
+                                style={{ padding: '0.75rem', background: 'none', border: '1px solid #e2e8f0', borderRadius: '0.5rem', cursor: 'pointer' }}
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleConfirmMove}
+                                style={{ padding: '0.75rem 1.5rem', background: '#ed8936', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 'bold' }}
+                            >
+                                Mover Lote
+                            </button>
+                        </div>
+                    </ModalContent>
+                </ModalOverlay>
+            )}
+
+            {/* Barcode Modal */
+            }
             {isBarcodeModalOpen && viewingBatch && (
                 <ModalOverlay onClick={() => setIsBarcodeModalOpen(false)}>
                     <ModalContent onClick={e => e.stopPropagation()}>
@@ -512,14 +929,98 @@ const Clones: React.FC = () => {
                             </div>
                         </BarcodeDisplay>
 
-                        <div style={{ display: 'flex', justifyContent: 'center' }}>
-                            <button onClick={() => setIsBarcodeModalOpen(false)} style={{ padding: '0.75rem 2rem', background: '#edf2f7', color: '#4a5568', border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 'bold' }}>
-                                Cerrar
-                            </button>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <label style={{ fontWeight: 600, color: '#4a5568' }}>Copias:</label>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    value={printQuantity}
+                                    onChange={(e) => setPrintQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                                    style={{ width: '60px', padding: '0.5rem', textAlign: 'center', borderRadius: '0.25rem', border: '1px solid #cbd5e0' }}
+                                />
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '1rem' }}>
+                                <button onClick={() => setIsBarcodeModalOpen(false)} style={{ padding: '0.75rem 2rem', background: 'none', border: '1px solid #cbd5e0', borderRadius: '0.5rem', cursor: 'pointer', color: '#718096' }}>
+                                    Cerrar
+                                </button>
+                                <button onClick={handlePrintTickets} style={{ padding: '0.75rem 2rem', background: '#2d3748', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <FaBarcode /> Imprimir
+                                </button>
+                            </div>
                         </div>
                     </ModalContent>
                 </ModalOverlay>
             )}
+
+            {/* Discard Modal */}
+            {isDiscardModalOpen && batchToDiscard && (
+                <ModalOverlay>
+                    <ModalContent>
+                        <CloseIcon onClick={() => setIsDiscardModalOpen(false)}><FaTimes /></CloseIcon>
+                        <h2 style={{ marginBottom: '1.5rem', color: '#e53e3e', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <FaMinusCircle /> Descartar Esquejes
+                        </h2>
+                        <p style={{ marginBottom: '1rem', color: '#718096' }}>
+                            Registrar baja de esquejes para el lote <strong>{batchToDiscard.name}</strong>.
+                        </p>
+
+                        <div style={{ background: '#fff5f5', padding: '1rem', borderRadius: '0.5rem', marginBottom: '1.5rem', border: '1px solid #fed7d7' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.9rem', color: '#c53030', fontWeight: 'bold' }}>
+                                <span>Cantidad Actual:</span>
+                                <span>{batchToDiscard.quantity} u.</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: '#2d3748' }}>
+                                <span>Nueva Cantidad:</span>
+                                <span>{Math.max(0, batchToDiscard.quantity - discardQuantity)} u.</span>
+                            </div>
+                        </div>
+
+                        <FormGroup>
+                            <label>Cantidad a Descartar</label>
+                            <input
+                                type="number"
+                                min="1"
+                                max={batchToDiscard.quantity}
+                                value={discardQuantity}
+                                onChange={e => setDiscardQuantity(Math.min(batchToDiscard.quantity, Math.max(0, parseInt(e.target.value) || 0)))}
+                            />
+                        </FormGroup>
+
+                        <FormGroup>
+                            <label>Motivo (Opcional)</label>
+                            <input
+                                type="text"
+                                placeholder="Ej: Hongos, Dañados, No enraizó..."
+                                value={discardReason}
+                                onChange={e => setDiscardReason(e.target.value)}
+                            />
+                        </FormGroup>
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem' }}>
+                            <button
+                                onClick={() => setIsDiscardModalOpen(false)}
+                                style={{ padding: '0.75rem', background: 'none', border: '1px solid #e2e8f0', borderRadius: '0.5rem', cursor: 'pointer' }}
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleConfirmDiscard}
+                                disabled={discardQuantity <= 0}
+                                style={{
+                                    padding: '0.75rem 1.5rem',
+                                    background: discardQuantity > 0 ? '#e53e3e' : '#feb2b2',
+                                    color: 'white', border: 'none', borderRadius: '0.5rem', cursor: discardQuantity > 0 ? 'pointer' : 'not-allowed', fontWeight: 'bold'
+                                }}
+                            >
+                                Confirmar Baja
+                            </button>
+                        </div>
+                    </ModalContent>
+                </ModalOverlay>
+            )
+            }
 
             {/* Delete Confirmation */}
             <ConfirmModal
@@ -532,9 +1033,37 @@ const Clones: React.FC = () => {
                 onConfirm={handleConfirmDelete}
             />
 
-        </Container>
+            {/* Success Modal */}
+            {
+                isSuccessModalOpen && (
+                    <ModalOverlay onClick={() => setIsSuccessModalOpen(false)}>
+                        <ModalContent style={{ textAlign: 'center', padding: '2rem' }}>
+                            <div style={{ color: '#48bb78', fontSize: '3rem', marginBottom: '1rem' }}>
+                                <FaCheckCircle />
+                            </div>
+                            <h3 style={{ fontSize: '1.25rem', color: '#2d3748', marginBottom: '0.5rem' }}>¡Lote Movido!</h3>
+                            <p style={{ color: '#718096', marginBottom: '1.5rem' }}>
+                                El lote se ha asignado correctamente a la sala de destino.
+                            </p>
+                            <button
+                                onClick={() => setIsSuccessModalOpen(false)}
+                                style={{ padding: '0.75rem 2rem', background: '#319795', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 'bold' }}
+                            >
+                                Aceptar
+                            </button>
+                        </ModalContent>
+                    </ModalOverlay>
+                )
+            }
+
+            <ToastModal
+                isOpen={toastOpen}
+                message={toastMessage}
+                type={toastType}
+                onClose={() => setToastOpen(false)}
+            />
+        </Container >
     );
 };
 
 export default Clones;
-

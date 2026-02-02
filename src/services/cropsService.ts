@@ -144,5 +144,30 @@ export const cropsService = {
         }
 
         return true;
+    },
+
+    async logHarvest(data: { cropId: string, roomName: string, amount: number, unit: 'g' | 'kg', notes?: string }): Promise<string | null> {
+        if (!supabase) return null;
+
+        const { data: { user } } = await supabase.auth.getUser();
+
+        const { data: logData, error } = await supabase
+            .from('chakra_harvest_logs')
+            .insert([{
+                crop_id: data.cropId,
+                room_name: data.roomName,
+                yield_amount: data.amount,
+                yield_unit: data.unit,
+                notes: data.notes,
+                logged_by: user?.id
+            }])
+            .select('id')
+            .single();
+
+        if (error) {
+            console.error('Error logging harvest:', error);
+            return null;
+        }
+        return logData?.id || null;
     }
 };

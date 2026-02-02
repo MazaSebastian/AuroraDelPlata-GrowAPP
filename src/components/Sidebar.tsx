@@ -4,16 +4,18 @@ import styled from 'styled-components';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   FaChartLine,
-
+  FaChartPie,
   FaBoxes,
   FaShoppingBag,
   FaBars,
   FaSeedling,
   FaSignOutAlt,
   FaMoneyBillWave,
-  FaWarehouse,
   FaDna,
-  FaCut
+  FaCut,
+  FaIdCard,
+  FaHandHoldingMedical,
+  FaCog
 } from 'react-icons/fa';
 import { useAuth } from '../context/AuthContext';
 import { notificationService } from '../services/notificationService';
@@ -147,6 +149,15 @@ const StyledNavLink = styled(NavLink)`
   }
 `;
 
+const SectionTitle = styled.div`
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #a0aec0;
+  margin: 1.5rem 0 0.5rem 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+`;
+
 const UserSection = styled.div`
   padding: 1.5rem;
   border-top: 1px solid #f0f4f8;
@@ -218,11 +229,11 @@ const Sidebar: React.FC = () => {
           <StyledNavLink to="/">
             <FaChartLine /> Dashboard
           </StyledNavLink>
+
+          <SectionTitle>Cultivo</SectionTitle>
+
           <StyledNavLink to="/crops">
-            <FaSeedling /> Spots
-          </StyledNavLink>
-          <StyledNavLink to="/rooms">
-            <FaWarehouse /> Salas de Cultivo
+            <FaSeedling /> Cultivos
           </StyledNavLink>
           <StyledNavLink to="/genetics">
             <FaDna /> Madres
@@ -230,76 +241,40 @@ const Sidebar: React.FC = () => {
           <StyledNavLink to="/clones">
             <FaCut /> Esquejes
           </StyledNavLink>
-
-
-
           <StyledNavLink to="/stock">
             <FaBoxes /> Stock
           </StyledNavLink>
+          <StyledNavLink to="/dispensary">
+            <FaHandHoldingMedical /> Dispensario
+          </StyledNavLink>
+
+          <SectionTitle>Gestión</SectionTitle>
+
           <StyledNavLink to="/insumos">
             <FaShoppingBag /> Insumos
           </StyledNavLink>
           <StyledNavLink to="/expenses">
             <FaMoneyBillWave /> Gastos
           </StyledNavLink>
-          {/* 
-          <StyledNavLink to="/compras">
-            <FaMoneyBillWave /> Compras
-          </StyledNavLink> 
-          */}
+          <StyledNavLink to="/patients">
+            <FaIdCard /> Socios
+          </StyledNavLink>
+          <StyledNavLink to="/metrics">
+            <FaChartPie /> Métricas
+          </StyledNavLink>
+          <StyledNavLink to="/settings">
+            <FaCog /> Configuración
+          </StyledNavLink>
         </NavList>
 
         <UserSection>
-          <div style={{ marginBottom: '1rem' }}>
-            {/* Telegram & Weather Test Buttons */}
-            <div style={{ marginTop: '10px', textAlign: 'center' }}>
 
-              <button
-                onClick={async () => {
-                  alert("Enviando mensaje de prueba a Telegram...");
-                  await notificationService.sendSelfNotification(
-                    "Prueba de Sistema",
-                    "¡El sistema de alertas por Telegram está funcionando correctamente! 🚀"
-                  );
-                  alert("Mensaje enviado. Revisa tu Telegram.");
-                }}
-                style={{
-                  background: '#38A169', color: 'white', border: 'none',
-                  padding: '8px 12px', borderRadius: '5px',
-                  fontSize: '11px', cursor: 'pointer', width: '100%', marginBottom: '5px'
-                }}
-              >
-                📢 Probar Alerta Telegram
-              </button>
-
-              <button
-                onClick={async () => {
-                  try {
-                    // Call the Vercel Function (Cron) manually
-                    const res = await fetch('/api/cron-weather');
-
-                    if (res.ok) alert("☀️ Pronóstico enviado.");
-                    else alert("Error enviando pronóstico.");
-                  } catch (e) {
-                    alert("Error de conexión al probar clima.");
-                  }
-                }}
-                style={{
-                  background: '#3182ce', color: 'white', border: 'none',
-                  padding: '5px 12px', borderRadius: '5px',
-                  fontSize: '10px', cursor: 'pointer', width: '100%'
-                }}
-              >
-                ☀️ Test Clima
-              </button>
-            </div>
-          </div>
           <LogoutButton onClick={logout}>
             <FaSignOutAlt /> Cerrar Sesión
           </LogoutButton>
         </UserSection>
 
-      </SidebarContainer>
+      </SidebarContainer >
     </>
   );
 };

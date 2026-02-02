@@ -5,9 +5,13 @@ import { notificationService } from './notificationService';
 export interface CreateTaskInput {
     title: string;
     description?: string;
-    type: 'info' | 'warning' | 'danger' | 'fertilizante' | 'defoliacion' | 'poda_apical' | 'hst' | 'lst' | 'enmienda' | 'te_compost' | 'agua';
+    type: 'info' | 'warning' | 'danger' | 'fertilizar' | 'riego' | 'poda_apical' | 'hst' | 'lst' | 'entrenamiento' | 'defoliacion' | 'esquejes' | 'enmienda' | 'te_compost';
     due_date?: string;
     crop_id?: string;
+    room_id?: string;
+    assigned_to?: string;
+    observations?: string;
+    photos?: string[];
 }
 
 export const tasksService = {
@@ -40,7 +44,11 @@ export const tasksService = {
                 type: task.type,
                 due_date: task.due_date,
                 crop_id: task.crop_id,
-                status: 'pending'
+                room_id: task.room_id,
+                assigned_to: task.assigned_to,
+                status: 'pending',
+                observations: task.observations,
+                photos: task.photos
             }])
             .select()
             .single();
@@ -134,6 +142,24 @@ export const tasksService = {
 
         if (error) {
             console.error('Error fetching tasks for crop:', error);
+            return [];
+        }
+
+        return data as Task[];
+    },
+
+    async getTasksByRoomId(roomId: string): Promise<Task[]> {
+        if (!supabase) return [];
+
+        const { data, error } = await supabase
+            .from('chakra_tasks')
+            .select('*')
+            .eq('room_id', roomId)
+            .neq('status', 'dismissed'); // Optional: show done tasks or not? Usually for calendar we want to see everything or at least pending/done.
+
+        // For calendar, we might want to see history too. Let's return all non-dismissed.
+        if (error) {
+            console.error('Error fetching tasks for room:', error);
             return [];
         }
 

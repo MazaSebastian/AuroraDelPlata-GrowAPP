@@ -2,23 +2,32 @@ import { supabase } from './supabaseClient';
 import { StickyNote } from '../types';
 
 export const stickiesService = {
-    async getStickies(): Promise<StickyNote[]> {
+    async getStickies(roomId?: string): Promise<StickyNote[]> {
         if (!supabase) return [];
 
-        // Sort by created_at desc (newest first)
-        const { data, error } = await supabase
+        let query = supabase
             .from('chakra_stickies')
             .select('*')
             .order('created_at', { ascending: false });
 
+        if (roomId) {
+            query = query.eq('room_id', roomId);
+        } else {
+            // If no room specified, maybe fetch only global/dashboard stickies? 
+            // Or fetch all? For now, let's fetch those where room_id is null to avoid cluttering dashboard with calendar notes.
+            query = query.is('room_id', null);
+        }
+
+        const { data, error } = await query;
+
         if (error) {
-            console.error('Error fetching stickies:', error);
+            console.error('Error fetching stickies FULL DETAILS:', JSON.stringify(error, null, 2));
             return [];
         }
         return data || [];
     },
 
-    async createSticky(content: string, color: StickyNote['color'] = 'yellow'): Promise<StickyNote | null> {
+    async createSticky(content: string, color: StickyNote['color'] = 'yellow', roomId?: string, targetDate?: string): Promise<StickyNote | null> {
         if (!supabase) return null;
 
         // Get current user for attribution
@@ -32,7 +41,9 @@ export const stickiesService = {
                     content,
                     color,
                     created_by: userName,
-                    user_id: user?.id
+                    user_id: user?.id,
+                    room_id: roomId || null,
+                    target_date: targetDate || null
                 }
             ])
             .select()
@@ -75,5 +86,7 @@ export const stickiesService = {
             return false;
         }
         return true;
-    }
+    },
+
+
 };

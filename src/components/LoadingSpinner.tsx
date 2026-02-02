@@ -47,15 +47,7 @@ const Circle = styled.div`
   animation: ${spin} 1s cubic-bezier(0.55, 0.055, 0.675, 0.19) infinite;
 `;
 
-const LeafIcon = styled.div`
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  color: #38a169;
-  font-size: 1.2rem;
-  animation: ${pulse} 2s ease-in-out infinite;
-`;
+
 
 const LoadingText = styled.h3`
   color: #2d3748;
@@ -67,21 +59,20 @@ const LoadingText = styled.h3`
 `;
 
 interface LoadingSpinnerProps {
-    text?: string;
-    fullScreen?: boolean;
+  text?: string;
+  fullScreen?: boolean;
 }
 
 export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
-    text = 'Cargando...',
-    fullScreen = false
+  text = 'Cargando...',
+  fullScreen = false
 }) => {
-    return (
-        <Overlay fullScreen={fullScreen}>
-            <SpinnerContainer>
-                <Circle />
-                <LeafIcon>🍃</LeafIcon>
-            </SpinnerContainer>
-            <LoadingText>{text}</LoadingText>
-        </Overlay>
-    );
+  return (
+    <Overlay fullScreen={fullScreen}>
+      <SpinnerContainer>
+        <Circle />
+      </SpinnerContainer>
+      <LoadingText>{text}</LoadingText>
+    </Overlay>
+  );
 };

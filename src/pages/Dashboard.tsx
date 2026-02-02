@@ -1,8 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { format, differenceInDays, addWeeks } from 'date-fns';
+import { es } from 'date-fns/locale';
 import { tasksService } from '../services/tasksService';
 import { cropsService } from '../services/cropsService';
+import { roomsService } from '../services/roomsService';
+import { stickiesService } from '../services/stickiesService';
 import { Crop } from '../types';
+import { Room } from '../types/rooms';
 
 import styled from 'styled-components';
 
@@ -15,10 +20,10 @@ import {
   FaCheckCircle,
   FaStickyNote,
   FaPlus,
-  FaTrash
+  FaTrash,
+  FaClock
 } from 'react-icons/fa';
 import { WeatherWidget } from '../components/WeatherWidget';
-import { stickiesService } from '../services/stickiesService';
 import { useAuth } from '../context/AuthContext';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 
@@ -54,6 +59,18 @@ const WelcomeHeader = styled.div`
     margin-top: 0.5rem;
     font-weight: 500;
   }
+`;
+
+const DateDisplay = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  color: #4a5568;
+  font-size: 1rem;
+  font-weight: 600;
+  
+  svg { color: #3182ce; }
 `;
 
 const KPISection = styled.div`
@@ -139,6 +156,42 @@ const ContentGrid = styled.div`
 
   @media (max-width: 1100px) {
     grid-template-columns: 1fr;
+  }
+`;
+
+const CountdownGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+`;
+
+const CountdownCard = styled.div<{ stage: string }>`
+  background: white;
+  border-radius: 1rem;
+  padding: 1.5rem;
+  border: 1px solid #e2e8f0;
+  border-left: 5px solid ${p => p.stage === 'vegetation' ? '#48bb78' : p.stage === 'flowering' ? '#ed8936' : '#cbd5e0'};
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+  .room-name { font-weight: 700; color: #2d3748; font-size: 1.1rem; }
+  .stage-badge { 
+    font-size: 0.75rem; font-weight: 700; text-transform: uppercase; padding: 0.25rem 0.5rem; border-radius: 999px;
+    background: ${p => p.stage === 'vegetation' ? '#c6f6d5' : p.stage === 'flowering' ? '#bee3f8' : '#edf2f7'}; // Note: flowering usually warm colors, but let's distinguish.
+    color: ${p => p.stage === 'vegetation' ? '#22543d' : p.stage === 'flowering' ? '#2c5282' : '#4a5568'};
+  }
+  
+  .countdown { font-size: 1.25rem; font-weight: 600; color: #4a5568; display: flex; align-items: center; gap: 0.5rem; }
+  .days { font-size: 1.5rem; font-weight: 800; color: ${p => p.stage === 'vegetation' ? '#38a169' : '#dd6b20'}; margin: 0 4px; }
+  
+  .progress-bar {
+    height: 6px; background: #edf2f7; border-radius: 3px; margin-top: 1rem; overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%; 
+    background: ${p => p.stage === 'vegetation' ? '#48bb78' : '#ed8936'};
+    border-radius: 3px;
   }
 `;
 
@@ -385,6 +438,7 @@ const Dashboard: React.FC = () => {
   const [alerts, setAlerts] = useState<any[]>([]);
   const [crops, setCrops] = useState<Crop[]>([]);
   const [stickies, setStickies] = useState<any[]>([]);
+  const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Sticky Modal State
@@ -403,10 +457,11 @@ const Dashboard: React.FC = () => {
 
   const loadData = React.useCallback(async () => {
     try {
-      const [tasks, loadedCrops, loadedStickies] = await Promise.all([
+      const [tasks, loadedCrops, loadedStickies, loadedRooms] = await Promise.all([
         tasksService.getPendingTasks(),
         cropsService.getCrops(),
-        stickiesService.getStickies()
+        stickiesService.getStickies(),
+        roomsService.getRooms()
       ]);
 
       // Map DB tasks to UI alert format
@@ -420,6 +475,7 @@ const Dashboard: React.FC = () => {
       setAlerts(mappedAlerts);
       setCrops(loadedCrops);
       setStickies(loadedStickies);
+      setRooms(loadedRooms);
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     } finally {
@@ -477,6 +533,10 @@ const Dashboard: React.FC = () => {
       <WelcomeHeader>
         <h1>Panel de Control</h1>
         <p>Bienvenido de nuevo, {user?.name || 'Cultivador'}. Aquí está el estado actual de tus cultivos.</p>
+        <DateDisplay>
+          <FaCalendarCheck />
+          {format(new Date(), "EEEE, d 'de' MMMM 'de' yyyy", { locale: es })}
+        </DateDisplay>
       </WelcomeHeader>
 
       <StickyBoard>
@@ -528,6 +588,71 @@ const Dashboard: React.FC = () => {
       )}
 
       <WeatherWidget />
+
+      {/* Stage Countdowns */}
+      {rooms.some(r => (r.type === 'vegetation' || r.type === 'flowering') && r.start_date) && (
+        <StickyBoard>
+          <SectionTitle><FaClock style={{ color: '#805ad5' }} /> Próximos Cambios de Etapa</SectionTitle>
+          <CountdownGrid>
+            {rooms
+              .filter(r => (r.type === 'vegetation' || r.type === 'flowering') && r.start_date)
+              .map(room => {
+                // Calculation Logic
+                const startDate = new Date(room.start_date!);
+                const activeBatch = room.batches?.find(b => b.genetic); // Heuristic: use first batch with genetic info
+                const genetic = activeBatch?.genetic;
+
+                // Defaults if no genetic info (fallback to standard 4 weeks veg / 9 weeks flora)
+                const vegWeeks = genetic?.vegetative_weeks || 4;
+                const floraWeeks = genetic?.flowering_weeks || 9;
+
+                let targetDate = new Date();
+                let nextStageName = '';
+                let totalDays = 0;
+
+                if (room.type === 'vegetation') {
+                  targetDate = addWeeks(startDate, vegWeeks);
+                  nextStageName = 'Floración';
+                  totalDays = vegWeeks * 7;
+                } else {
+                  targetDate = addWeeks(startDate, floraWeeks);
+                  nextStageName = 'Cosecha';
+                  totalDays = floraWeeks * 7;
+                }
+
+                const daysRemaining = differenceInDays(targetDate, new Date());
+                const daysElapsed = totalDays - daysRemaining;
+                const progress = Math.min(100, Math.max(0, (daysElapsed / totalDays) * 100));
+
+                return (
+                  <CountdownCard key={room.id} stage={room.type}>
+                    <div className="header">
+                      <span className="room-name">{room.name}</span>
+                      <span className="stage-badge">{room.type === 'vegetation' ? 'Vegetativo' : 'Floración'}</span>
+                    </div>
+
+                    <div className="countdown">
+                      {daysRemaining > 0 ? (
+                        <>
+                          Faltan <span className="days">{daysRemaining}</span> días para {nextStageName}
+                        </>
+                      ) : (
+                        <span style={{ color: '#e53e3e' }}>¡Listo para {nextStageName}!</span>
+                      )}
+                    </div>
+
+                    <div className="progress-bar">
+                      <div className="progress-fill" style={{ width: `${progress}%` }}></div>
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#a0aec0', marginTop: '0.5rem', textAlign: 'right' }}>
+                      Base: {genetic?.name || 'Genética Estándar'} ({room.type === 'vegetation' ? vegWeeks : floraWeeks} sem)
+                    </div>
+                  </CountdownCard>
+                );
+              })}
+          </CountdownGrid>
+        </StickyBoard>
+      )}
 
       <KPISection>
         <Link to="/crops" style={{ textDecoration: 'none', color: 'inherit' }}>

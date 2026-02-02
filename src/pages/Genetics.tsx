@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import { FaDna, FaPlus, FaClock, FaCalendarAlt, FaLeaf, FaEdit, FaTrash } from 'react-icons/fa';
+import { FaDna, FaPlus, FaClock, FaCalendarAlt, FaLeaf, FaEdit, FaTrash, FaTag } from 'react-icons/fa';
 import { geneticsService } from '../services/geneticsService';
 import { Genetic, GeneticType } from '../types/genetics';
 import { LoadingSpinner } from '../components/LoadingSpinner';
+import { ConfirmModal } from '../components/ConfirmModal';
 
 const Container = styled.div`
   padding: 2rem;
@@ -142,6 +143,10 @@ const Genetics: React.FC = () => {
         setLoading(false);
     };
 
+    // Delete Modal State
+    const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+    const [geneticToDelete, setGeneticToDelete] = useState<Genetic | null>(null);
+
     const [editingId, setEditingId] = useState<string | null>(null);
 
     const handleEdit = (genetic: Genetic) => {
@@ -150,12 +155,19 @@ const Genetics: React.FC = () => {
         setIsModalOpen(true);
     };
 
-    const handleDelete = async (id: string) => {
-        if (!window.confirm('¿Estás seguro de que deseas eliminar esta madre?')) return;
+    const handleDeleteClick = (genetic: Genetic) => {
+        setGeneticToDelete(genetic);
+        setConfirmDeleteOpen(true);
+    };
 
-        const success = await geneticsService.deleteGenetic(id);
+    const handleConfirmDelete = async () => {
+        if (!geneticToDelete) return;
+
+        const success = await geneticsService.deleteGenetic(geneticToDelete.id);
         if (success) {
-            setGenetics(genetics.filter(g => g.id !== id));
+            setGenetics(genetics.filter(g => g.id !== geneticToDelete.id));
+            setConfirmDeleteOpen(false);
+            setGeneticToDelete(null);
         }
     };
 
@@ -171,7 +183,8 @@ const Genetics: React.FC = () => {
             acquisition_date: newGenetic.acquisition_date,
             thc_percent: newGenetic.thc_percent,
             cbd_percent: newGenetic.cbd_percent,
-            estimated_yield_g: newGenetic.estimated_yield_g
+            estimated_yield_g: newGenetic.estimated_yield_g,
+            default_price_per_gram: newGenetic.default_price_per_gram
         };
 
         if (editingId) {
@@ -230,7 +243,7 @@ const Genetics: React.FC = () => {
                                     <FaEdit />
                                 </button>
                                 <button
-                                    onClick={() => handleDelete(gen.id)}
+                                    onClick={() => handleDeleteClick(gen)}
                                     style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#e53e3e', padding: '0.25rem' }}
                                     title="Eliminar"
                                 >
@@ -273,6 +286,11 @@ const Genetics: React.FC = () => {
                                         Prod: {gen.estimated_yield_g}g
                                     </span>
                                 )}
+                                {gen.default_price_per_gram && (
+                                    <span style={{ fontSize: '0.7rem', background: '#fffaf0', color: '#b7791f', padding: '0.1rem 0.4rem', borderRadius: '4px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                                        <FaTag size={10} /> ${gen.default_price_per_gram}/g
+                                    </span>
+                                )}
                             </div>
                         </CardBody>
                     </GeneticCard>
@@ -304,6 +322,18 @@ const Genetics: React.FC = () => {
 
                         <div style={{ display: 'flex', gap: '1rem' }}>
                             <FormGroup style={{ flex: 1 }}>
+                                <label>Prod. Est. (g)</label>
+                                <input
+                                    type="number"
+                                    value={newGenetic.estimated_yield_g || ''}
+                                    onChange={e => setNewGenetic({ ...newGenetic, estimated_yield_g: parseFloat(e.target.value) })}
+                                    placeholder="Ej: 500"
+                                />
+                            </FormGroup>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '1rem' }}>
+                            <FormGroup style={{ flex: 1 }}>
                                 <label>% THC (Opcional)</label>
                                 <input
                                     type="number"
@@ -321,15 +351,6 @@ const Genetics: React.FC = () => {
                                     value={newGenetic.cbd_percent || ''}
                                     onChange={e => setNewGenetic({ ...newGenetic, cbd_percent: parseFloat(e.target.value) })}
                                     placeholder="Ej: 0.5"
-                                />
-                            </FormGroup>
-                            <FormGroup style={{ flex: 1 }}>
-                                <label>Prod. Est. (g)</label>
-                                <input
-                                    type="number"
-                                    value={newGenetic.estimated_yield_g || ''}
-                                    onChange={e => setNewGenetic({ ...newGenetic, estimated_yield_g: parseFloat(e.target.value) })}
-                                    placeholder="Ej: 500"
                                 />
                             </FormGroup>
                         </div>
@@ -382,6 +403,17 @@ const Genetics: React.FC = () => {
                     </ModalContent>
                 </ModalOverlay>
             )}
+
+            {/* Confirm Delete Modal */}
+            <ConfirmModal
+                isOpen={confirmDeleteOpen}
+                title="Eliminar Madre"
+                message={`¿Estás seguro de que deseas eliminar la madre "${geneticToDelete?.name}"? Esta acción no se puede deshacer.`}
+                onClose={() => setConfirmDeleteOpen(false)}
+                onConfirm={handleConfirmDelete}
+                confirmText="Eliminar"
+                isDanger
+            />
         </Container>
     );
 };

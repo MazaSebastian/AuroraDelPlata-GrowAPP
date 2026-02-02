@@ -18,6 +18,7 @@ import { PromptModal } from '../components/PromptModal';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { ColorPickerModal } from '../components/ColorPickerModal';
 import { FaPalette } from 'react-icons/fa';
+import { ToastModal } from '../components/ToastModal';
 
 
 
@@ -252,8 +253,15 @@ const getColorHex = (colorName?: string) => {
   }
 };
 
+
+
 const Crops: React.FC = () => {
   const [crops, setCrops] = useState<Crop[]>([]);
+  // Toast State
+  const [toastOpen, setToastOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('info');
+
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -331,7 +339,9 @@ const Crops: React.FC = () => {
 
   const handleCreate = async () => {
     if (!formData.name) {
-      alert("Por favor ingresa un nombre para el Spot.");
+      setToastMessage("Por favor ingresa un nombre para el Cultivo.");
+      setToastType('info');
+      setToastOpen(true);
       return;
     }
 
@@ -342,7 +352,7 @@ const Crops: React.FC = () => {
 
       const newCrop = await cropsService.createCrop({
         name: formData.name,
-        location: 'Spot General', // Default location
+        location: 'Cultivo General', // Default location
         startDate: normalizedDate.toISOString(),
         estimatedHarvestDate: undefined,
         color: 'green' // Default color
@@ -360,11 +370,15 @@ const Crops: React.FC = () => {
           geneticId: ''
         });
       } else {
-        alert("Error al crear el spot. El servicio devolvió null.");
+        setToastMessage("Error al crear el cultivo. El servicio devolvió null.");
+        setToastType('error');
+        setToastOpen(true);
       }
     } catch (error: any) {
       console.error("Error creating spot:", error);
-      alert(`Ocurrió un error al crear el spot: ${error.message || JSON.stringify(error)}`);
+      setToastMessage(`Ocurrió un error al crear el cultivo: ${error.message || JSON.stringify(error)}`);
+      setToastType('error');
+      setToastOpen(true);
     }
   };
 
@@ -466,8 +480,8 @@ const Crops: React.FC = () => {
   return (
     <Container>
       <Header>
-        <h1>Spots</h1>
-        <CreateButton onClick={() => setIsModalOpen(true)}><FaPlus /> Nuevo Spot</CreateButton>
+        <h1>Cultivos</h1>
+        <CreateButton onClick={() => setIsModalOpen(true)}><FaPlus /> Nuevo Cultivo</CreateButton>
       </Header>
 
       <Grid>
@@ -505,12 +519,9 @@ const Crops: React.FC = () => {
             <CardBody>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Badge variant={statusVariant(c.status)}>{c.status}</Badge>
-                {/* ID removed as requested */}
               </div>
 
-              <InfoRow>
-                <FaMapMarkerAlt /> {c.location ?? 'Sin ubicación'}
-              </InfoRow>
+
 
               {c.estimatedHarvestDate && (
                 <InfoRow>
@@ -561,10 +572,10 @@ const Crops: React.FC = () => {
       {isModalOpen && (
         <ModalOverlay>
           <ModalContent>
-            <h2>Nuevo Spot</h2>
+            <h2>Nuevo Cultivo</h2>
 
             <FormGroup>
-              <label>Nombre del Spot</label>
+              <label>Nombre del Cultivo</label>
               <input
                 type="text"
                 placeholder="Ej: Carpa Indoor 120x120"
@@ -575,7 +586,7 @@ const Crops: React.FC = () => {
 
             <ModalActions>
               <Button variant="secondary" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
-              <Button onClick={handleCreate}>Crear Spot</Button>
+              <Button onClick={handleCreate}>Crear Cultivo</Button>
             </ModalActions>
           </ModalContent>
         </ModalOverlay>
@@ -584,7 +595,7 @@ const Crops: React.FC = () => {
       {/* Prompt Modal for Renaming */}
       <PromptModal
         isOpen={isEditOpen}
-        title="Renombrar Spot"
+        title="Renombrar Cultivo"
         initialValue={editingCrop?.name || ''}
         placeholder="Nuevo nombre..."
         onClose={() => setIsEditOpen(false)}
@@ -611,6 +622,13 @@ const Crops: React.FC = () => {
         onSelectColor={handleUpdateColor}
         onClose={() => setColorPickerOpen(false)}
         getColorHex={getColorHex}
+      />
+
+      <ToastModal
+        isOpen={toastOpen}
+        message={toastMessage}
+        type={toastType}
+        onClose={() => setToastOpen(false)}
       />
     </Container >
   );

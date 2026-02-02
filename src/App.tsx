@@ -11,9 +11,13 @@ import Genetics from './pages/Genetics';
 import Clones from './pages/Clones';
 
 import Stock from './pages/Stock';
+import Dispensary from './pages/Dispensary';
+import Settings from './pages/Settings';
 import Compras from './pages/Compras';
 import Insumos from './pages/Insumos';
 import Expenses from './pages/Expenses';
+import Metrics from './pages/Metrics'; // New Import
+import Patients from './pages/Patients';
 import { notificationService } from './services/notificationService';
 import Login from './pages/Login';
 import { useAuth } from './context/AuthContext';
@@ -119,6 +123,21 @@ function App() {
             </MainContent>
           </RequireAuth>
         } />
+
+        <Route path="/dispensary" element={
+          <RequireAuth>
+            <MainContent>
+              <Dispensary />
+            </MainContent>
+          </RequireAuth>
+        } />
+        <Route path="/settings" element={
+          <RequireAuth>
+            <MainContent>
+              <Settings />
+            </MainContent>
+          </RequireAuth>
+        } />
         <Route path="/insumos" element={
           <RequireAuth>
             <MainContent>
@@ -137,6 +156,20 @@ function App() {
           <RequireAuth>
             <MainContent>
               <Expenses />
+            </MainContent>
+          </RequireAuth>
+        } />
+        <Route path="/patients" element={
+          <RequireAuth>
+            <MainContent>
+              <Patients />
+            </MainContent>
+          </RequireAuth>
+        } />
+        <Route path="/metrics" element={
+          <RequireAuth>
+            <MainContent>
+              <Metrics />
             </MainContent>
           </RequireAuth>
         } />
