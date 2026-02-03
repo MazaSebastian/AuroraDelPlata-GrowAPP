@@ -1,7 +1,7 @@
-
 import React, { useEffect, useState, useMemo } from 'react';
 import styled from 'styled-components';
 import { TuyaDevice, tuyaService, DeviceSettings } from '../services/tuyaService';
+import { roomsService } from '../services/roomsService';
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
@@ -152,6 +152,7 @@ export const DeviceDetailModal: React.FC<DeviceDetailModalProps> = ({ device, on
 
     // Config State
     const [settings, setSettings] = useState<DeviceSettings>({ device_id: device.id });
+    const [rooms, setRooms] = useState<any[]>([]);
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
@@ -190,12 +191,18 @@ export const DeviceDetailModal: React.FC<DeviceDetailModalProps> = ({ device, on
             };
             fetchLogs();
         } else {
-            // Fetch Settings
+            // Fetch Settings AND Rooms
             const loadSettings = async () => {
                 setLoading(true);
                 try {
-                    const data = await tuyaService.getDeviceSettings(device.id);
-                    if (data) setSettings(data);
+                    // Parallel fetch
+                    const [settingsData, roomsData] = await Promise.all([
+                        tuyaService.getDeviceSettings(device.id),
+                        roomsService.getRooms()
+                    ]);
+
+                    if (settingsData) setSettings(settingsData);
+                    if (roomsData) setRooms(roomsData);
                 } catch (err) {
                     console.error(err);
                 } finally {
@@ -303,7 +310,29 @@ export const DeviceDetailModal: React.FC<DeviceDetailModalProps> = ({ device, on
                 <ModalBody>
                     {view === 'config' ? (
                         <div style={{ padding: '1rem' }}>
-                            <h4 style={{ color: '#2d3748', marginBottom: '1rem' }}>Configuración de Alertas</h4>
+                            <h4 style={{ color: '#2d3748', marginBottom: '1rem' }}>Configuración General</h4>
+
+                            {/* Room Assignment */}
+                            <div style={{ marginBottom: '2rem', background: '#f7fafc', padding: '1rem', borderRadius: '0.5rem', border: '1px solid #edf2f7' }}>
+                                <label style={{ display: 'block', fontSize: '0.9rem', color: '#4a5568', marginBottom: '0.5rem', fontWeight: 'bold' }}>📍 Asignar a Sala / Cultivo</label>
+                                <select
+                                    value={settings.room_id || ''}
+                                    onChange={(e) => setSettings({ ...settings, room_id: e.target.value || undefined })}
+                                    style={{ width: '100%', padding: '0.75rem', borderRadius: '0.25rem', border: '1px solid #cbd5e0', background: 'white', fontSize: '1rem' }}
+                                >
+                                    <option value="">-- Sin asignar --</option>
+                                    {rooms.map((room: any) => (
+                                        <option key={room.id} value={room.id}>
+                                            {room.name} ({room.type === 'vegetation' ? 'Vegetación' : room.type === 'flowering' ? 'Floración' : room.type === 'drying' ? 'Secado' : 'Otro'})
+                                        </option>
+                                    ))}
+                                </select>
+                                <p style={{ fontSize: '0.8rem', color: '#718096', marginTop: '0.5rem' }}>
+                                    Asignar este sensor a una sala te permitirá filtrar y ver sus datos directamente en la vista de detalle de esa sala.
+                                </p>
+                            </div>
+
+                            <h4 style={{ color: '#2d3748', marginBottom: '1rem' }}>Umbrales de Alerta</h4>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
                                 {/* Temperature Settings */}
                                 <div style={{ background: '#fff5f5', padding: '1.5rem', borderRadius: '0.5rem', border: '1px solid #feb2b2' }}>

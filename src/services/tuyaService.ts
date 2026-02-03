@@ -11,6 +11,7 @@ export interface DeviceSettings {
     max_temp?: number;
     min_hum?: number;
     max_hum?: number;
+    room_id?: string;
 }
 
 export interface TuyaDevice {
