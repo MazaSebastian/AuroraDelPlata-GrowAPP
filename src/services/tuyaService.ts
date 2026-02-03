@@ -55,7 +55,7 @@ export const tuyaService = {
     },
 
     async getDeviceStatus(deviceId: string): Promise<any[]> {
-        const { data } = await api.get(`/tuya?action=get_device_status&deviceId=${deviceId}`);
+        const { data } = await axios.get(`${API_URL}?action=get_device_status&deviceId=${deviceId}`);
         return data.status || [];
     },
 

@@ -215,7 +215,7 @@ export const TuyaManager: React.FC<TuyaManagerProps> = ({ mode = 'full' }) => {
         let alert = null;
 
         if (temp) {
-            const tempVal = (typeof temp.value === 'number' && temp.value > 50) ? (temp.value / 10) : temp.value; // Normalize
+            const tempVal = (typeof temp.value === 'number') ? (temp.value / 10) : temp.value; // Normalize
             if (setting.max_temp && tempVal > setting.max_temp) alert = 'Temperatura Alta';
             if (setting.min_temp && tempVal < setting.min_temp) alert = 'Temperatura Baja';
         }
@@ -280,7 +280,7 @@ export const TuyaManager: React.FC<TuyaManagerProps> = ({ mode = 'full' }) => {
                                         {temp && (
                                             <SensorValue>
                                                 <FaThermometerHalf color="#e53e3e" />
-                                                <span>{(typeof temp.value === 'number' && temp.value > 50) ? (temp.value / 10).toFixed(1) : temp.value}°C</span>
+                                                <span>{(typeof temp.value === 'number') ? (temp.value / 10).toFixed(1) : temp.value}°C</span>
                                             </SensorValue>
                                         )}
                                         {hum && (
