@@ -13,6 +13,8 @@ import { ToastModal } from '../components/ToastModal';
 import { Room } from '../types/rooms';
 import QRCode from 'react-qr-code';
 import { TuyaManager } from '../components/TuyaManager';
+import { tuyaService } from '../services/tuyaService';
+import { supabase } from '../services/supabaseClient';
 
 const Container = styled.div`
   padding: 2rem;
@@ -428,7 +430,38 @@ const Clones: React.FC = () => {
         setRooms(validRooms);
 
         const clonesRoom = allRooms.find(r => r.type === 'clones');
-        if (clonesRoom) setClonesRoomId(clonesRoom.id);
+
+        let realEnvData = null;
+        if (clonesRoom) {
+            setClonesRoomId(clonesRoom.id);
+
+            // Fetch assigned device
+            const { data: settings } = await supabase!
+                .from('tuya_device_settings')
+                .select('device_id')
+                .eq('room_id', clonesRoom.id)
+                .single();
+
+            if (settings) {
+                try {
+                    const status = await tuyaService.getDeviceStatus(settings.device_id);
+                    const temp = status.find((s: any) => s.code.includes('temp'));
+                    const hum = status.find((s: any) => s.code.includes('humid'));
+
+                    if (temp || hum) {
+                        realEnvData = {
+                            temperature: temp ? (typeof temp.value === 'number' ? temp.value / 10 : temp.value) : 0,
+                            humidity: hum ? hum.value : 0
+                        };
+                    }
+                } catch (e) {
+                    console.error("Error fetching sensor status", e);
+                }
+            }
+        }
+
+        // Use real data if available, otherwise fallback to mock/service data only if needed (or just use null)
+        setEnvData(realEnvData || env);
 
         const allClones = batches.filter(b =>
             b.parent_batch_id ||
@@ -689,7 +722,7 @@ const Clones: React.FC = () => {
 
             {clonesRoomId && (
                 <div style={{ marginBottom: '2rem' }}>
-                    <TuyaManager mode="sensors" roomId={clonesRoomId} />
+                    <TuyaManager mode="sensors" roomId={clonesRoomId} compact={true} />
                 </div>
             )}
 

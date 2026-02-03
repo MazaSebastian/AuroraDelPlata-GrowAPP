@@ -113,19 +113,21 @@ const SensorValue = styled.div`
 interface TuyaManagerProps {
     mode?: 'full' | 'sensors' | 'switches';
     roomId?: string;
+    compact?: boolean;
 }
 
 // ...
 
-export const TuyaManager: React.FC<TuyaManagerProps> = ({ mode = 'full', roomId }) => {
+export const TuyaManager: React.FC<TuyaManagerProps> = ({ mode = 'full', roomId, compact = false }) => {
+    // ... (keep state)
     const [devices, setDevices] = useState<TuyaDevice[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [selectedDevice, setSelectedDevice] = useState<TuyaDevice | null>(null);
     const [settingsMap, setSettingsMap] = useState<Record<string, any>>({});
 
+    // ... (keep loadDevices, loadSettings, useEffect, handleToggle, getSensorData, filteredDevices, getAlertStatus)
     const loadDevices = async () => {
-        // ... (keep existing loadDevices logic)
         setLoading(true);
         setError(null);
         try {
@@ -168,12 +170,11 @@ export const TuyaManager: React.FC<TuyaManagerProps> = ({ mode = 'full', roomId 
         loadSettings();
         const interval = setInterval(() => {
             loadDevices();
-            loadSettings(); // Also refresh settings occasionally
+            loadSettings();
         }, 60000);
         return () => clearInterval(interval);
     }, []);
 
-    // ... (handleToggle logic)
     const handleToggle = async (device: TuyaDevice) => {
         const switchStatus = device.status.find(s => s.code.startsWith('switch'));
         const currentVal = switchStatus ? switchStatus.value : false;
@@ -187,32 +188,26 @@ export const TuyaManager: React.FC<TuyaManagerProps> = ({ mode = 'full', roomId 
         }
     };
 
-    // Helper to extract sensor data
     const getSensorData = (status: any[]) => {
         const temp = status.find(s => s.code.includes('temp'));
         const hum = status.find(s => s.code.includes('humid'));
         return { temp, hum };
     };
 
-    // Filter devices based on mode AND roomId
     const filteredDevices = devices.filter(device => {
         const { temp, hum } = getSensorData(device.status);
         const switchStatus = device.status.find(s => s.code.startsWith('switch'));
 
-        // 1. Room Filter (Strict)
         if (roomId) {
             const setting = settingsMap[device.id];
             if (!setting || setting.room_id !== roomId) return false;
         }
 
-        // 2. Mode Filter
         if (mode === 'sensors') return !!(temp || hum);
         if (mode === 'switches') return !!switchStatus;
         return true;
     });
 
-
-    // ... (getAlertStatus logic - keep unchanged)
     const getAlertStatus = (device: TuyaDevice) => {
         const setting = settingsMap[device.id];
         if (!setting) return null;
@@ -221,14 +216,14 @@ export const TuyaManager: React.FC<TuyaManagerProps> = ({ mode = 'full', roomId 
         let alert = null;
 
         if (temp) {
-            const tempVal = (typeof temp.value === 'number') ? (temp.value / 10) : temp.value; // Normalize
-            if (setting.max_temp && tempVal > setting.max_temp) alert = 'Temperatura Alta';
-            if (setting.min_temp && tempVal < setting.min_temp) alert = 'Temperatura Baja';
+            const tempVal = (typeof temp.value === 'number') ? (temp.value / 10) : temp.value;
+            if (setting.max_temp && tempVal > setting.max_temp) alert = 'Temp. Alta';
+            if (setting.min_temp && tempVal < setting.min_temp) alert = 'Temp. Baja';
         }
         if (hum) {
             const humVal = hum.value;
-            if (setting.max_hum && humVal > setting.max_hum) alert = alert ? `${alert} / Humedad Alta` : 'Humedad Alta';
-            if (setting.min_hum && humVal < setting.min_hum) alert = alert ? `${alert} / Humedad Baja` : 'Humedad Baja';
+            if (setting.max_hum && humVal > setting.max_hum) alert = alert ? `${alert} / Hum. Alta` : 'Hum. Alta';
+            if (setting.min_hum && humVal < setting.min_hum) alert = alert ? `${alert} / Hum. Baja` : 'Hum. Baja';
         }
         return alert;
     };
@@ -236,26 +231,25 @@ export const TuyaManager: React.FC<TuyaManagerProps> = ({ mode = 'full', roomId 
 
     if (loading && devices.length === 0) return <LoadingSpinner text="Cargando dispositivos..." />;
 
-    // If roomId is provided and no devices are found, we might want to show a specific message or nothing?
-    // User asked to "Remove the visualization... show the info of the assigned sensor"
-
     return (
-        <Container>
-            <Header>
-                <h3>
-                    {roomId ? 'Sensor Asignado' : (mode === 'sensors' ? 'Monitoreo Ambiental (Tuya)' : 'Dispositivos Tuya (IoT)')}
-                </h3>
-                <RefreshButton onClick={() => { loadDevices(); loadSettings(); }} title="Actualizar">
-                    <FaSync className={loading ? 'fa-spin' : ''} />
-                </RefreshButton>
-            </Header>
+        <Container style={compact ? { padding: '0.5rem', boxShadow: 'none', background: 'transparent' } : undefined}>
+            {!compact && (
+                <Header>
+                    <h3>
+                        {roomId ? 'Sensor Asignado' : (mode === 'sensors' ? 'Monitoreo Ambiental (Tuya)' : 'Dispositivos Tuya (IoT)')}
+                    </h3>
+                    <RefreshButton onClick={() => { loadDevices(); loadSettings(); }} title="Actualizar">
+                        <FaSync className={loading ? 'fa-spin' : ''} />
+                    </RefreshButton>
+                </Header>
+            )}
 
             {error ? (
                 <div style={{ color: '#e53e3e', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <FaExclamationTriangle /> {error}
                 </div>
             ) : (
-                <DeviceGrid>
+                <DeviceGrid style={compact ? { gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.5rem' } : undefined}>
                     {filteredDevices.map(device => {
                         const switchStatus = device.status.find(s => s.code.startsWith('switch'));
                         const isSwitch = !!switchStatus;
@@ -263,9 +257,53 @@ export const TuyaManager: React.FC<TuyaManagerProps> = ({ mode = 'full', roomId 
                         const { temp, hum } = getSensorData(device.status);
                         const isSensor = temp || hum;
                         const alert = getAlertStatus(device);
-
                         const showControls = mode !== 'sensors';
 
+                        // Compact Card Rendering
+                        if (compact) {
+                            return (
+                                <DeviceCard
+                                    key={device.id}
+                                    $online={device.online}
+                                    onClick={() => isSensor && setSelectedDevice(device)}
+                                    style={{
+                                        cursor: isSensor ? 'pointer' : 'default',
+                                        border: alert ? '1px solid #e53e3e' : '1px solid #e2e8f0',
+                                        background: alert ? '#fff5f5' : 'white',
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        padding: '0.75rem',
+                                        gap: '1rem',
+                                        minHeight: 'auto'
+                                    }}
+                                >
+                                    <StatusBadge $online={device.online} style={{ top: '0.25rem', right: '0.25rem' }} />
+                                    <div style={{ fontSize: '1.5rem', color: '#4a5568' }}>
+                                        {isSensor ? <FaThermometerHalf /> : isSwitch ? <FaPlug /> : <FaLightbulb />}
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ fontWeight: 'bold', fontSize: '0.9rem', color: '#2d3748', marginBottom: '0.25rem' }}>{device.name}</div>
+                                        {isSensor && (
+                                            <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.85rem' }}>
+                                                {temp && (
+                                                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: '#e53e3e', fontWeight: '600' }}>
+                                                        <FaThermometerHalf /> {typeof temp.value === 'number' ? (temp.value / 10).toFixed(1) : temp.value}°C
+                                                    </span>
+                                                )}
+                                                {hum && (
+                                                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: '#3182ce', fontWeight: '600' }}>
+                                                        <FaTint /> {hum.value}%
+                                                    </span>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                    {alert && <FaExclamationTriangle style={{ color: '#e53e3e' }} title={alert} />}
+                                </DeviceCard>
+                            );
+                        }
+
+                        // Full Card Rendering (Existing)
                         return (
                             <DeviceCard
                                 key={device.id}
