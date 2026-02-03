@@ -687,9 +687,11 @@ const Clones: React.FC = () => {
                 </CreateButton>
             </Header>
 
-            <div style={{ marginBottom: '2rem' }}>
-                <TuyaManager mode="sensors" roomId={clonesRoomId} />
-            </div>
+            {clonesRoomId && (
+                <div style={{ marginBottom: '2rem' }}>
+                    <TuyaManager mode="sensors" roomId={clonesRoomId} />
+                </div>
+            )}
 
             {loading ? (
                 <div style={{ position: 'relative', height: '300px', background: 'white', borderRadius: '1rem', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
