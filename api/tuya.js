@@ -58,11 +58,52 @@ export default async function handler(req, res) {
 
         if (req.method === 'GET' && action === 'get_logs') {
             const { deviceId, start_time, end_time, type } = req.query;
-            const response = await context.request({
-                method: 'GET',
-                path: `/v1.0/devices/${deviceId}/logs?start_time=${start_time}&end_time=${end_time}&type=${type || 7}&size=100`, // Type 7 = all? Usually 1=event, 7=report
-            });
-            return res.status(200).json({ success: response.success, logs: response.result });
+
+            let allLogs = [];
+            let nextRowKey = null;
+            let hasNext = true;
+            let pageCount = 0;
+            const MAX_PAGES = 5; // Fetch up to 500 logs to cover 24h of frequent updates
+
+            while (hasNext && pageCount < MAX_PAGES) {
+                let path = `/v1.0/devices/${deviceId}/logs?start_time=${start_time}&end_time=${end_time}&type=${type || 7}&size=100`;
+                if (nextRowKey) {
+                    path += `&start_row_key=${nextRowKey}`;
+                }
+
+                const response = await context.request({
+                    method: 'GET',
+                    path: path,
+                });
+
+                if (!response.success) {
+                    console.error("Tuya API Error requesting logs:", response);
+                    break;
+                }
+
+                const result = response.result;
+                let pageLogs = [];
+
+                // Handle different response structures
+                if (Array.isArray(result)) {
+                    pageLogs = result;
+                    hasNext = false; // If array, probably no pagination info provided
+                } else if (result && Array.isArray(result.logs)) {
+                    pageLogs = result.logs;
+                    hasNext = result.has_next;
+                    nextRowKey = result.next_row_key;
+                }
+
+                if (pageLogs.length > 0) {
+                    allLogs = allLogs.concat(pageLogs);
+                } else {
+                    hasNext = false;
+                }
+
+                pageCount++;
+            }
+
+            return res.status(200).json({ success: true, logs: allLogs });
         }
 
         if (req.method === 'POST') {
