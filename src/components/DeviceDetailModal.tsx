@@ -3,7 +3,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import styled from 'styled-components';
 import { TuyaDevice, tuyaService, DeviceSettings } from '../services/tuyaService';
 import {
-    LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea
+    LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 import { FaTimes, FaThermometerHalf, FaTint, FaHistory, FaArrowUp, FaArrowDown, FaMinus, FaCog, FaSave } from 'react-icons/fa';
 import { LoadingSpinner } from './LoadingSpinner';
@@ -122,25 +122,7 @@ const ChartTitle = styled.h4`
     gap: 0.5rem;
 `;
 
-const HistoryTable = styled.table`
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.9rem;
-  
-  th {
-    text-align: left;
-    padding: 0.75rem;
-    background: #f7fafc;
-    color: #718096;
-    font-weight: 600;
-  }
-  
-  td {
-    padding: 0.75rem;
-    border-top: 1px solid #e2e8f0;
-    color: #4a5568;
-  }
-`;
+
 
 const TabButton = styled.button<{ $active: boolean }>`
   padding: 0.5rem 1rem;
