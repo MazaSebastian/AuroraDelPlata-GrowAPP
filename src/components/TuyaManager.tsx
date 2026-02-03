@@ -112,36 +112,35 @@ const SensorValue = styled.div`
 
 interface TuyaManagerProps {
     mode?: 'full' | 'sensors' | 'switches';
+    roomId?: string;
 }
-
-
 
 // ...
 
-export const TuyaManager: React.FC<TuyaManagerProps> = ({ mode = 'full' }) => {
+export const TuyaManager: React.FC<TuyaManagerProps> = ({ mode = 'full', roomId }) => {
     const [devices, setDevices] = useState<TuyaDevice[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [selectedDevice, setSelectedDevice] = useState<TuyaDevice | null>(null);
+    const [settingsMap, setSettingsMap] = useState<Record<string, any>>({});
 
     const loadDevices = async () => {
+        // ... (keep existing loadDevices logic)
         setLoading(true);
         setError(null);
         try {
-            // 1. Get the list (Fast but potentially stale)
             const data = await tuyaService.getDevices();
             setDevices(data);
-            setLoading(false); // Show the stale data first so the UI isn't empty
+            setLoading(false);
 
-            // 2. Refresh each device's status individually (Slower but Fresh)
-            // We do this in parallel but limiting concurrency if needed, here we just do parallel all
+            // Refresh status
             const freshDataPromises = data.map(async (device) => {
                 try {
                     const freshStatus = await tuyaService.getDeviceStatus(device.id);
                     return { ...device, status: freshStatus };
                 } catch (e) {
                     console.warn(`Failed to refresh status for ${device.name}`, e);
-                    return device; // Fallback to stale
+                    return device;
                 }
             });
 
@@ -155,12 +154,26 @@ export const TuyaManager: React.FC<TuyaManagerProps> = ({ mode = 'full' }) => {
         }
     };
 
+    const loadSettings = async () => {
+        const { data } = await import('../services/supabaseClient').then(m => m.supabase!.from('tuya_device_settings').select('*'));
+        if (data) {
+            const map: Record<string, any> = {};
+            data.forEach((s: any) => map[s.device_id] = s);
+            setSettingsMap(map);
+        }
+    };
+
     useEffect(() => {
         loadDevices();
-        const interval = setInterval(loadDevices, 60000); // Auto-refresh every 60s
+        loadSettings();
+        const interval = setInterval(() => {
+            loadDevices();
+            loadSettings(); // Also refresh settings occasionally
+        }, 60000);
         return () => clearInterval(interval);
     }, []);
 
+    // ... (handleToggle logic)
     const handleToggle = async (device: TuyaDevice) => {
         const switchStatus = device.status.find(s => s.code.startsWith('switch'));
         const currentVal = switchStatus ? switchStatus.value : false;
@@ -181,32 +194,25 @@ export const TuyaManager: React.FC<TuyaManagerProps> = ({ mode = 'full' }) => {
         return { temp, hum };
     };
 
-    // Filter devices based on mode
+    // Filter devices based on mode AND roomId
     const filteredDevices = devices.filter(device => {
         const { temp, hum } = getSensorData(device.status);
         const switchStatus = device.status.find(s => s.code.startsWith('switch'));
 
-        if (mode === 'sensors') return !!(temp || hum); // Only show if it has sensor data
-        if (mode === 'switches') return !!switchStatus; // Only show if it has a switch
-        return true; // 'full' shows everything
+        // 1. Room Filter (Strict)
+        if (roomId) {
+            const setting = settingsMap[device.id];
+            if (!setting || setting.room_id !== roomId) return false;
+        }
+
+        // 2. Mode Filter
+        if (mode === 'sensors') return !!(temp || hum);
+        if (mode === 'switches') return !!switchStatus;
+        return true;
     });
 
 
-    // Load settings for alerts
-    const [settingsMap, setSettingsMap] = useState<Record<string, any>>({});
-
-    useEffect(() => {
-        const loadSettings = async () => {
-            const { data } = await import('../services/supabaseClient').then(m => m.supabase!.from('tuya_device_settings').select('*'));
-            if (data) {
-                const map: Record<string, any> = {};
-                data.forEach((s: any) => map[s.device_id] = s);
-                setSettingsMap(map);
-            }
-        };
-        loadSettings();
-    }, []);
-
+    // ... (getAlertStatus logic - keep unchanged)
     const getAlertStatus = (device: TuyaDevice) => {
         const setting = settingsMap[device.id];
         if (!setting) return null;
@@ -227,15 +233,19 @@ export const TuyaManager: React.FC<TuyaManagerProps> = ({ mode = 'full' }) => {
         return alert;
     };
 
+
     if (loading && devices.length === 0) return <LoadingSpinner text="Cargando dispositivos..." />;
+
+    // If roomId is provided and no devices are found, we might want to show a specific message or nothing?
+    // User asked to "Remove the visualization... show the info of the assigned sensor"
 
     return (
         <Container>
             <Header>
                 <h3>
-                    {mode === 'sensors' ? 'Monitoreo Ambiental (Tuya)' : 'Dispositivos Tuya (IoT)'}
+                    {roomId ? 'Sensor Asignado' : (mode === 'sensors' ? 'Monitoreo Ambiental (Tuya)' : 'Dispositivos Tuya (IoT)')}
                 </h3>
-                <RefreshButton onClick={loadDevices} title="Actualizar">
+                <RefreshButton onClick={() => { loadDevices(); loadSettings(); }} title="Actualizar">
                     <FaSync className={loading ? 'fa-spin' : ''} />
                 </RefreshButton>
             </Header>
@@ -305,7 +315,7 @@ export const TuyaManager: React.FC<TuyaManagerProps> = ({ mode = 'full' }) => {
                                     </div>
                                 )}
 
-                                {/* Switch Control - Start */}
+                                {/* Switch Control */}
                                 {isSwitch && showControls && (
                                     <ControlButton
                                         $isOn={isOn}
@@ -315,13 +325,15 @@ export const TuyaManager: React.FC<TuyaManagerProps> = ({ mode = 'full' }) => {
                                         <FaPowerOff /> {isOn ? 'Encendido' : 'Apagado'}
                                     </ControlButton>
                                 )}
-                                {/* Switch Control - End */}
                             </DeviceCard>
                         );
                     })}
                     {filteredDevices.length === 0 && !loading && (
-                        <div style={{ gridColumn: '1/-1', textAlign: 'center', color: '#a0aec0', padding: '1rem' }}>
-                            {mode === 'sensors' ? 'No hay sensores disponibles.' : 'No se encontraron dispositivos.'}
+                        <div style={{ gridColumn: '1/-1', textAlign: 'center', color: '#a0aec0', padding: '1rem', border: '1px dashed #cbd5e0', borderRadius: '0.5rem' }}>
+                            {roomId
+                                ? 'No hay sensor asignado a esta sala.'
+                                : (mode === 'sensors' ? 'No hay sensores disponibles.' : 'No se encontraron dispositivos.')
+                            }
                         </div>
                     )}
                 </DeviceGrid>

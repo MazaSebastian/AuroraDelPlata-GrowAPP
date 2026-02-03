@@ -475,7 +475,7 @@ const RoomDetail: React.FC = () => {
             )}
 
             <div style={{ marginBottom: '2rem' }}>
-                <TuyaManager mode="sensors" />
+                <TuyaManager mode="sensors" roomId={room?.id} />
             </div>
 
             {/* Stickies Wall Section */}

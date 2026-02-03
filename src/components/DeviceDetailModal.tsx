@@ -144,6 +144,10 @@ interface DeviceDetailModalProps {
     onClose: () => void;
 }
 
+import { ToastModal } from './ToastModal';
+
+// ... (keep styled components)
+
 export const DeviceDetailModal: React.FC<DeviceDetailModalProps> = ({ device, onClose }) => {
     const [view, setView] = useState<'history' | 'config'>('history');
     const [timeRange, setTimeRange] = useState<'24h' | '7d' | '30d'>('7d');
@@ -155,8 +159,16 @@ export const DeviceDetailModal: React.FC<DeviceDetailModalProps> = ({ device, on
     const [rooms, setRooms] = useState<any[]>([]);
     const [saving, setSaving] = useState(false);
 
+    // Toast State
+    const [toast, setToast] = useState<{ open: boolean; message: string; type: 'success' | 'error' | 'info' }>({
+        open: false,
+        message: '',
+        type: 'info'
+    });
+
     useEffect(() => {
         if (view === 'history') {
+            // ... (existing fetchLogs logic - keep unchanged)
             const fetchLogs = async () => {
                 setLoading(true);
                 try {
@@ -252,255 +264,266 @@ export const DeviceDetailModal: React.FC<DeviceDetailModalProps> = ({ device, on
         setSaving(true);
         try {
             await tuyaService.saveDeviceSettings({ ...settings, device_id: device.id });
-            alert("Configuración guardada correctamente");
-            setView('history');
+            setToast({ open: true, message: 'Configuración guardada correctamente', type: 'success' });
+            setTimeout(() => setView('history'), 1500); // Wait a bit before closing config
         } catch (e) {
-            alert("Error al guardar configuración.");
+            setToast({ open: true, message: 'Error al guardar configuración.', type: 'error' });
         } finally {
             setSaving(false);
         }
     };
 
     return (
-        <ModalOverlay onClick={onClose}>
-            <ModalContent onClick={e => e.stopPropagation()}>
-                <ModalHeader>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                        <Title>{device.name}</Title>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                            <TabButton
-                                $active={view === 'history'}
-                                onClick={() => setView('history')}
-                                title="Ver Historial"
-                            >
-                                <FaHistory /> Historial
-                            </TabButton>
-                            <TabButton
-                                $active={view === 'config'}
-                                onClick={() => setView('config')}
-                                title="Configuración de Alertas"
-                            >
-                                <FaCog /> Configuración
-                            </TabButton>
-                        </div>
-                    </div>
-
-                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                        {view === 'history' && (['24h', '7d', '30d'] as const).map(range => (
-                            <button
-                                key={range}
-                                onClick={() => setTimeRange(range)}
-                                style={{
-                                    padding: '0.25rem 0.5rem',
-                                    borderRadius: '0.25rem',
-                                    border: '1px solid #cbd5e0',
-                                    background: timeRange === range ? '#3182ce' : 'white',
-                                    color: timeRange === range ? 'white' : '#4a5568',
-                                    cursor: 'pointer',
-                                    fontSize: '0.8rem'
-                                }}
-                            >
-                                {range === '24h' ? '24hs' : range === '7d' ? '7 Días' : '30 Días'}
-                            </button>
-                        ))}
-                        <CloseButton onClick={onClose}><FaTimes /></CloseButton>
-                    </div>
-                </ModalHeader>
-
-                <ModalBody>
-                    {view === 'config' ? (
-                        <div style={{ padding: '1rem' }}>
-                            <h4 style={{ color: '#2d3748', marginBottom: '1rem' }}>Configuración General</h4>
-
-                            {/* Room Assignment */}
-                            <div style={{ marginBottom: '2rem', background: '#f7fafc', padding: '1rem', borderRadius: '0.5rem', border: '1px solid #edf2f7' }}>
-                                <label style={{ display: 'block', fontSize: '0.9rem', color: '#4a5568', marginBottom: '0.5rem', fontWeight: 'bold' }}>📍 Asignar a Sala / Cultivo</label>
-                                <select
-                                    value={settings.room_id || ''}
-                                    onChange={(e) => setSettings({ ...settings, room_id: e.target.value || undefined })}
-                                    style={{ width: '100%', padding: '0.75rem', borderRadius: '0.25rem', border: '1px solid #cbd5e0', background: 'white', fontSize: '1rem' }}
+        <React.Fragment>
+            <ModalOverlay onClick={onClose}>
+                {/* ... Modal Content ... */}
+                <ModalContent onClick={e => e.stopPropagation()}>
+                    <ModalHeader>
+                        {/* ... Header ... */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                            <Title>{device.name}</Title>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <TabButton
+                                    $active={view === 'history'}
+                                    onClick={() => setView('history')}
+                                    title="Ver Historial"
                                 >
-                                    <option value="">-- Sin asignar --</option>
-                                    {rooms.map((room: any) => (
-                                        <option key={room.id} value={room.id}>
-                                            {room.name} ({room.type === 'vegetation' ? 'Vegetación' : room.type === 'flowering' ? 'Floración' : room.type === 'drying' ? 'Secado' : 'Otro'})
-                                        </option>
-                                    ))}
-                                </select>
-                                <p style={{ fontSize: '0.8rem', color: '#718096', marginTop: '0.5rem' }}>
-                                    Asignar este sensor a una sala te permitirá filtrar y ver sus datos directamente en la vista de detalle de esa sala.
-                                </p>
+                                    <FaHistory /> Historial
+                                </TabButton>
+                                <TabButton
+                                    $active={view === 'config'}
+                                    onClick={() => setView('config')}
+                                    title="Configuración de Alertas"
+                                >
+                                    <FaCog /> Configuración
+                                </TabButton>
                             </div>
+                        </div>
 
-                            <h4 style={{ color: '#2d3748', marginBottom: '1rem' }}>Umbrales de Alerta</h4>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-                                {/* Temperature Settings */}
-                                <div style={{ background: '#fff5f5', padding: '1.5rem', borderRadius: '0.5rem', border: '1px solid #feb2b2' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#c53030', fontWeight: 'bold', marginBottom: '1rem' }}>
-                                        <FaThermometerHalf /> Alertas de Temperatura
-                                    </div>
-                                    <div style={{ marginBottom: '1rem' }}>
-                                        <label style={{ display: 'block', fontSize: '0.85rem', color: '#4a5568', marginBottom: '0.5rem' }}>Mínima (°C)</label>
-                                        <input
-                                            type="number"
-                                            value={settings.min_temp ?? ''}
-                                            onChange={e => setSettings({ ...settings, min_temp: Number(e.target.value) })}
-                                            style={{ width: '100%', padding: '0.5rem', borderRadius: '0.25rem', border: '1px solid #e2e8f0' }}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label style={{ display: 'block', fontSize: '0.85rem', color: '#4a5568', marginBottom: '0.5rem' }}>Máxima (°C)</label>
-                                        <input
-                                            type="number"
-                                            value={settings.max_temp ?? ''}
-                                            onChange={e => setSettings({ ...settings, max_temp: Number(e.target.value) })}
-                                            style={{ width: '100%', padding: '0.5rem', borderRadius: '0.25rem', border: '1px solid #e2e8f0' }}
-                                        />
-                                    </div>
-                                </div>
-
-                                {/* Humidity Settings */}
-                                <div style={{ background: '#ebf8ff', padding: '1.5rem', borderRadius: '0.5rem', border: '1px solid #bee3f8' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#2b6cb0', fontWeight: 'bold', marginBottom: '1rem' }}>
-                                        <FaTint /> Alertas de Humedad
-                                    </div>
-                                    <div style={{ marginBottom: '1rem' }}>
-                                        <label style={{ display: 'block', fontSize: '0.85rem', color: '#4a5568', marginBottom: '0.5rem' }}>Mínima (%)</label>
-                                        <input
-                                            type="number"
-                                            value={settings.min_hum ?? ''}
-                                            onChange={e => setSettings({ ...settings, min_hum: Number(e.target.value) })}
-                                            style={{ width: '100%', padding: '0.5rem', borderRadius: '0.25rem', border: '1px solid #e2e8f0' }}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label style={{ display: 'block', fontSize: '0.85rem', color: '#4a5568', marginBottom: '0.5rem' }}>Máxima (%)</label>
-                                        <input
-                                            type="number"
-                                            value={settings.max_hum ?? ''}
-                                            onChange={e => setSettings({ ...settings, max_hum: Number(e.target.value) })}
-                                            style={{ width: '100%', padding: '0.5rem', borderRadius: '0.25rem', border: '1px solid #e2e8f0' }}
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'flex-end' }}>
+                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                            {view === 'history' && (['24h', '7d', '30d'] as const).map(range => (
                                 <button
-                                    onClick={handleSaveSettings}
-                                    disabled={saving}
+                                    key={range}
+                                    onClick={() => setTimeRange(range)}
                                     style={{
-                                        background: '#48bb78',
-                                        color: 'white',
-                                        border: 'none',
-                                        padding: '0.75rem 1.5rem',
-                                        borderRadius: '0.5rem',
-                                        fontWeight: 'bold',
+                                        padding: '0.25rem 0.5rem',
+                                        borderRadius: '0.25rem',
+                                        border: '1px solid #cbd5e0',
+                                        background: timeRange === range ? '#3182ce' : 'white',
+                                        color: timeRange === range ? 'white' : '#4a5568',
                                         cursor: 'pointer',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '0.5rem',
-                                        opacity: saving ? 0.7 : 1
+                                        fontSize: '0.8rem'
                                     }}
                                 >
-                                    <FaSave /> {saving ? 'Guardando...' : 'Guardar Configuración'}
+                                    {range === '24h' ? '24hs' : range === '7d' ? '7 Días' : '30 Días'}
                                 </button>
-                            </div>
+                            ))}
+                            <CloseButton onClick={onClose}><FaTimes /></CloseButton>
                         </div>
-                    ) : (
-                        loading ? <LoadingSpinner text="Cargando historial..." /> : !hasData ? (
-                            <div style={{ textAlign: 'center', color: '#a0aec0', padding: '3rem' }}>
-                                <FaHistory style={{ fontSize: '3rem', marginBottom: '1rem', display: 'block', margin: '0 auto 1rem' }} />
-                                No hay datos históricos disponibles para este periodo.
+                    </ModalHeader>
+
+                    <ModalBody>
+                        {view === 'config' ? (
+                            <div style={{ padding: '1rem' }}>
+                                <h4 style={{ color: '#2d3748', marginBottom: '1rem' }}>Configuración General</h4>
+
+                                {/* Room Assignment */}
+                                <div style={{ marginBottom: '2rem', background: '#f7fafc', padding: '1rem', borderRadius: '0.5rem', border: '1px solid #edf2f7' }}>
+                                    <label style={{ display: 'block', fontSize: '0.9rem', color: '#4a5568', marginBottom: '0.5rem', fontWeight: 'bold' }}>📍 Asignar a Sala / Cultivo</label>
+                                    <select
+                                        value={settings.room_id || ''}
+                                        onChange={(e) => setSettings({ ...settings, room_id: e.target.value || undefined })}
+                                        style={{ width: '100%', padding: '0.75rem', borderRadius: '0.25rem', border: '1px solid #cbd5e0', background: 'white', fontSize: '1rem' }}
+                                    >
+                                        <option value="">-- Sin asignar --</option>
+                                        {rooms.map((room: any) => (
+                                            <option key={room.id} value={room.id}>
+                                                {room.name} ({room.type === 'vegetation' ? 'Vegetación' : room.type === 'flowering' ? 'Floración' : room.type === 'drying' ? 'Secado' : 'Otro'})
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <p style={{ fontSize: '0.8rem', color: '#718096', marginTop: '0.5rem' }}>
+                                        Asignar este sensor a una sala te permitirá filtrar y ver sus datos directamente en la vista de detalle de esa sala.
+                                    </p>
+                                </div>
+
+                                <h4 style={{ color: '#2d3748', marginBottom: '1rem' }}>Umbrales de Alerta</h4>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                                    {/* Temperature Settings */}
+                                    <div style={{ background: '#fff5f5', padding: '1.5rem', borderRadius: '0.5rem', border: '1px solid #feb2b2' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#c53030', fontWeight: 'bold', marginBottom: '1rem' }}>
+                                            <FaThermometerHalf /> Alertas de Temperatura
+                                        </div>
+                                        <div style={{ marginBottom: '1rem' }}>
+                                            <label style={{ display: 'block', fontSize: '0.85rem', color: '#4a5568', marginBottom: '0.5rem' }}>Mínima (°C)</label>
+                                            <input
+                                                type="number"
+                                                value={settings.min_temp ?? ''}
+                                                onChange={e => setSettings({ ...settings, min_temp: Number(e.target.value) })}
+                                                style={{ width: '100%', padding: '0.5rem', borderRadius: '0.25rem', border: '1px solid #e2e8f0' }}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '0.85rem', color: '#4a5568', marginBottom: '0.5rem' }}>Máxima (°C)</label>
+                                            <input
+                                                type="number"
+                                                value={settings.max_temp ?? ''}
+                                                onChange={e => setSettings({ ...settings, max_temp: Number(e.target.value) })}
+                                                style={{ width: '100%', padding: '0.5rem', borderRadius: '0.25rem', border: '1px solid #e2e8f0' }}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Humidity Settings */}
+                                    <div style={{ background: '#ebf8ff', padding: '1.5rem', borderRadius: '0.5rem', border: '1px solid #bee3f8' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#2b6cb0', fontWeight: 'bold', marginBottom: '1rem' }}>
+                                            <FaTint /> Alertas de Humedad
+                                        </div>
+                                        <div style={{ marginBottom: '1rem' }}>
+                                            <label style={{ display: 'block', fontSize: '0.85rem', color: '#4a5568', marginBottom: '0.5rem' }}>Mínima (%)</label>
+                                            <input
+                                                type="number"
+                                                value={settings.min_hum ?? ''}
+                                                onChange={e => setSettings({ ...settings, min_hum: Number(e.target.value) })}
+                                                style={{ width: '100%', padding: '0.5rem', borderRadius: '0.25rem', border: '1px solid #e2e8f0' }}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '0.85rem', color: '#4a5568', marginBottom: '0.5rem' }}>Máxima (%)</label>
+                                            <input
+                                                type="number"
+                                                value={settings.max_hum ?? ''}
+                                                onChange={e => setSettings({ ...settings, max_hum: Number(e.target.value) })}
+                                                style={{ width: '100%', padding: '0.5rem', borderRadius: '0.25rem', border: '1px solid #e2e8f0' }}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'flex-end' }}>
+                                    <button
+                                        onClick={handleSaveSettings}
+                                        disabled={saving}
+                                        style={{
+                                            background: '#48bb78',
+                                            color: 'white',
+                                            border: 'none',
+                                            padding: '0.75rem 1.5rem',
+                                            borderRadius: '0.5rem',
+                                            fontWeight: 'bold',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '0.5rem',
+                                            opacity: saving ? 0.7 : 1
+                                        }}
+                                    >
+                                        <FaSave /> {saving ? 'Guardando...' : 'Guardar Configuración'}
+                                    </button>
+                                </div>
                             </div>
                         ) : (
-                            <>
-                                {/* Temperature Section */}
-                                {tempData.length > 0 && (
-                                    <div>
-                                        <StatsGrid style={{ marginBottom: '1rem' }}>
-                                            <StatCard>
-                                                <StatLabel>Temperatura Actual</StatLabel>
-                                                <StatValue color="#e53e3e"><FaThermometerHalf /> {tempStats.current.toFixed(1)}°C</StatValue>
-                                            </StatCard>
-                                            <StatCard>
-                                                <StatLabel>Máxima ({timeRange})</StatLabel>
-                                                <StatValue color="#d53f8c"><FaArrowUp size={16} /> {tempStats.max.toFixed(1)}°C</StatValue>
-                                            </StatCard>
-                                            <StatCard>
-                                                <StatLabel>Mínima ({timeRange})</StatLabel>
-                                                <StatValue color="#3182ce"><FaArrowDown size={16} /> {tempStats.min.toFixed(1)}°C</StatValue>
-                                            </StatCard>
-                                            <StatCard>
-                                                <StatLabel>Promedio</StatLabel>
-                                                <StatValue color="#805ad5"><FaMinus size={16} /> {tempStats.avg.toFixed(1)}°C</StatValue>
-                                            </StatCard>
-                                        </StatsGrid>
+                            // ... history view (restored or kept)
+                            loading ? <LoadingSpinner text="Cargando historial..." /> : !hasData ? (
+                                <div style={{ textAlign: 'center', color: '#a0aec0', padding: '3rem' }}>
+                                    <FaHistory style={{ fontSize: '3rem', marginBottom: '1rem', display: 'block', margin: '0 auto 1rem' }} />
+                                    No hay datos históricos disponibles para este periodo.
+                                </div>
+                            ) : (
+                                <>
+                                    {/* Temperature Section */}
+                                    {tempData.length > 0 && (
+                                        <div>
+                                            <StatsGrid style={{ marginBottom: '1rem' }}>
+                                                <StatCard>
+                                                    <StatLabel>Temperatura Actual</StatLabel>
+                                                    <StatValue color="#e53e3e"><FaThermometerHalf /> {tempStats.current.toFixed(1)}°C</StatValue>
+                                                </StatCard>
+                                                <StatCard>
+                                                    <StatLabel>Máxima ({timeRange})</StatLabel>
+                                                    <StatValue color="#d53f8c"><FaArrowUp size={16} /> {tempStats.max.toFixed(1)}°C</StatValue>
+                                                </StatCard>
+                                                <StatCard>
+                                                    <StatLabel>Mínima ({timeRange})</StatLabel>
+                                                    <StatValue color="#3182ce"><FaArrowDown size={16} /> {tempStats.min.toFixed(1)}°C</StatValue>
+                                                </StatCard>
+                                                <StatCard>
+                                                    <StatLabel>Promedio</StatLabel>
+                                                    <StatValue color="#805ad5"><FaMinus size={16} /> {tempStats.avg.toFixed(1)}°C</StatValue>
+                                                </StatCard>
+                                            </StatsGrid>
 
-                                        <ChartContainer>
-                                            <ChartTitle><FaThermometerHalf color="#e53e3e" /> Historial de Temperatura</ChartTitle>
-                                            <ResponsiveContainer width="100%" height={300}>
-                                                <LineChart data={tempData}>
-                                                    <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-                                                    <XAxis dataKey="time" minTickGap={30} fontSize={12} stroke="#a0aec0" />
-                                                    <YAxis domain={['auto', 'auto']} fontSize={12} stroke="#a0aec0" unit="°C" />
-                                                    <Tooltip
-                                                        contentStyle={{ borderRadius: '0.5rem', border: 'none', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}
-                                                        formatter={(value: any) => [`${Number(value).toFixed(1)} °C`, 'Temperatura']}
-                                                        labelStyle={{ color: '#718096' }}
-                                                    />
-                                                    <Line type="monotone" dataKey="value" stroke="#e53e3e" strokeWidth={2} dot={false} activeDot={{ r: 6 }} />
-                                                </LineChart>
-                                            </ResponsiveContainer>
-                                        </ChartContainer>
-                                    </div>
-                                )}
+                                            <ChartContainer>
+                                                <ChartTitle><FaThermometerHalf color="#e53e3e" /> Historial de Temperatura</ChartTitle>
+                                                <ResponsiveContainer width="100%" height={300}>
+                                                    <LineChart data={tempData}>
+                                                        <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                                                        <XAxis dataKey="time" minTickGap={30} fontSize={12} stroke="#a0aec0" />
+                                                        <YAxis domain={['auto', 'auto']} fontSize={12} stroke="#a0aec0" unit="°C" />
+                                                        <Tooltip
+                                                            contentStyle={{ borderRadius: '0.5rem', border: 'none', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}
+                                                            formatter={(value: any) => [`${Number(value).toFixed(1)} °C`, 'Temperatura']}
+                                                            labelStyle={{ color: '#718096' }}
+                                                        />
+                                                        <Line type="monotone" dataKey="value" stroke="#e53e3e" strokeWidth={2} dot={false} activeDot={{ r: 6 }} />
+                                                    </LineChart>
+                                                </ResponsiveContainer>
+                                            </ChartContainer>
+                                        </div>
+                                    )}
 
-                                {/* Humidity Section */}
-                                {humData.length > 0 && (
-                                    <div style={{ marginTop: '2rem' }}>
-                                        <StatsGrid style={{ marginBottom: '1rem' }}>
-                                            <StatCard>
-                                                <StatLabel>Humedad Actual</StatLabel>
-                                                <StatValue color="#3182ce"><FaTint /> {humStats.current.toFixed(0)}%</StatValue>
-                                            </StatCard>
-                                            <StatCard>
-                                                <StatLabel>Máxima ({timeRange})</StatLabel>
-                                                <StatValue color="#d53f8c"><FaArrowUp size={16} /> {humStats.max.toFixed(0)}%</StatValue>
-                                            </StatCard>
-                                            <StatCard>
-                                                <StatLabel>Mínima ({timeRange})</StatLabel>
-                                                <StatValue color="#3182ce"><FaArrowDown size={16} /> {humStats.min.toFixed(0)}%</StatValue>
-                                            </StatCard>
-                                            <StatCard>
-                                                <StatLabel>Promedio</StatLabel>
-                                                <StatValue color="#805ad5"><FaMinus size={16} /> {humStats.avg.toFixed(0)}%</StatValue>
-                                            </StatCard>
-                                        </StatsGrid>
+                                    {/* Humidity Section */}
+                                    {humData.length > 0 && (
+                                        <div style={{ marginTop: '2rem' }}>
+                                            <StatsGrid style={{ marginBottom: '1rem' }}>
+                                                <StatCard>
+                                                    <StatLabel>Humedad Actual</StatLabel>
+                                                    <StatValue color="#3182ce"><FaTint /> {humStats.current.toFixed(0)}%</StatValue>
+                                                </StatCard>
+                                                <StatCard>
+                                                    <StatLabel>Máxima ({timeRange})</StatLabel>
+                                                    <StatValue color="#d53f8c"><FaArrowUp size={16} /> {humStats.max.toFixed(0)}%</StatValue>
+                                                </StatCard>
+                                                <StatCard>
+                                                    <StatLabel>Mínima ({timeRange})</StatLabel>
+                                                    <StatValue color="#3182ce"><FaArrowDown size={16} /> {humStats.min.toFixed(0)}%</StatValue>
+                                                </StatCard>
+                                                <StatCard>
+                                                    <StatLabel>Promedio</StatLabel>
+                                                    <StatValue color="#805ad5"><FaMinus size={16} /> {humStats.avg.toFixed(0)}%</StatValue>
+                                                </StatCard>
+                                            </StatsGrid>
 
-                                        <ChartContainer>
-                                            <ChartTitle><FaTint color="#3182ce" /> Historial de Humedad</ChartTitle>
-                                            <ResponsiveContainer width="100%" height={300}>
-                                                <LineChart data={humData}>
-                                                    <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-                                                    <XAxis dataKey="time" minTickGap={30} fontSize={12} stroke="#a0aec0" />
-                                                    <YAxis domain={[0, 100]} fontSize={12} stroke="#a0aec0" unit="%" />
-                                                    <Tooltip
-                                                        contentStyle={{ borderRadius: '0.5rem', border: 'none', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}
-                                                        formatter={(value: any) => [`${Number(value).toFixed(0)} %`, 'Humedad']}
-                                                        labelStyle={{ color: '#718096' }}
-                                                    />
-                                                    <Line type="monotone" dataKey="value" stroke="#3182ce" strokeWidth={2} dot={false} activeDot={{ r: 6 }} />
-                                                </LineChart>
-                                            </ResponsiveContainer>
-                                        </ChartContainer>
-                                    </div>
-                                )}
-                            </>
-                        )
-                    )}
-                </ModalBody>
-            </ModalContent>
-        </ModalOverlay>
+                                            <ChartContainer>
+                                                <ChartTitle><FaTint color="#3182ce" /> Historial de Humedad</ChartTitle>
+                                                <ResponsiveContainer width="100%" height={300}>
+                                                    <LineChart data={humData}>
+                                                        <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                                                        <XAxis dataKey="time" minTickGap={30} fontSize={12} stroke="#a0aec0" />
+                                                        <YAxis domain={[0, 100]} fontSize={12} stroke="#a0aec0" unit="%" />
+                                                        <Tooltip
+                                                            contentStyle={{ borderRadius: '0.5rem', border: 'none', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}
+                                                            formatter={(value: any) => [`${Number(value).toFixed(0)} %`, 'Humedad']}
+                                                            labelStyle={{ color: '#718096' }}
+                                                        />
+                                                        <Line type="monotone" dataKey="value" stroke="#3182ce" strokeWidth={2} dot={false} activeDot={{ r: 6 }} />
+                                                    </LineChart>
+                                                </ResponsiveContainer>
+                                            </ChartContainer>
+                                        </div>
+                                    )}
+                                </>
+                            )
+                        )}
+                    </ModalBody>
+                </ModalContent>
+                <ToastModal
+                    isOpen={toast.open}
+                    message={toast.message}
+                    type={toast.type}
+                    onClose={() => setToast(prev => ({ ...prev, open: false }))}
+                />
+            </ModalOverlay>
+        </React.Fragment>
     );
 };
