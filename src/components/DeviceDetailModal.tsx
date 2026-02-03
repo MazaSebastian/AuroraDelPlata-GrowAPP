@@ -7,6 +7,7 @@ import {
 } from 'recharts';
 import { FaTimes, FaThermometerHalf, FaTint, FaHistory, FaArrowUp, FaArrowDown, FaMinus, FaCog, FaSave } from 'react-icons/fa';
 import { LoadingSpinner } from './LoadingSpinner';
+import { ToastModal } from './ToastModal';
 
 const ModalOverlay = styled.div`
   position: fixed;
@@ -143,10 +144,6 @@ interface DeviceDetailModalProps {
     device: TuyaDevice;
     onClose: () => void;
 }
-
-import { ToastModal } from './ToastModal';
-
-// ... (keep styled components)
 
 export const DeviceDetailModal: React.FC<DeviceDetailModalProps> = ({ device, onClose }) => {
     const [view, setView] = useState<'history' | 'config'>('history');
