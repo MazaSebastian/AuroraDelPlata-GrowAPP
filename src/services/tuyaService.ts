@@ -54,6 +54,11 @@ export const tuyaService = {
         if (error) throw error;
     },
 
+    async getDeviceStatus(deviceId: string): Promise<any[]> {
+        const { data } = await api.get(`/tuya?action=get_device_status&deviceId=${deviceId}`);
+        return data.status || [];
+    },
+
     async getDevices(): Promise<TuyaDevice[]> {
         // If we are in local dev without vercel dev, this might fail (404).
         // For now, we assume standardized Vercel deployment structure.

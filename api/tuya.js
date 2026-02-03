@@ -56,6 +56,15 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, devices: response.result });
         }
 
+        if (req.method === 'GET' && action === 'get_device_status') {
+            const { deviceId } = req.query;
+            const response = await context.request({
+                method: 'GET',
+                path: `/v1.0/devices/${deviceId}/status`,
+            });
+            return res.status(200).json({ success: response.success, status: response.result });
+        }
+
         if (req.method === 'GET' && action === 'get_logs') {
             const { deviceId, start_time, end_time, type } = req.query;
 

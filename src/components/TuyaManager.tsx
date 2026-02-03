@@ -128,18 +128,37 @@ export const TuyaManager: React.FC<TuyaManagerProps> = ({ mode = 'full' }) => {
         setLoading(true);
         setError(null);
         try {
+            // 1. Get the list (Fast but potentially stale)
             const data = await tuyaService.getDevices();
             setDevices(data);
+            setLoading(false); // Show the stale data first so the UI isn't empty
+
+            // 2. Refresh each device's status individually (Slower but Fresh)
+            // We do this in parallel but limiting concurrency if needed, here we just do parallel all
+            const freshDataPromises = data.map(async (device) => {
+                try {
+                    const freshStatus = await tuyaService.getDeviceStatus(device.id);
+                    return { ...device, status: freshStatus };
+                } catch (e) {
+                    console.warn(`Failed to refresh status for ${device.name}`, e);
+                    return device; // Fallback to stale
+                }
+            });
+
+            const freshDevices = await Promise.all(freshDataPromises);
+            setDevices(freshDevices);
+
         } catch (err: any) {
-            console.error(err); // debug
-            setError("Error al cargar dispositivos. Verifica las credenciales.");
-        } finally {
+            console.error(err);
+            setError("Error al cargar dispositivos.");
             setLoading(false);
         }
     };
 
     useEffect(() => {
         loadDevices();
+        const interval = setInterval(loadDevices, 60000); // Auto-refresh every 60s
+        return () => clearInterval(interval);
     }, []);
 
     const handleToggle = async (device: TuyaDevice) => {
