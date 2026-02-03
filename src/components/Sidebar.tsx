@@ -15,7 +15,8 @@ import {
   FaCut,
   FaIdCard,
   FaHandHoldingMedical,
-  FaCog
+  FaCog,
+  FaPlug
 } from 'react-icons/fa';
 import { useAuth } from '../context/AuthContext';
 
@@ -239,6 +240,9 @@ const Sidebar: React.FC = () => {
           </StyledNavLink>
           <StyledNavLink to="/clones">
             <FaCut /> Esquejes
+          </StyledNavLink>
+          <StyledNavLink to="/devices">
+            <FaPlug /> Dispositivos
           </StyledNavLink>
           <StyledNavLink to="/stock">
             <FaBoxes /> Stock

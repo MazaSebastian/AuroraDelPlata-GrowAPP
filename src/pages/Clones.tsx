@@ -12,6 +12,7 @@ import { ToastModal } from '../components/ToastModal';
 
 import { Room } from '../types/rooms';
 import QRCode from 'react-qr-code';
+import { TuyaManager } from '../components/TuyaManager';
 
 const Container = styled.div`
   padding: 2rem;
@@ -680,6 +681,10 @@ const Clones: React.FC = () => {
                     <FaPlus /> Agregar Esquejes
                 </CreateButton>
             </Header>
+
+            <div style={{ marginBottom: '2rem' }}>
+                <TuyaManager mode="sensors" />
+            </div>
 
             {loading ? (
                 <div style={{ position: 'relative', height: '300px', background: 'white', borderRadius: '1rem', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>

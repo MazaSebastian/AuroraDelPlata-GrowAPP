@@ -12,8 +12,8 @@ const pulse = keyframes`
   100% { opacity: 0.6; transform: scale(0.98); }
 `;
 
-const Overlay = styled.div<{ fullScreen?: boolean }>`
-  position: ${props => props.fullScreen ? 'fixed' : 'absolute'};
+const Overlay = styled.div<{ $fullScreen?: boolean }>`
+  position: ${props => props.$fullScreen ? 'fixed' : 'absolute'};
   top: 0;
   left: 0;
   right: 0;
@@ -47,8 +47,6 @@ const Circle = styled.div`
   animation: ${spin} 1s cubic-bezier(0.55, 0.055, 0.675, 0.19) infinite;
 `;
 
-
-
 const LoadingText = styled.h3`
   color: #2d3748;
   font-size: 1.1rem;
@@ -68,7 +66,7 @@ export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
   fullScreen = false
 }) => {
   return (
-    <Overlay fullScreen={fullScreen}>
+    <Overlay $fullScreen={fullScreen}>
       <SpinnerContainer>
         <Circle />
       </SpinnerContainer>

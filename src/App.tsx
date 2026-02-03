@@ -9,6 +9,7 @@ import Rooms from './pages/Rooms';
 import RoomDetail from './pages/RoomDetail';
 import Genetics from './pages/Genetics';
 import Clones from './pages/Clones';
+import Devices from './pages/Devices';
 
 import Stock from './pages/Stock';
 import Dispensary from './pages/Dispensary';
@@ -112,6 +113,13 @@ function App() {
           <RequireAuth>
             <MainContent>
               <Clones />
+            </MainContent>
+          </RequireAuth>
+        } />
+        <Route path="/devices" element={
+          <RequireAuth>
+            <MainContent>
+              <Devices />
             </MainContent>
           </RequireAuth>
         } />

@@ -20,6 +20,7 @@ import { Room } from '../types/rooms';
 import { Task, StickyNote } from '../types';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { FaStickyNote } from 'react-icons/fa';
+import { TuyaManager } from '../components/TuyaManager';
 
 const Container = styled.div`
   padding: 2rem;
@@ -472,6 +473,10 @@ const RoomDetail: React.FC = () => {
                     </StatCard>
                 </HeaderGrid>
             )}
+
+            <div style={{ marginBottom: '2rem' }}>
+                <TuyaManager mode="sensors" />
+            </div>
 
             {/* Stickies Wall Section */}
             <div style={{ marginBottom: '2rem' }}>
