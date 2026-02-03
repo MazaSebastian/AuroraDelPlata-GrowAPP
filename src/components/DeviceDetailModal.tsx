@@ -335,7 +335,7 @@ export const DeviceDetailModal: React.FC<DeviceDetailModalProps> = ({ device, on
                                         <option value="">-- Sin asignar --</option>
                                         {rooms.map((room: any) => (
                                             <option key={room.id} value={room.id}>
-                                                {room.name} ({room.type === 'vegetation' ? 'Vegetación' : room.type === 'flowering' ? 'Floración' : room.type === 'drying' ? 'Secado' : 'Otro'})
+                                                {room.name} ({room.type === 'vegetation' ? 'Vegetación' : room.type === 'flowering' ? 'Floración' : room.type === 'drying' ? 'Secado' : room.type === 'clones' ? 'Esquejes' : 'Otro'})
                                             </option>
                                         ))}
                                     </select>

@@ -405,6 +405,8 @@ const Clones: React.FC = () => {
     };
 
 
+    const [clonesRoomId, setClonesRoomId] = useState<string | undefined>(undefined);
+
     useEffect(() => {
         loadData();
     }, []);
@@ -424,6 +426,9 @@ const Clones: React.FC = () => {
 
         const validRooms = allRooms.filter(r => ['clones', 'vegetation', 'general'].includes(r.type));
         setRooms(validRooms);
+
+        const clonesRoom = allRooms.find(r => r.type === 'clones');
+        if (clonesRoom) setClonesRoomId(clonesRoom.id);
 
         const allClones = batches.filter(b =>
             b.parent_batch_id ||
@@ -683,7 +688,7 @@ const Clones: React.FC = () => {
             </Header>
 
             <div style={{ marginBottom: '2rem' }}>
-                <TuyaManager mode="sensors" />
+                <TuyaManager mode="sensors" roomId={clonesRoomId} />
             </div>
 
             {loading ? (
