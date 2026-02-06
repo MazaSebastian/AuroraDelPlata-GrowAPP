@@ -15,7 +15,7 @@ import {
     useSensors
 } from '@dnd-kit/core';
 import {
-    FaArrowLeft, FaSeedling, FaThermometerHalf, FaTint, FaMapMarkedAlt, FaTimes
+    FaArrowLeft, FaThermometerHalf, FaTint, FaMapMarkedAlt, FaTimes
 } from 'react-icons/fa';
 import { roomsService } from '../services/roomsService';
 import { cropsService } from '../services/cropsService';

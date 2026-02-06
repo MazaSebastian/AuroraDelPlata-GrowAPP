@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import styled, { keyframes, css } from 'styled-components';
-import { FaRobot, FaTimes, FaPaperPlane, FaLeaf, FaPaperclip, FaTrash, FaImage } from 'react-icons/fa'; // Updated icons
+import { FaRobot, FaTimes, FaPaperPlane, FaLeaf, FaPaperclip } from 'react-icons/fa'; // Updated icons
 import { aiService, ChatMessage } from '../../services/aiService';
 // import ReactMarkdown from 'react-markdown'; // DISABLED FOR DEBUGGING
 

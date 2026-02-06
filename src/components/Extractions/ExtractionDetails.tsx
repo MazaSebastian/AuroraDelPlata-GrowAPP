@@ -3,7 +3,7 @@ import styled from 'styled-components';
 import { Extraction } from '../../types/extractions';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { FaTimes, FaPrint, FaThermometerHalf, FaClock, FaLayerGroup, FaSnowflake, FaTint, FaInfoCircle } from 'react-icons/fa';
+import { FaTimes, FaPrint, FaThermometerHalf, FaClock, FaLayerGroup, FaSnowflake, FaTint } from 'react-icons/fa';
 import { TastingRating } from './TastingRating';
 
 interface ExtractionDetailsProps {

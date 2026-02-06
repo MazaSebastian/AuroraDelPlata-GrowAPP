@@ -13,7 +13,7 @@ interface ExtractionFormProps {
 
 export const ExtractionForm: React.FC<ExtractionFormProps> = ({ onClose, onSuccess, initialData }) => {
     const [sources, setSources] = useState<DispensaryBatch[]>([]);
-    const [loading, setLoading] = useState(true);
+    // const [loading, setLoading] = useState(true);
 
     // Form State
     const [sourceId, setSourceId] = useState('');
@@ -55,7 +55,7 @@ export const ExtractionForm: React.FC<ExtractionFormProps> = ({ onClose, onSucce
         } catch (err) {
             console.error(err);
         } finally {
-            setLoading(false);
+            // setLoading(false);
         }
     };
 

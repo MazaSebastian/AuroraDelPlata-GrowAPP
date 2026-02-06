@@ -40,7 +40,6 @@ import {
   FaBarcode,
   FaFileUpload,
   FaMapMarkedAlt,
-  FaArrowUp, FaArrowDown,
   FaExclamationTriangle,
 } from 'react-icons/fa';
 
@@ -622,7 +621,7 @@ const CropDetail: React.FC = () => {
   };
 
   const executeBatchMove = async () => {
-    const { batch, targetRoomId, sourceRoomId, batchIds } = moveConfirmState; // extracted batchIds
+    const { targetRoomId, sourceRoomId, batchIds } = moveConfirmState; // extracted batchIds
     if (!targetRoomId || !batchIds || batchIds.length === 0) return;
 
     try {
@@ -1102,9 +1101,9 @@ const CropDetail: React.FC = () => {
     }
   };
 
-  const handleRecurrenceChange = (field: keyof RecurrenceConfig, value: any) => {
-    setRecurrenceConfig(prev => ({ ...prev, [field]: value }));
-  };
+  // const handleRecurrenceChange = (field: keyof RecurrenceConfig, value: any) => {
+  //   setRecurrenceConfig(prev => ({ ...prev, [field]: value }));
+  // };
 
 
   useEffect(() => {
@@ -1229,29 +1228,29 @@ const CropDetail: React.FC = () => {
   // This function is not used in the provided snippet, but it was part of the original code
   // and is likely intended to be used when opening the modal for a specific date.
   // Keeping it here for context, but it's not directly modified by the current instruction.
-  const handleDayClick = async (date: Date) => {
-    // setSelectedDate(date);
-    // const dateStr = format(date, 'yyyy-MM-dd');
-    // const tasksForDay = await tasksService.getTasksByDate(id!, dateStr);
-    // setSelectedDayTasks(tasksForDay);
+  // const handleDayClick = async (date: Date) => {
+  //   // setSelectedDate(date);
+  //   // const dateStr = format(date, 'yyyy-MM-dd');
+  //   // const tasksForDay = await tasksService.getTasksByDate(id!, dateStr);
+  //   // setSelectedDayTasks(tasksForDay);
 
-    // const logForDay = await dailyLogsService.getLogByDate(id!, dateStr);
-    // if (logForDay) {
-    //   setLogForm({ notes: logForDay.notes || '', photos: logForDay.photos || [] });
-    //   setExistingLogId(logForDay.id);
-    // } else {
-    //   setLogForm({ notes: '', photos: [] });
-    //   setExistingLogId(null);
-    // }
+  //   // const logForDay = await dailyLogsService.getLogByDate(id!, dateStr);
+  //   // if (logForDay) {
+  //   //   setLogForm({ notes: logForDay.notes || '', photos: logForDay.photos || [] });
+  //   //   setExistingLogId(logForDay.id);
+  //   // } else {
+  //   //   setLogForm({ notes: '', photos: [] });
+  //   //   setExistingLogId(null);
+  //   // }
 
-    // Reset Task/Recurrence Form
-    setTaskForm({ title: '', type: 'info', description: '' });
-    setRecurrenceEnabled(false);
-    setRecurrenceConfig({ type: 'daily', interval: 1, unit: 'day', daysOfWeek: [] });
-    setEditingTaskId(null);
+  //   // Reset Task/Recurrence Form
+  //   // setTaskForm({ title: '', type: 'info', description: '' });
+  //   // setRecurrenceEnabled(false);
+  //   // setRecurrenceConfig({ type: 'daily', interval: 1, unit: 'day', daysOfWeek: [] });
+  //   // setEditingTaskId(null);
 
-    setIsModalOpen(true);
-  };
+  //   // setIsModalOpen(true);
+  // };
 
 
 

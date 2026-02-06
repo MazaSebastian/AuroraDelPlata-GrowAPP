@@ -5,7 +5,7 @@ import { Extraction } from '../types/extractions';
 import { ExtractionForm } from '../components/Extractions/ExtractionForm';
 import { ExtractionDetails } from '../components/Extractions/ExtractionDetails';
 import { ConfirmationModal } from '../components/ConfirmationModal';
-import { TastingRating } from '../components/Extractions/TastingRating';
+import { TastingRating } from '../components/Extractions/TastingRating'; // check if unused
 import { FaFlask, FaPlus, FaCalendarAlt, FaWeightHanging, FaTrash, FaEye, FaEdit } from 'react-icons/fa';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
