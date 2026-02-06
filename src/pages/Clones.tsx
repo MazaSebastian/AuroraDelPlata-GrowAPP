@@ -408,6 +408,7 @@ const Clones: React.FC = () => {
 
 
     const [clonesRoomId, setClonesRoomId] = useState<string | undefined>(undefined);
+    const [selectedGeneticFilter, setSelectedGeneticFilter] = useState<string | null>(null);
 
     useEffect(() => {
         loadData();
@@ -711,6 +712,13 @@ const Clones: React.FC = () => {
     };
 
 
+    // Filter logic
+    const filteredGroups = selectedGeneticFilter
+        ? cloneBatches.filter(g => g.root.genetic?.name === selectedGeneticFilter)
+        : cloneBatches;
+
+
+
     return (
         <Container>
             <Header>
@@ -752,15 +760,26 @@ const Clones: React.FC = () => {
                         </EnvironmentSection>
                     )}
 
-                    {/* Summary Section */}
+
+
+
+                    {/* Summary Grid */}
                     <SummaryGrid>
-                        <SummaryCard isTotal>
+                        <SummaryCard isTotal onClick={() => setSelectedGeneticFilter(null)} style={{ cursor: 'pointer' }}>
                             <h3>Total Esquejes</h3>
                             <div className="value">{stats.total}</div>
                             <div className="icon"><FaCut /></div>
                         </SummaryCard>
                         {Object.entries(stats.byGenetic).map(([name, qty]) => (
-                            <SummaryCard key={name}>
+                            <SummaryCard
+                                key={name}
+                                onClick={() => setSelectedGeneticFilter(prev => prev === name ? null : name)}
+                                style={{
+                                    cursor: 'pointer',
+                                    border: selectedGeneticFilter === name ? '2px solid #319795' : '1px solid #edf2f7',
+                                    background: selectedGeneticFilter === name ? '#e6fffa' : 'white'
+                                }}
+                            >
                                 <h3>{name}</h3>
                                 <div className="value">{qty}</div>
                             </SummaryCard>
@@ -784,7 +803,7 @@ const Clones: React.FC = () => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {/* RENDER BY GROUPS */}
+                                    {/* RENDER BY GROUPS (ALL) */}
                                     {cloneBatches.map(group => {
                                         const { root, children } = group;
                                         const rows = [root, ...children];
@@ -869,6 +888,94 @@ const Clones: React.FC = () => {
                         </div>
                     </HistorySection>
                 </>
+            )}
+            {/* Genetic Details Modal (Floating Table) */}
+            {selectedGeneticFilter && (
+                <ModalOverlay>
+                    <ModalContent style={{ maxWidth: '1000px', width: '95%' }}>
+                        <CloseIcon onClick={() => setSelectedGeneticFilter(null)}><FaTimes /></CloseIcon>
+                        <h2 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <FaCut /> Lotes de {selectedGeneticFilter}
+                        </h2>
+
+                        <div style={{ overflowX: 'auto', maxHeight: '70vh', overflowY: 'auto' }}>
+                            <HistoryTable>
+                                <thead>
+                                    <tr>
+                                        <th>Fecha</th>
+                                        <th>Lote (Código)</th>
+                                        <th>Genética</th>
+                                        <th>Cantidad</th>
+                                        <th>Destino</th>
+                                        <th style={{ textAlign: 'center' }}>Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {filteredGroups.map(group => {
+                                        const { root, children } = group;
+                                        const rows = [root, ...children];
+
+                                        return (
+                                            <React.Fragment key={root.id}>
+                                                {rows.map((batch, index) => {
+                                                    const isRoot = batch === root;
+                                                    const isLast = index === rows.length - 1;
+                                                    const rowStyle: React.CSSProperties = {
+                                                        borderBottom: !isLast ? 'none' : undefined,
+                                                        fontSize: !isRoot ? '0.9rem' : undefined,
+                                                        color: !isRoot ? '#4a5568' : undefined
+                                                    };
+                                                    const cellStyle = !isLast ? { borderBottom: 'none' } : undefined;
+
+                                                    return (
+                                                        <tr key={batch.id} style={rowStyle}>
+                                                            <td style={cellStyle}>{new Date(batch.start_date || batch.created_at).toLocaleDateString()}</td>
+                                                            <td style={cellStyle}>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', paddingLeft: batch.parent_batch_id ? '1.5rem' : '0' }}>
+                                                                    {batch.parent_batch_id && (
+                                                                        <FaLevelUpAlt style={{ transform: 'rotate(90deg)', color: '#a0aec0', fontSize: '1rem', minWidth: '1rem' }} />
+                                                                    )}
+                                                                    <FaBarcode style={{ color: batch.parent_batch_id ? '#718096' : '#2d3748' }} />
+                                                                    <strong>{batch.name}</strong>
+                                                                    {batch.parent_batch_id && <span style={{ fontSize: '0.7rem', color: '#a0aec0', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '0 4px' }}>Sub-lote</span>}
+                                                                </div>
+                                                            </td>
+                                                            <td style={cellStyle}>{batch.genetic?.name || 'Desconocida'}</td>
+                                                            <td style={cellStyle}>{batch.quantity} u.</td>
+                                                            <td style={cellStyle}>{batch.room?.name || 'Desconocido'}</td>
+                                                            <td style={{ textAlign: 'center', ...cellStyle }}>
+                                                                <div style={{ display: 'flex', justifyContent: 'center' }}>
+                                                                    <Tooltip text="Ver Código de Barras">
+                                                                        <ActionButton color="#4a5568" onClick={() => handleBarcodeClick(batch)}><FaBarcode /></ActionButton>
+                                                                    </Tooltip>
+                                                                    <Tooltip text="Mover a Sala (Transplante)">
+                                                                        <ActionButton color="#ed8936" onClick={() => handleMoveClick(batch)}><FaExchangeAlt /></ActionButton>
+                                                                    </Tooltip>
+                                                                    <Tooltip text="Dar de Baja (Descarte)">
+                                                                        <ActionButton color="#e53e3e" onClick={() => handleDiscardClick(batch)}><FaMinusCircle /></ActionButton>
+                                                                    </Tooltip>
+                                                                    <Tooltip text="Editar Lote">
+                                                                        <ActionButton color="#3182ce" onClick={() => handleEditClick(batch)}><FaEdit /></ActionButton>
+                                                                    </Tooltip>
+                                                                    <Tooltip text="Eliminar Lote">
+                                                                        <ActionButton color="#e53e3e" onClick={() => handleDeleteClick(batch)}><FaTrash /></ActionButton>
+                                                                    </Tooltip>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </React.Fragment>
+                                        );
+                                    })}
+                                    {filteredGroups.length === 0 && (
+                                        <tr><td colSpan={6} style={{ textAlign: 'center', color: '#a0aec0', padding: '2rem' }}>No hay lotes activos para esta genética.</td></tr>
+                                    )}
+                                </tbody>
+                            </HistoryTable>
+                        </div>
+                    </ModalContent>
+                </ModalOverlay>
             )}
 
             {/* Create Clone Batch Modal */}

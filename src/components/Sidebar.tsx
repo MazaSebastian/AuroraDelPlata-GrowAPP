@@ -16,7 +16,8 @@ import {
   FaIdCard,
   FaHandHoldingMedical,
   FaCog,
-  FaPlug
+  FaPlug,
+  FaFlask,
 } from 'react-icons/fa';
 import { useAuth } from '../context/AuthContext';
 
@@ -235,9 +236,6 @@ const Sidebar: React.FC = () => {
           <StyledNavLink to="/crops">
             <FaSeedling /> Cultivos
           </StyledNavLink>
-          <StyledNavLink to="/genetics">
-            <FaDna /> Madres
-          </StyledNavLink>
           <StyledNavLink to="/clones">
             <FaCut /> Esquejes
           </StyledNavLink>
@@ -249,6 +247,12 @@ const Sidebar: React.FC = () => {
           </StyledNavLink>
           <StyledNavLink to="/dispensary">
             <FaHandHoldingMedical /> Dispensario
+          </StyledNavLink>
+          <StyledNavLink to="/genetics">
+            <FaDna /> Madres
+          </StyledNavLink>
+          <StyledNavLink to="/extractions">
+            <FaFlask /> Extracciones
           </StyledNavLink>
 
           <SectionTitle>Gestión</SectionTitle>

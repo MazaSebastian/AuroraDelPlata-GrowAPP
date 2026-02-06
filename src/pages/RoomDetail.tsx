@@ -10,14 +10,15 @@ import {
 } from 'react-icons/fa';
 import {
     format, startOfWeek, endOfWeek, startOfMonth, endOfMonth,
-    eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths
+    eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths,
+    addDays, addWeeks
 } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { roomsService } from '../services/roomsService';
 import { tasksService } from '../services/tasksService';
 import { stickiesService } from '../services/stickiesService';
 import { Room } from '../types/rooms';
-import { Task, StickyNote } from '../types';
+import { Task, StickyNote, RecurrenceConfig } from '../types';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { FaStickyNote } from 'react-icons/fa';
 import { TuyaManager } from '../components/TuyaManager';
@@ -157,6 +158,9 @@ const RoomDetail: React.FC = () => {
     const [room, setRoom] = useState<Room | null>(null);
     const [loading, setLoading] = useState(true);
 
+    // Genetics Modal State
+    const [isGeneticsModalOpen, setIsGeneticsModalOpen] = useState(false);
+
     // Calendar State
     const [currentDate, setCurrentDate] = useState(new Date());
     const [tasks, setTasks] = useState<Task[]>([]);
@@ -165,6 +169,18 @@ const RoomDetail: React.FC = () => {
     // Day Summary State
     const [isDaySummaryOpen, setIsDaySummaryOpen] = useState(false);
     const [selectedDayForSummary, setSelectedDayForSummary] = useState<Date | null>(null);
+
+    // Projection Alert State
+    const [isProjectionAlertOpen, setIsProjectionAlertOpen] = useState(false);
+
+    // Recurrence State
+    const [recurrenceEnabled, setRecurrenceEnabled] = useState(false);
+    const [recurrenceConfig, setRecurrenceConfig] = useState<RecurrenceConfig>({
+        type: 'daily',
+        interval: 1,
+        unit: 'day',
+        daysOfWeek: []
+    });
 
     // Sticky Modal State
     const [isStickyModalOpen, setIsStickyModalOpen] = useState(false);
@@ -292,6 +308,8 @@ const RoomDetail: React.FC = () => {
         if (user && (user.role === 'admin' || user.role === 'partner')) {
             setTaskForm({ title: '', type: 'info', due_date: format(day, 'yyyy-MM-dd'), description: '', assigned_to: '' });
             setSelectedTask(null);
+            setRecurrenceEnabled(false);
+            setRecurrenceConfig({ type: 'daily', interval: 1, unit: 'day', daysOfWeek: [] });
             setIsTaskModalOpen(true);
         }
     };
@@ -311,6 +329,13 @@ const RoomDetail: React.FC = () => {
             description: task.description || '',
             assigned_to: task.assigned_to || ''
         });
+        if (task.recurrence) {
+            setRecurrenceEnabled(true);
+            setRecurrenceConfig(task.recurrence);
+        } else {
+            setRecurrenceEnabled(false);
+            setRecurrenceConfig({ type: 'daily', interval: 1, unit: 'day', daysOfWeek: [] });
+        }
         setIsTaskModalOpen(true);
     };
 
@@ -323,7 +348,8 @@ const RoomDetail: React.FC = () => {
             due_date: taskForm.due_date,
             description: taskForm.description,
             room_id: room.id,
-            assigned_to: taskForm.assigned_to || null
+            assigned_to: taskForm.assigned_to || null,
+            recurrence: recurrenceEnabled ? recurrenceConfig : undefined
         };
 
         if (selectedTask) {
@@ -435,12 +461,24 @@ const RoomDetail: React.FC = () => {
 
                                 return (
                                     <GeneticsList>
-                                        {entries.map(([name, count]) => (
+                                        {entries.slice(0, 5).map(([name, count]) => (
                                             <GeneticTag key={name}>
                                                 <span style={{ fontWeight: 800, marginRight: '4px' }}>{count}</span>
                                                 {name}
                                             </GeneticTag>
                                         ))}
+                                        {entries.length > 5 && (
+                                            <button
+                                                onClick={() => setIsGeneticsModalOpen(true)}
+                                                style={{
+                                                    background: 'none', border: 'none', color: '#3182ce',
+                                                    fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer',
+                                                    textDecoration: 'underline'
+                                                }}
+                                            >
+                                                Ver todas ({entries.length})
+                                            </button>
+                                        )}
                                     </GeneticsList>
                                 );
                             })()}
@@ -557,10 +595,66 @@ const RoomDetail: React.FC = () => {
 
                         const calendarDays = eachDayOfInterval({ start: startDate, end: endDate });
 
+                        // Helper to generate virtual tasks based on recurrence
+                        const generateVirtualTasks = (currentTasks: Task[], viewingDate: Date): Task[] => {
+                            const virtualTasks: Task[] = [];
+                            const monthEnd = endOfMonth(viewingDate);
+
+                            currentTasks.forEach(task => {
+                                if (!task.recurrence || !task.due_date) return;
+
+                                const rec = task.recurrence;
+                                let lastDate = new Date(task.due_date);
+                                // Ensure lastDate is valid
+                                if (isNaN(lastDate.getTime())) return;
+
+                                // Prevent infinite loops
+                                let safetyCounter = 0;
+
+                                while (lastDate < monthEnd && safetyCounter < 50) {
+                                    let nextDate: Date | null = null;
+                                    const interval = rec.interval || 1;
+
+                                    if (rec.type === 'custom' || rec.type === 'daily' || rec.type === 'weekly') {
+                                        if (rec.unit === 'day' || rec.type === 'daily') {
+                                            nextDate = addDays(lastDate, interval);
+                                        } else if (rec.unit === 'week' || rec.type === 'weekly') {
+                                            nextDate = addWeeks(lastDate, interval);
+                                        } else if (rec.unit === 'month') {
+                                            nextDate = addMonths(lastDate, interval);
+                                        }
+                                    }
+
+                                    if (nextDate && nextDate <= monthEnd) {
+                                        // Create Virtual Task
+                                        // Check if a real task already exists on this date for this crop/room to avoid dupes?
+                                        // For now, simply trust the projection.
+                                        virtualTasks.push({
+                                            ...task,
+                                            id: `virtual-${task.id}-${nextDate.getTime()}`,
+                                            due_date: format(nextDate, 'yyyy-MM-dd'),
+                                            status: 'pending',
+                                            title: `${task.title} (Proyectada)`,
+                                            // Add a custom flag handled by UI
+                                            type: task.type // Keep type for color
+                                        });
+                                        lastDate = nextDate;
+                                    } else {
+                                        break;
+                                    }
+                                    safetyCounter++;
+                                }
+                            });
+                            return virtualTasks;
+                        };
+
+                        const allVirtualTasks = generateVirtualTasks(tasks, currentDate);
+                        const allTasksForView = [...tasks, ...allVirtualTasks];
+
                         return calendarDays.map((dayItem, idx) => {
                             const isCurrentMonth = isSameMonth(dayItem, monthStart);
                             const dateStr = format(dayItem, 'yyyy-MM-dd');
-                            const dayTasks = tasks.filter(t => t.due_date && t.due_date.split('T')[0] === dateStr);
+                            const dayTasks = allTasksForView.filter(t => t.due_date && t.due_date.split('T')[0] === dateStr);
 
                             // Determine Background Gradient based on Task Distribution
                             let dayBg = 'white';
@@ -679,22 +773,37 @@ const RoomDetail: React.FC = () => {
                                     </div>
 
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '4px' }}>
-                                        {dayTasks.map(t => (
-                                            <div
-                                                key={t.id}
-                                                onClick={(e) => handleTaskClick(e, t)}
-                                                style={{
-                                                    fontSize: '0.7rem', padding: '2px 4px', borderRadius: '3px',
-                                                    background: 'rgba(255,255,255,0.6)', // Semi-transparent white to stand out on colored bg
-                                                    color: '#2d3748',
-                                                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                                                    borderLeft: `3px solid ${t.status === 'done' ? '#48bb78' : '#718096'}`, // Status indicator instead of type color (since type is bg)
-                                                    cursor: 'pointer',
-                                                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-                                                }}>
-                                                {t.title}
-                                            </div>
-                                        ))}
+                                        {dayTasks.map(t => {
+                                            const isVirtual = t.id.startsWith('virtual-');
+                                            return (
+                                                <div
+                                                    key={t.id}
+                                                    onClick={(e) => {
+                                                        if (isVirtual) {
+                                                            e.stopPropagation();
+                                                            setIsProjectionAlertOpen(true);
+                                                            return;
+                                                        }
+                                                        handleTaskClick(e, t);
+                                                    }}
+                                                    style={{
+                                                        fontSize: '0.7rem', padding: '2px 4px', borderRadius: '3px',
+                                                        background: isVirtual ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.6)',
+                                                        color: '#2d3748',
+                                                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                                                        borderLeft: `3px solid ${t.status === 'done' ? '#48bb78' : isVirtual ? '#a0aec0' : '#718096'}`,
+                                                        cursor: isVirtual ? 'default' : 'pointer',
+                                                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                                                        opacity: isVirtual ? 0.7 : 1,
+                                                        fontStyle: isVirtual ? 'italic' : 'normal',
+                                                        border: isVirtual ? '1px dashed #cbd5e0' : 'none'
+                                                    }}
+                                                    title={isVirtual ? "Proyección futura (Virtual)" : t.title}
+                                                >
+                                                    {t.title.replace(' (Proyectada)', '')}
+                                                </div>
+                                            );
+                                        })}
                                     </div>
 
                                     {phaseBar}
@@ -771,6 +880,78 @@ const RoomDetail: React.FC = () => {
                                     <label>Indicaciones / Instrucciones (Opcional)</label>
                                     <textarea value={taskForm.description} onChange={e => setTaskForm({ ...taskForm, description: e.target.value })} placeholder="Escribe aquí los detalles precisos (ej: '5ml/L de CalMag')..." />
                                 </FormGroup>
+
+                                {/* Recurrence Section */}
+                                <div style={{ marginTop: '1.5rem', borderTop: '1px solid #e2e8f0', paddingTop: '1rem' }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600, color: '#2d3748', cursor: 'pointer' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={recurrenceEnabled}
+                                            onChange={e => setRecurrenceEnabled(e.target.checked)}
+                                            style={{ transform: 'scale(1.2)' }}
+                                        />
+                                        Repetir Tarea (Periodicidad)
+                                    </label>
+
+                                    {recurrenceEnabled && (
+                                        <div style={{ marginTop: '1rem', padding: '1rem', background: '#f7fafc', borderRadius: '0.5rem', border: '1px solid #edf2f7' }}>
+                                            <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
+                                                <div style={{ flex: 1 }}>
+                                                    <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.25rem', color: '#718096' }}>Repetir cada:</label>
+                                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                        <input
+                                                            type="number"
+                                                            min="1"
+                                                            value={recurrenceConfig.interval}
+                                                            onChange={e => setRecurrenceConfig(prev => ({ ...prev, interval: parseInt(e.target.value) || 1 }))}
+                                                            style={{ width: '60px', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e0' }}
+                                                        />
+                                                        <select
+                                                            value={recurrenceConfig.unit}
+                                                            onChange={e => setRecurrenceConfig(prev => ({ ...prev, unit: e.target.value as any, type: 'custom' }))}
+                                                            style={{ flex: 1, padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e0' }}
+                                                        >
+                                                            <option value="day">Días</option>
+                                                            <option value="week">Semanas</option>
+                                                            <option value="month">Meses</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {recurrenceConfig.unit === 'week' && (
+                                                <div style={{ marginBottom: '1rem' }}>
+                                                    <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.5rem', color: '#718096' }}>Se repite el:</label>
+                                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                        {['D', 'L', 'M', 'M', 'J', 'V', 'S'].map((day, idx) => {
+                                                            const isSelected = recurrenceConfig.daysOfWeek?.includes(idx);
+                                                            return (
+                                                                <button
+                                                                    key={idx}
+                                                                    onClick={() => {
+                                                                        setRecurrenceConfig(prev => {
+                                                                            const days = prev.daysOfWeek || [];
+                                                                            if (days.includes(idx)) return { ...prev, daysOfWeek: days.filter(d => d !== idx) };
+                                                                            return { ...prev, daysOfWeek: [...days, idx] };
+                                                                        });
+                                                                    }}
+                                                                    style={{
+                                                                        width: '32px', height: '32px', borderRadius: '50%', border: 'none',
+                                                                        background: isSelected ? '#3182ce' : '#e2e8f0',
+                                                                        color: isSelected ? 'white' : '#4a5568',
+                                                                        fontWeight: 'bold', cursor: 'pointer', fontSize: '0.8rem'
+                                                                    }}
+                                                                >
+                                                                    {day}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
 
                                 <div style={{ marginBottom: '1rem' }}>
                                     <label style={{ display: 'block', fontWeight: 600, color: '#4a5568', fontSize: '0.9rem', marginBottom: '0.5rem' }}>Gestor de archivos</label>
@@ -1018,6 +1199,24 @@ const RoomDetail: React.FC = () => {
                 </ModalOverlay>
             )}
 
+            {/* Projection Alert Modal */}
+            {isProjectionAlertOpen && (
+                <ModalOverlay onClick={(e) => { if (e.target === e.currentTarget) setIsProjectionAlertOpen(false) }}>
+                    <ModalContent style={{ maxWidth: '400px', textAlign: 'center' }}>
+                        <div style={{ color: '#3182ce', fontSize: '3rem', marginBottom: '1rem' }}>
+                            <FaClock />
+                        </div>
+                        <h3 style={{ fontSize: '1.25rem', color: '#2d3748', marginBottom: '0.5rem' }}>Tarea Proyectada</h3>
+                        <p style={{ color: '#718096', marginBottom: '1.5rem', lineHeight: '1.5' }}>
+                            Esta es una proyección futura. Para activarla, primero debes completar la tarea anterior.
+                        </p>
+                        <ActionButton onClick={() => setIsProjectionAlertOpen(false)} $variant="primary">
+                            Entendido
+                        </ActionButton>
+                    </ModalContent>
+                </ModalOverlay>
+            )}
+
             {/* Delete Confirmation Modal (Tasks) */}
             {isDeleteConfirmOpen && (
                 <ModalOverlay onClick={(e) => { if (e.target === e.currentTarget) setIsDeleteConfirmOpen(false) }}>
@@ -1035,6 +1234,63 @@ const RoomDetail: React.FC = () => {
                             </CancelButton>
                             <ActionButton onClick={confirmDeleteTask} $variant="danger">
                                 Sí, Eliminar
+                            </ActionButton>
+                        </div>
+                    </ModalContent>
+                </ModalOverlay>
+            )}
+
+            {/* Genetics Modal */}
+            {isGeneticsModalOpen && room && (
+                <ModalOverlay onClick={(e) => { if (e.target === e.currentTarget) setIsGeneticsModalOpen(false) }}>
+                    <ModalContent style={{ maxWidth: '600px' }}>
+                        <h3 style={{ fontSize: '1.25rem', color: '#2d3748', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <FaDna style={{ color: '#2b6cb0' }} /> Todas las Genéticas en Sala
+                        </h3>
+
+                        <div style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+                            {(() => {
+                                const geneticCounts: Record<string, number> = {};
+                                room.batches?.forEach(b => {
+                                    const name = b.genetic?.name || b.strain || 'Desconocida';
+                                    geneticCounts[name] = (geneticCounts[name] || 0) + b.quantity;
+                                });
+                                const entries = Object.entries(geneticCounts);
+
+                                return (
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
+                                        {entries.map(([name, count]) => (
+                                            <div key={name} style={{
+                                                background: '#ebf8ff',
+                                                border: '1px solid #bee3f8',
+                                                borderRadius: '0.5rem',
+                                                padding: '1rem',
+                                                display: 'flex',
+                                                justifyContent: 'space-between',
+                                                alignItems: 'center'
+                                            }}>
+                                                <span style={{ fontWeight: 600, color: '#2b6cb0' }}>{name}</span>
+                                                <span style={{
+                                                    background: 'white',
+                                                    color: '#2b6cb0',
+                                                    fontWeight: 800,
+                                                    padding: '0.2rem 0.6rem',
+                                                    borderRadius: '999px',
+                                                    fontSize: '0.9rem',
+                                                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                                                }}>
+                                                    {count}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                );
+                            })()}
+                        </div>
+
+                        <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'flex-end' }}>
+                            <ActionButton onClick={() => setIsGeneticsModalOpen(false)} style={{ maxWidth: '150px' }}>
+                                Cerrar
                             </ActionButton>
                         </div>
                     </ModalContent>

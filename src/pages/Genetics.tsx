@@ -58,6 +58,48 @@ const ContentGrid = styled.div`
   gap: 1.5rem;
 `;
 
+const StatsGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+`;
+
+const StatCard = styled.div`
+  background: white;
+  padding: 1.5rem;
+  border-radius: 1rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  border: 1px solid #edf2f7;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+
+  h3 {
+    margin: 0;
+    font-size: 0.9rem;
+    color: #718096;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 700;
+  }
+
+  .value {
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: #2d3748;
+    line-height: 1;
+  }
+
+  .icon-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.25rem;
+    color: #805ad5;
+  }
+`;
+
 const GeneticCard = styled.div`
   background: white;
   border-radius: 1rem;
@@ -126,6 +168,7 @@ const Genetics: React.FC = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [newGenetic, setNewGenetic] = useState<Partial<Genetic>>({
         name: '',
+        nomenclatura: '',
         type: 'photoperiodic',
         vegetative_weeks: 4,
         flowering_weeks: 9,
@@ -138,9 +181,14 @@ const Genetics: React.FC = () => {
 
     const loadGenetics = async () => {
         setLoading(true);
-        const data = await geneticsService.getGenetics();
-        setGenetics(data);
-        setLoading(false);
+        try {
+            const data = await geneticsService.getGenetics();
+            setGenetics(data);
+        } catch (error) {
+            console.error("Error loading data:", error);
+        } finally {
+            setLoading(false);
+        }
     };
 
     // Delete Modal State
@@ -229,6 +277,16 @@ const Genetics: React.FC = () => {
                 </CreateButton>
             </Header>
 
+            <StatsGrid>
+                <StatCard>
+                    <div className="icon-wrapper">
+                        <FaDna size={20} />
+                        <h3>Total de Genéticas</h3>
+                    </div>
+                    <div className="value">{genetics.length}</div>
+                </StatCard>
+            </StatsGrid>
+
             <ContentGrid>
                 {genetics.map(gen => (
                     <GeneticCard key={gen.id}>
@@ -305,9 +363,20 @@ const Genetics: React.FC = () => {
                         <FormGroup>
                             <label>Nombre</label>
                             <input
+                                type="text"
                                 value={newGenetic.name}
                                 onChange={e => setNewGenetic({ ...newGenetic, name: e.target.value })}
-                                placeholder="Ej: Amnesia Haze"
+                                placeholder="Ej: Gorilla Glue #4"
+                            />
+                        </FormGroup>
+
+                        <FormGroup>
+                            <label>Nomenclatura (Código)</label>
+                            <input
+                                type="text"
+                                value={newGenetic.nomenclatura || ''}
+                                onChange={e => setNewGenetic({ ...newGenetic, nomenclatura: e.target.value })}
+                                placeholder="Ej: GG4"
                             />
                         </FormGroup>
 

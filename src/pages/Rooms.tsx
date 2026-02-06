@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
-import { FaWarehouse, FaPlus, FaThermometerHalf, FaTint, FaEdit, FaTrash } from 'react-icons/fa';
+import { FaWarehouse, FaPlus, FaThermometerHalf, FaTint, FaEdit, FaTrash, FaMapMarkedAlt } from 'react-icons/fa';
 import { roomsService } from '../services/roomsService';
 import { Room } from '../types/rooms';
 import { LoadingSpinner } from '../components/LoadingSpinner';
@@ -267,9 +267,14 @@ const Rooms: React.FC = () => {
         <Container>
             <Header>
                 <h1>Salas de Cultivo</h1>
-                <CreateButton onClick={() => setIsModalOpen(true)}>
-                    <FaPlus /> Nueva Sala
-                </CreateButton>
+                <div style={{ display: 'flex', gap: '1rem' }}>
+                    <CreateButton onClick={() => navigate('/rooms/map')} style={{ background: 'white', color: '#2b6cb0', border: '1px solid #2b6cb0' }}>
+                        <FaMapMarkedAlt /> Mapa Interactivo
+                    </CreateButton>
+                    <CreateButton onClick={() => setIsModalOpen(true)}>
+                        <FaPlus /> Nueva Sala
+                    </CreateButton>
+                </div>
             </Header>
 
             <Grid>

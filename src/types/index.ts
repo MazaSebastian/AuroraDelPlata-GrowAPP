@@ -90,6 +90,30 @@ export interface Task {
   observations?: string;
   photos?: string[];
   completed_at?: string;
+  recurrence?: RecurrenceConfig;
+}
+
+export interface CreateTaskInput {
+  title: string;
+  description?: string;
+  type: 'info' | 'warning' | 'danger' | 'fertilizar' | 'riego' | 'poda_apical' | 'hst' | 'lst' | 'entrenamiento' | 'defoliacion' | 'esquejes' | 'enmienda' | 'te_compost';
+  due_date?: string;
+  crop_id?: string;
+  room_id?: string;
+  assigned_to?: string;
+  observations?: string;
+  photos?: string[];
+  recurrence?: RecurrenceConfig;
+}
+
+export interface RecurrenceConfig {
+  type: 'daily' | 'weekly' | 'custom';
+  interval: number; // Every X units
+  unit: 'day' | 'week' | 'month';
+  daysOfWeek?: number[]; // 0=Sunday, 1=Monday...
+  endDate?: string; // ISO
+  endOccurrences?: number;
+  currentOccurrence?: number;
 }
 
 

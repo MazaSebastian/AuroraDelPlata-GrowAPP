@@ -12,6 +12,7 @@ export interface Room {
     spot_id?: string;
     created_at: string;
     start_date?: string; // Added for user-defined start date
+    operational_days?: number; // Configured duration in days
     batches?: Batch[];
 }
 

@@ -4,6 +4,7 @@ import { patientsService, Patient } from '../services/patientsService';
 
 import { ConfirmModal } from '../components/ConfirmModal';
 import { LoadingSpinner } from '../components/LoadingSpinner';
+import { ToastModal } from '../components/ToastModal';
 import { FaUserPlus, FaIdCard, FaFileUpload, FaCheckCircle, FaFileAlt } from 'react-icons/fa';
 
 // Styled Components
@@ -203,6 +204,17 @@ const Patients: React.FC = () => {
         isDanger: false
     });
 
+    // Toast State
+    const [toastOpen, setToastOpen] = useState(false);
+    const [toastMessage, setToastMessage] = useState('');
+    const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('info');
+
+    const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+        setToastMessage(message);
+        setToastType(type);
+        setToastOpen(true);
+    };
+
     // Form Data
 
 
@@ -327,11 +339,11 @@ const Patients: React.FC = () => {
             setIsAddOpen(false);
             resetForm();
             loadData();
-            alert("Socio registrado exitosamente.");
+            showToast("Socio registrado exitosamente.", 'success');
 
         } catch (error: any) {
             console.error("Error registering patient:", error);
-            alert("Error al registrar socio: " + (error.message || 'Check console'));
+            showToast("Error al registrar socio: " + (error.message || 'Check console'), 'error');
         } finally {
             setIsSubmitting(false);
         }
@@ -364,12 +376,12 @@ const Patients: React.FC = () => {
 
         try {
             await patientsService.upsertPatient(selectedPatient);
-            alert("Socio actualizado exitosamente.");
+            showToast("Socio actualizado exitosamente.", 'success');
             setIsEditOpen(false);
             loadData();
         } catch (error) {
             console.error("Error updating patient:", error);
-            alert("Error al actualizar socio.");
+            showToast("Error al actualizar socio.", 'error');
         }
     };
 
@@ -637,13 +649,13 @@ const Patients: React.FC = () => {
                                                 onConfirm: async () => {
                                                     try {
                                                         await patientsService.upsertPatient({ ...selectedPatient, reprocann_status: 'active' });
-                                                        // alert("✅ Socio aprobado correctamente."); // Optional: Toast notification instead?
+                                                        showToast("Socio aprobado correctamente.", 'success');
                                                         setConfirmModal(prev => ({ ...prev, isOpen: false }));
                                                         setIsEditOpen(false);
                                                         loadData();
                                                     } catch (error) {
                                                         console.error(error);
-                                                        alert("Error al aprobar.");
+                                                        showToast("Error al aprobar.", 'error');
                                                     }
                                                 },
                                                 isDanger: false
@@ -701,9 +713,10 @@ const Patients: React.FC = () => {
                                                         setConfirmModal(prev => ({ ...prev, isOpen: false }));
                                                         setIsEditOpen(false);
                                                         loadData();
+                                                        showToast("Socio eliminado correctamente.", 'success');
                                                     } catch (error) {
                                                         console.error(error);
-                                                        alert("Error al eliminar.");
+                                                        showToast("Error al eliminar.", 'error');
                                                     }
                                                 },
                                                 isDanger: true
@@ -733,6 +746,13 @@ const Patients: React.FC = () => {
                 confirmText="Sí, Aprobar"
                 cancelText="Cancelar"
                 isDanger={confirmModal.isDanger}
+            />
+
+            <ToastModal
+                isOpen={toastOpen}
+                message={toastMessage}
+                type={toastType}
+                onClose={() => setToastOpen(false)}
             />
         </PageContainer>
     );

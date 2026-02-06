@@ -1,18 +1,7 @@
 import { supabase } from './supabaseClient';
-import { Task } from '../types';
+import { Task, CreateTaskInput } from '../types';
 import { notificationService } from './notificationService';
-
-export interface CreateTaskInput {
-    title: string;
-    description?: string;
-    type: 'info' | 'warning' | 'danger' | 'fertilizar' | 'riego' | 'poda_apical' | 'hst' | 'lst' | 'entrenamiento' | 'defoliacion' | 'esquejes' | 'enmienda' | 'te_compost';
-    due_date?: string;
-    crop_id?: string;
-    room_id?: string;
-    assigned_to?: string;
-    observations?: string;
-    photos?: string[];
-}
+import { addDays, addWeeks, addMonths, parseISO, format } from 'date-fns';
 
 export const tasksService = {
     async getPendingTasks(): Promise<Task[]> {
@@ -48,7 +37,8 @@ export const tasksService = {
                 assigned_to: task.assigned_to,
                 status: 'pending',
                 observations: task.observations,
-                photos: task.photos
+                photos: task.photos,
+                recurrence: task.recurrence
             }])
             .select()
             .single();
@@ -56,10 +46,6 @@ export const tasksService = {
         if (error) {
             console.error('Error creating task:', error);
             return null;
-        }
-
-        if (data) {
-            // Notification logic removed as per user request (Only completion notifications active)
         }
 
         return data as Task;
@@ -80,15 +66,15 @@ export const tasksService = {
 
         // Send Notification if marked as DONE
         if (status === 'done') {
-            // Fetch task details for notification
+            // Fetch task details for notification and recurrence
             const { data: taskData } = await supabase
                 .from('chakra_tasks')
-                .select('title')
+                .select('title, recurrence, due_date, description, type, crop_id, room_id')
                 .eq('id', id)
                 .single();
 
             if (taskData) {
-                // Get Current User
+                // Determine User for Notification
                 const { data: { user } } = await supabase.auth.getUser();
                 const userName = user?.user_metadata?.name || user?.email?.split('@')[0] || 'Alguien';
 
@@ -96,6 +82,36 @@ export const tasksService = {
                     `Tarea Completada (${userName})`,
                     `✅ ${taskData.title}`
                 );
+
+                // Handle Recurrence
+                if (taskData.recurrence) {
+                    const rec = taskData.recurrence as any;
+                    let nextDate: Date | null = null;
+                    const currentDate = taskData.due_date ? parseISO(taskData.due_date) : new Date();
+
+                    if (rec.type === 'custom' || rec.type === 'daily' || rec.type === 'weekly') {
+                        const interval = rec.interval || 1;
+                        if (rec.unit === 'day' || rec.type === 'daily') {
+                            nextDate = addDays(currentDate, interval);
+                        } else if (rec.unit === 'week' || rec.type === 'weekly') {
+                            nextDate = addWeeks(currentDate, interval);
+                        } else if (rec.unit === 'month') {
+                            nextDate = addMonths(currentDate, interval);
+                        }
+                    }
+
+                    if (nextDate) {
+                        await this.createTask({
+                            title: taskData.title,
+                            description: taskData.description,
+                            type: taskData.type,
+                            due_date: format(nextDate, 'yyyy-MM-dd'),
+                            crop_id: taskData.crop_id,
+                            room_id: taskData.room_id,
+                            recurrence: rec // Pass recurrence to next task to continue chain
+                        });
+                    }
+                }
             }
         }
 
@@ -155,9 +171,8 @@ export const tasksService = {
             .from('chakra_tasks')
             .select('*')
             .eq('room_id', roomId)
-            .neq('status', 'dismissed'); // Optional: show done tasks or not? Usually for calendar we want to see everything or at least pending/done.
+            .neq('status', 'dismissed');
 
-        // For calendar, we might want to see history too. Let's return all non-dismissed.
         if (error) {
             console.error('Error fetching tasks for room:', error);
             return [];

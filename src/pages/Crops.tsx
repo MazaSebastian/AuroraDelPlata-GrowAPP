@@ -52,6 +52,7 @@ const Grid = styled.div`
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 1.5rem;
+  align-items: flex-start;
 `;
 
 const Card = styled.div`

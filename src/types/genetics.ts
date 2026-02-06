@@ -13,5 +13,6 @@ export interface Genetic {
     cbd_percent?: number;
     estimated_yield_g?: number;
     default_price_per_gram?: number;
+    nomenclatura?: string;
     created_at: string;
 }

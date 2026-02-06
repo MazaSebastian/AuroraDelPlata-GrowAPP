@@ -6,10 +6,12 @@ import Dashboard from './pages/Dashboard';
 import Crops from './pages/Crops';
 import CropDetail from './pages/CropDetail';
 import Rooms from './pages/Rooms';
+import RoomsMap from './pages/RoomsMap';
 import RoomDetail from './pages/RoomDetail';
 import Genetics from './pages/Genetics';
 import Clones from './pages/Clones';
 import Devices from './pages/Devices';
+import { ExtractionsPage as Extractions } from './pages/Extractions';
 
 import Stock from './pages/Stock';
 import Dispensary from './pages/Dispensary';
@@ -25,6 +27,8 @@ import { useAuth } from './context/AuthContext';
 import './App.css';
 
 import Sidebar from './components/Sidebar';
+
+import { ChatWidget } from './components/AI/ChatWidget';
 
 const MainContent = styled.main`
   margin-left: 260px;
@@ -61,6 +65,7 @@ function App() {
   return (
     <div className="App">
       {!isLogin && <Sidebar />}
+      {!isLogin && <ChatWidget />}
 
       <Routes>
         <Route path="/login" element={<Login />} />
@@ -95,6 +100,13 @@ function App() {
             </MainContent>
           </RequireAuth>
         } />
+        <Route path="/rooms/map" element={
+          <RequireAuth>
+            <MainContent>
+              <RoomsMap />
+            </MainContent>
+          </RequireAuth>
+        } />
         <Route path="/rooms/:id" element={
           <RequireAuth>
             <MainContent>
@@ -120,6 +132,14 @@ function App() {
           <RequireAuth>
             <MainContent>
               <Devices />
+            </MainContent>
+          </RequireAuth>
+        } />
+
+        <Route path="/extractions" element={
+          <RequireAuth>
+            <MainContent>
+              <Extractions />
             </MainContent>
           </RequireAuth>
         } />

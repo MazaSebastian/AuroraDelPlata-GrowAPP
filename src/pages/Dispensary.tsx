@@ -289,7 +289,7 @@ const Dispensary: React.FC = () => {
     };
 
     const loadDispensaryStock = async () => {
-        const batches = await dispensaryService.getBatches();
+        const batches = await dispensaryService.getShopBatches();
         setDispensaryBatches(batches);
     };
 

@@ -8,22 +8,27 @@ export interface DispensaryBatch {
     initial_weight: number;
     current_weight: number;
     quality_grade: 'Premium' | 'Standard' | 'Extracts' | 'Trim';
-    status: 'curing' | 'available' | 'depleted' | 'quarantine';
+    status: 'curing' | 'available' | 'depleted' | 'quarantine' | 'deleted';
     location: string;
     notes?: string;
     price_per_gram?: number;
     harvest_log_id?: string;
+    photo_url?: string;
     created_at: string;
 }
 
 export interface DispensaryMovement {
     id: string;
     batch_id: string;
-    type: 'dispense' | 'adjustment' | 'quality_test' | 'restock';
+    batch?: DispensaryBatch; // Joined
+    type: 'dispense' | 'adjustment' | 'quality_test' | 'restock' | 'disposal';
     amount: number;
     transaction_value?: number;
     reason?: string;
     performed_by?: string;
+    member_id?: string;
+    previous_weight?: number;
+    new_weight?: number;
     created_at: string;
 }
 
@@ -34,7 +39,7 @@ export const dispensaryService = {
         const { data, error } = await supabase
             .from('chakra_dispensary_batches')
             .select('*')
-            .neq('status', 'depleted') // Optional: Don't show depleted by default? Or maybe show them separately.
+            .neq('status', 'depleted')
             .order('created_at', { ascending: false });
 
         if (error) {
@@ -44,6 +49,29 @@ export const dispensaryService = {
         return data as DispensaryBatch[];
     },
 
+    async getMovements(limit = 100): Promise<DispensaryMovement[]> {
+        if (!supabase) return [];
+
+        const { data, error } = await supabase
+            .from('chakra_dispensary_movements')
+            .select(`
+                *,
+                batch:batch_id (
+                    batch_code,
+                    strain_name
+                )
+            `)
+            .order('created_at', { ascending: false })
+            .limit(limit);
+
+        if (error) {
+            console.error('Error fetching movements:', error);
+            return [];
+        }
+        // Map batch properties to first level if needed or just return data
+        return data as unknown as DispensaryMovement[];
+    },
+
     async createBatch(batch: Omit<DispensaryBatch, 'id' | 'created_at' | 'current_weight'>): Promise<DispensaryBatch | null> {
         if (!supabase) return null;
 
@@ -51,7 +79,7 @@ export const dispensaryService = {
             .from('chakra_dispensary_batches')
             .insert([{
                 ...batch,
-                current_weight: batch.initial_weight // Initial current weight = initial weight
+                current_weight: batch.initial_weight
             }])
             .select()
             .single();
@@ -60,68 +88,153 @@ export const dispensaryService = {
             console.error('Error creating dispensary batch:', error);
             return null;
         }
+
+        // Optional: Log Creation? Not a 'movement' per se but could be 'restock' from 0?
         return data;
     },
 
     async dispense(batchId: string, amount: number, reason: string, memberId?: string, unitPrice: number = 0): Promise<boolean> {
         if (!supabase) return false;
 
-        // 1. Get current batch to validate stock
         const { data: batch, error: fetchError } = await supabase
             .from('chakra_dispensary_batches')
             .select('current_weight')
             .eq('id', batchId)
             .single();
 
-        if (fetchError || !batch) {
-            console.error("Error fetching batch for dispense:", fetchError);
-            return false;
-        }
+        if (fetchError || !batch) return false;
 
-        if (batch.current_weight < amount) {
-            console.error("Insufficient stock");
-            return false;
-        }
+        if (batch.current_weight < amount) return false;
 
-        // 2. Decrease Stock
         const newWeight = batch.current_weight - amount;
+
+        // Update Stock
         const { error: updateError } = await supabase
             .from('chakra_dispensary_batches')
             .update({
                 current_weight: newWeight,
-                status: newWeight === 0 ? 'depleted' : undefined // Auto-deplete
+                status: newWeight === 0 ? 'depleted' : undefined
             })
             .eq('id', batchId);
 
-        if (updateError) {
-            console.error("Error updating batch stock:", updateError);
-            return false;
-        }
+        if (updateError) return false;
 
-        // 3. Log Movement
-        const transactionValue = unitPrice * amount;
-
+        // Log Movement
         const { data: { user } } = await supabase.auth.getUser();
-        const { error: logError } = await supabase
+        await supabase
             .from('chakra_dispensary_movements')
             .insert([{
                 batch_id: batchId,
                 type: 'dispense',
-                amount: -amount, // Negative for dispense
-                transaction_value: transactionValue,
+                amount: -amount,
+                transaction_value: unitPrice * amount,
                 reason: reason,
                 performed_by: user?.id,
-                member_id: memberId || null, // Record member if provided
+                member_id: memberId || null,
                 previous_weight: batch.current_weight,
                 new_weight: newWeight
             }]);
 
-        if (logError) console.error("Error logging movement (Stock updated though):", logError);
+        return true;
+    },
+
+    // REPLACED deleteBatch with Soft Delete to preserve history
+    async deleteBatchWithReason(batchId: string, reason: string): Promise<boolean> {
+        if (!supabase) return false;
+
+        // 1. Get current data for log
+        const { data: batch } = await supabase
+            .from('chakra_dispensary_batches')
+            .select('*')
+            .eq('id', batchId)
+            .single();
+
+        if (!batch) return false;
+
+        // 2. Soft Delete
+        const { error } = await supabase
+            .from('chakra_dispensary_batches')
+            .update({ status: 'depleted', current_weight: 0 })
+            .eq('id', batchId);
+
+        if (error) return false;
+
+        // 3. Log Reason
+        const { data: { user } } = await supabase.auth.getUser();
+        await supabase
+            .from('chakra_dispensary_movements')
+            .insert([{
+                batch_id: batchId,
+                type: 'adjustment', // Changed from 'disposal' to avoid Enum constraint error
+                amount: -(batch.current_weight), // Parenthesis to ensure it treats as number
+                reason: `Baja: ${reason}`,
+                performed_by: user?.id,
+                previous_weight: batch.current_weight,
+                new_weight: 0
+            }]);
 
         return true;
     },
 
-    async createFromHarvest(harvestData: { cropId: string, harvestLogId: string, strainName: string, amount: number, unit: 'g' | 'kg', originalBatchCode?: string }): Promise<DispensaryBatch | null> {
+    async updateBatchWithReason(id: string, updates: Partial<DispensaryBatch>, reason: string, movementType?: 'dispense' | 'adjustment' | 'quality_test' | 'restock' | 'disposal'): Promise<boolean> {
+        if (!supabase) return false;
+
+        // 1. Fetch current to compare weight
+        const { data: older } = await supabase
+            .from('chakra_dispensary_batches')
+            .select('current_weight')
+            .eq('id', id)
+            .single();
+
+        if (!older) return false;
+
+        // 2. Update
+        const { error } = await supabase
+            .from('chakra_dispensary_batches')
+            .update(updates)
+            .eq('id', id);
+
+        if (error) {
+            console.error('Error updating batch:', error);
+            return false;
+        }
+
+        // 3. Log Adjustment if weight changed
+        if (updates.current_weight !== undefined && updates.current_weight !== older.current_weight) {
+            const diff = updates.current_weight - older.current_weight;
+            const { data: { user } } = await supabase.auth.getUser();
+
+            await supabase
+                .from('chakra_dispensary_movements')
+                .insert([{
+                    batch_id: id,
+                    type: movementType || 'adjustment',
+                    amount: diff,
+                    reason: reason || 'Ajuste manual de inventario',
+                    performed_by: user?.id,
+                    previous_weight: older.current_weight,
+                    new_weight: updates.current_weight
+                }]);
+        }
+        // If other fields changed, maybe log update event?
+        // Typically "Movements" track stock/money. If location changed, it's not strictly a movement of stock quantity.
+        // But we could add a log type 'audit'? For now, stick to Stock Movements.
+
+        return true;
+    },
+
+    // Kept generic update for non-critical changes if needed, but UI will use withReason
+    async updateBatch(id: string, updates: Partial<DispensaryBatch>): Promise<boolean> {
+        if (!supabase) return false;
+        const { error } = await supabase.from('chakra_dispensary_batches').update(updates).eq('id', id);
+        return !error;
+    },
+
+    async deleteBatch(batchId: string): Promise<boolean> {
+        return this.deleteBatchWithReason(batchId, "Baja directa (Legacy)");
+    },
+
+    async createFromHarvest(harvestData: { cropId: string, harvestLogId: string, strainName: string, amount: number, unit: 'g' | 'kg', originalBatchCode?: string, photoUrl?: string }): Promise<DispensaryBatch | null> {
         if (!supabase) return null;
 
         let batchCode = harvestData.originalBatchCode;
@@ -146,51 +259,104 @@ export const dispensaryService = {
             quality_grade: 'Standard',
             status: 'curing',
             location: 'Depósito General',
-            harvest_log_id: harvestData.harvestLogId
+            harvest_log_id: harvestData.harvestLogId,
+            photo_url: harvestData.photoUrl
         };
 
         return await this.createBatch(newBatch);
     },
 
-    async deleteBatch(batchId: string): Promise<boolean> {
+    async getShopBatches(): Promise<DispensaryBatch[]> {
+        if (!supabase) return [];
+        const { data, error } = await supabase
+            .from('chakra_dispensary_batches')
+            .select('*')
+            .eq('status', 'available')
+            .order('created_at', { ascending: false });
+        if (error) return [];
+        return data as DispensaryBatch[];
+    },
+
+    async dispenseToShop(sourceBatchId: string, amount: number): Promise<boolean> {
         if (!supabase) return false;
 
-        // 1. Delete associated movements first (Manual Cascade)
-        const { error: movementError } = await supabase
-            .from('chakra_dispensary_movements')
-            .delete()
-            .eq('batch_id', batchId);
+        // 1. Get Source
+        const { data: source } = await supabase.from('chakra_dispensary_batches').select('*').eq('id', sourceBatchId).single();
+        if (!source || source.current_weight < amount) return false;
 
-        if (movementError) {
-            console.error('Error deleting batch movements:', movementError);
-            return false;
+        // 2. Update Source
+        const newSourceWeight = source.current_weight - amount;
+
+        // If source becomes empty, update status to depleted? Or keep it 'curing'/'storage' but empty (Red color)?
+        // User said: "cuando se dispense la totalidad se coloreara a color rojo... debe eliminarlo".
+        // Use 'depleted' or just weight 0. Weight 0 is fine.
+
+        await supabase.from('chakra_dispensary_batches').update({ current_weight: newSourceWeight }).eq('id', sourceBatchId);
+
+        // 3. Create Shop Batch
+        const { data: newBatch } = await supabase.from('chakra_dispensary_batches').insert([{
+            strain_name: source.strain_name,
+            batch_code: `${source.batch_code} - Dispensando`, // Updated naming convention
+            initial_weight: amount,
+            current_weight: amount,
+            quality_grade: source.quality_grade,
+            status: 'available',
+            location: 'Dispensario / Shop',
+            notes: `Transferido desde stock: ${source.batch_code}`,
+            harvest_log_id: source.harvest_log_id
+        }]).select().single();
+
+        // 4. Log Movements
+        const { data: { user } } = await supabase.auth.getUser();
+
+        // Out from Stock (Use 'adjustment' or 'transfer_out' if allowed, defaulting to adjustment)
+        await supabase.from('chakra_dispensary_movements').insert([{
+            batch_id: sourceBatchId,
+            type: 'adjustment',
+            amount: -amount,
+            reason: 'Envío a Dispensario',
+            performed_by: user?.id,
+            previous_weight: source.current_weight,
+            new_weight: newSourceWeight
+        }]);
+
+        // In to Shop
+        if (newBatch) {
+            await supabase.from('chakra_dispensary_movements').insert([{
+                batch_id: newBatch.id,
+                type: 'restock',
+                amount: amount,
+                reason: 'Recepción desde Stock',
+                performed_by: user?.id,
+                previous_weight: 0,
+                new_weight: amount
+            }]);
         }
 
-        // 2. Delete the batch
-        const { error } = await supabase
-            .from('chakra_dispensary_batches')
-            .delete()
-            .eq('id', batchId);
-
-        if (error) {
-            console.error('Error deleting dispensary batch:', error);
-            return false;
-        }
         return true;
     },
 
-    async updateBatch(id: string, updates: Partial<DispensaryBatch>): Promise<boolean> {
-        if (!supabase) return false;
+    // Upload Harvest Photo
+    async uploadHarvestPhoto(file: File): Promise<string | null> {
+        if (!supabase) return null;
 
-        const { error } = await supabase
-            .from('chakra_dispensary_batches')
-            .update(updates)
-            .eq('id', id);
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
+        const filePath = `harvests/${fileName}`;
 
-        if (error) {
-            console.error('Error updating dispensary batch:', error);
-            return false;
+        const { error: uploadError } = await supabase.storage
+            .from('harvest_photos')
+            .upload(filePath, file);
+
+        if (uploadError) {
+            console.error('Error uploading file:', uploadError);
+            return null;
         }
-        return true;
+
+        const { data: { publicUrl } } = supabase.storage
+            .from('harvest_photos')
+            .getPublicUrl(filePath);
+
+        return publicUrl;
     }
 };
