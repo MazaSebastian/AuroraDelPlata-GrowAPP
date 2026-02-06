@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-import { Extraction, ExtractionTechnique } from '../types/extractions';
+import { Extraction } from '../types/extractions';
 import { DispensaryBatch } from './dispensaryService';
 
 export const extractionsService = {

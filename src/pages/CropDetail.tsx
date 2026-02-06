@@ -478,7 +478,7 @@ const CropDetail: React.FC = () => {
 
   // Form State
   const [taskForm, setTaskForm] = useState({ title: '', type: 'info', description: '' });
-  const [fertilizerDetails, setFertilizerDetails] = useState('');
+  // const [fertilizerDetails, setFertilizerDetails] = useState('');
 
   // Recurrence State
   const [recurrenceEnabled, setRecurrenceEnabled] = useState(false);
@@ -1170,9 +1170,9 @@ const CropDetail: React.FC = () => {
       if (!taskForm.title) return;
       // Append fertilizer details if applicable
       let finalDescription = taskForm.description;
-      if (taskForm.type === 'fertilizante' && fertilizerDetails.trim()) {
+      /* if (taskForm.type === 'fertilizante' && fertilizerDetails.trim()) {
         finalDescription = `${finalDescription ? finalDescription + '\n\n' : ''}🧪 Fertilizante/Dosis: ${fertilizerDetails}`;
-      }
+      } */
 
       const taskData: CreateTaskInput = {
         title: taskForm.title,

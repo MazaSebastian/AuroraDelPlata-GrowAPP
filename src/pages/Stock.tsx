@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import { FaBoxes, FaPlus, FaChevronDown, FaChevronUp, FaEdit, FaTrash, FaTimes, FaHistory, FaArrowRight, FaArrowDown, FaArrowUp, FaHandHoldingMedical } from 'react-icons/fa';
+import { FaBoxes, FaPlus, FaChevronDown, FaChevronUp, FaEdit, FaTrash, FaTimes, FaHistory, FaHandHoldingMedical } from 'react-icons/fa';
 import { dispensaryService, DispensaryBatch, DispensaryMovement } from '../services/dispensaryService';
 import { geneticsService } from '../services/geneticsService';
 import { Genetic } from '../types/genetics';
