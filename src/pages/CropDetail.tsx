@@ -1523,7 +1523,7 @@ const CropDetail: React.FC = () => {
       <Header>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <BackButton onClick={() => navigate('/crops')}>
-            <FaArrowLeft /> Volver a Spots
+            <FaArrowLeft /> Volver a Cultivos
           </BackButton>
         </div>
 

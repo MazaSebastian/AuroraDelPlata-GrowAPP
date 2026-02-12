@@ -52,6 +52,7 @@ export interface Batch {
     created_at: string;
     discarded_at?: string | null;
     discard_reason?: string | null;
+    has_alert?: boolean; // New Field
 
     // Joins (optional, depending on query)
     room?: Room;

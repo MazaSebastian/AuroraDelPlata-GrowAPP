@@ -147,7 +147,7 @@ export const LivingSoilBatchModal: React.FC<LivingSoilBatchModalProps> = ({
 
     return (
         <>
-            <Overlay onClick={onClose}>
+            <Overlay>
                 <Content onClick={e => e.stopPropagation()}>
                     <Header>
                         <Title>

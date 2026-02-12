@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import styled from 'styled-components';
 import { useAuth } from '../context/AuthContext';
-import { FaArrowLeft, FaThermometerHalf, FaPlus, FaCalendarAlt, FaSeedling, FaMapMarkedAlt, FaExchangeAlt, FaExpandArrowsAlt, FaStickyNote, FaTrash, FaHistory, FaDna, FaClock, FaCheck, FaExclamationTriangle, FaPrint, FaCut, FaPen, FaEdit, FaTasks, FaTimes } from 'react-icons/fa';
+import { FaArrowLeft, FaThermometerHalf, FaPlus, FaCalendarAlt, FaSeedling, FaMapMarkedAlt, FaExchangeAlt, FaExpandArrowsAlt, FaStickyNote, FaTrash, FaHistory, FaDna, FaClock, FaCheck, FaExclamationTriangle, FaPrint, FaCut, FaPen, FaEdit, FaChevronDown, FaTasks, FaTimes } from 'react-icons/fa';
 // FaExclamationTriangle, FaTint, FaCut, FaSkull, FaLeaf, FaFlask, FaBroom
 import {
     format, startOfWeek, endOfWeek, startOfMonth, endOfMonth,
@@ -25,6 +25,7 @@ import { LoadingSpinner } from '../components/LoadingSpinner';
 import { EsquejeraGrid } from '../components/Esquejera/EsquejeraGrid';
 import { LivingSoilGrid } from '../components/LivingSoil/LivingSoilGrid';
 import { LivingSoilBatchModal } from '../components/LivingSoil/LivingSoilBatchModal';
+import { StageSelectionModal } from '../components/LivingSoil/StageSelectionModal';
 import { DndContext, DragEndEvent, useSensor, useSensors, MouseSensor, TouchSensor, pointerWithin, useDraggable, useDroppable, DragOverlay } from '@dnd-kit/core';
 import { getGeneticColor } from '../utils/geneticColors';
 import { Batch, CloneMap } from '../types/rooms';
@@ -148,6 +149,42 @@ const GlobalPrintStyles = createGlobalStyle`
     body.printing-map .printable-map-details td {
         color: black !important;
         border-color: #000 !important;
+    }
+
+    /* NEW PRINTABLE REPORT STYLES */
+    .printable-report {
+        display: none;
+    }
+}
+@media print {
+    /* Hide EVERYTHING by default */
+    body * {
+        visibility: hidden;
+    }
+    
+    /* Show only our report and its children */
+    .printable-report, .printable-report * {
+        visibility: visible;
+    }
+
+    .printable-report {
+        display: block !important;
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        z-index: 20000;
+        background: white;
+    }
+    
+    /* Reset body margin/padding for print */
+    @page { margin: 10mm; }
+    body {
+        margin: 0;
+        padding: 0;
+        overflow: visible !important; /* Allow scroll if content is long */
     }
 }
 `;
@@ -785,10 +822,40 @@ const RoomDetail: React.FC = () => {
     const [isMetricsModalOpen, setIsMetricsModalOpen] = useState(false);
     const [metricsData, setMetricsData] = useState<any[]>([]);
 
+    const handleBulkStageChange = async (newStage: any) => {
+        if (selectedBatchIds.size === 0) return;
+        setLoading(true);
+        try {
+            // Update all selected batches
+            const updatePromises = Array.from(selectedBatchIds).map(id =>
+                roomsService.updateBatchStage(id, newStage)
+            );
+            await Promise.all(updatePromises);
+
+            showToast(`Fase actualizada a ${newStage} para ${selectedBatchIds.size} lotes.`, 'success');
+
+            // Clear selection and refresh
+            setIsSelectionMode(false);
+            setSelectedBatchIds(new Set());
+            setIsStageModalOpen(false);
+
+            if (id) await loadData(id);
+
+        } catch (error) {
+            console.error(error);
+            showToast("Error al actualizar la fase.", 'error');
+        } finally {
+            setLoading(false);
+        }
+    };
+
 
 
     // Genetics Modal State
     const [isGeneticsModalOpen, setIsGeneticsModalOpen] = useState(false);
+
+    // Living Soil Stage Modal
+    const [isStageModalOpen, setIsStageModalOpen] = useState(false);
 
     // Transplant Modal (Use constants to satisfy unused implementation for now)
     const loadingMetrics = false;
@@ -1400,6 +1467,8 @@ const RoomDetail: React.FC = () => {
         setDeleteConfirm({ isOpen: true, batch });
     };
 
+    const [isBulkActionsOpen, setIsBulkActionsOpen] = useState(false); // Dropdown State
+
     // Living Soil States
     const [isSowingModalOpen, setIsSowingModalOpen] = useState(false);
     const [sowingPosition, setSowingPosition] = useState<string | null>(null);
@@ -1570,7 +1639,7 @@ const RoomDetail: React.FC = () => {
 
     const handleSaveNotes = async (batch: Batch, notes: string) => {
         try {
-            await roomsService.updateBatch(batch.id, { ...batch, notes });
+            await roomsService.updateBatch(batch.id, { notes });
             if (id) await loadData(id);
             showToast("Notas guardadas", 'success');
         } catch (error) {
@@ -1625,6 +1694,34 @@ const RoomDetail: React.FC = () => {
         } catch (error) {
             console.error("Error deleting single plant", error);
             alert("Error al eliminar la planta");
+        }
+    };
+
+    const handleToggleAlert = async () => {
+        if (!room?.batches) return;
+
+        // Find selected batches
+        const selectedBatches = room.batches.filter(b => selectedBatchIds.has(b.id));
+        if (selectedBatches.length === 0) return;
+
+        // Determine target state: if any selected batch DOES NOT have alert, turn ON for all.
+        // Otherwise (all have alert), turn OFF.
+        const anyMissingAlert = selectedBatches.some(b => !b.has_alert);
+        const targetAlertState = anyMissingAlert;
+
+        setLoading(true);
+        try {
+            await Promise.all(selectedBatches.map(b =>
+                roomsService.updateBatchAlert(b.id, targetAlertState)
+            ));
+
+            showToast(targetAlertState ? 'Alerta activada' : 'Alerta desactivada', 'success');
+            if (id) await loadData(id);
+        } catch (error) {
+            console.error("Error toggling alert:", error);
+            showToast("Error al actualizar alerta", 'error');
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -2222,8 +2319,57 @@ const RoomDetail: React.FC = () => {
     // Calendar rendering logic removed from here as it was misplaced.
 
 
+    // --- Observation Feature State ---
+    const [isObservationModalOpen, setIsObservationModalOpen] = useState(false);
+    const [observationText, setObservationText] = useState('');
 
-    // Batch Management Handlers
+    const handleRegisterObservation = async () => {
+        if (!selectedBatchIds.size) return;
+
+        try {
+            const batchIds = Array.from(selectedBatchIds);
+
+            // 1. Update in Supabase
+            const { error } = await supabase
+                .from('batches')
+                .update({
+                    notes: observationText,
+                    has_alert: true
+                })
+                .in('id', batchIds);
+
+            if (error) throw error;
+
+            // 2. Update local state
+            if (activeMapId && room?.batches) {
+                const updatedBatches = room.batches.map(b => {
+                    if (selectedBatchIds.has(b.id)) {
+                        return { ...b, notes: observationText, has_alert: true };
+                    }
+                    return b;
+                });
+
+                // We need to update the room state with the new batches
+                // Since room state is managed via setRoom which likely comes from a fetch, 
+                // we might want to refetch or manually update.
+                // Assuming setRoom is available or we can trigger a refresh.
+                // But wait, setRoom is state.
+                setRoom(prev => prev ? { ...prev, batches: updatedBatches } : null);
+            }
+
+            showToast(`Observación registrada en ${selectedBatchIds.size} lotes.`, 'success');
+            setIsObservationModalOpen(false);
+            setObservationText('');
+            setIsBulkActionsOpen(false);
+            // Optional: Clear selection? For now, keep it to see changes.
+            setSelectedBatchIds(new Set());
+
+        } catch (error) {
+            console.error('Error registering observation:', error);
+            showToast('Error al registrar observación.', 'error');
+        }
+    };
+
     // Batch Management Handlers-REMOVED
 
 
@@ -2812,25 +2958,27 @@ const RoomDetail: React.FC = () => {
 
                                                             {/* ACTIVE MAP SELECTION CONTROLS */}
                                                             <div className="no-print-map-controls" style={{ display: 'flex', gap: '0.5rem', marginLeft: '1rem' }}>
-                                                                <button
-                                                                    onClick={() => handleToggleSelectionMode()}
-                                                                    style={{
-                                                                        background: 'white',
-                                                                        border: '1px solid #e2e8f0',
-                                                                        borderRadius: '0.375rem',
-                                                                        padding: '0.5rem 1rem',
-                                                                        fontSize: '0.85rem',
-                                                                        cursor: 'pointer',
-                                                                        color: isSelectionMode ? '#e53e3e' : '#4a5568',
-                                                                        fontWeight: 600,
-                                                                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                                                                        display: 'flex', alignItems: 'center', gap: '0.5rem',
-                                                                        transition: 'all 0.2s',
-                                                                    }}
-                                                                >
-                                                                    {isSelectionMode ? <FaTimes /> : <FaCheck />}
-                                                                    {isSelectionMode ? 'Cancelar Selección' : 'Seleccionar Varios'}
-                                                                </button>
+                                                                {isSelectionMode && (
+                                                                    <button
+                                                                        onClick={() => handleToggleSelectionMode()}
+                                                                        style={{
+                                                                            background: 'white',
+                                                                            border: '1px solid #e2e8f0',
+                                                                            borderRadius: '0.375rem',
+                                                                            padding: '0.5rem 1rem',
+                                                                            fontSize: '0.85rem',
+                                                                            cursor: 'pointer',
+                                                                            color: '#e53e3e',
+                                                                            fontWeight: 600,
+                                                                            boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                                                                            display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                                                            transition: 'all 0.2s',
+                                                                        }}
+                                                                    >
+                                                                        <FaTimes />
+                                                                        Cancelar Selección
+                                                                    </button>
+                                                                )}
 
                                                                 <button
                                                                     onClick={() => {
@@ -2859,25 +3007,88 @@ const RoomDetail: React.FC = () => {
 
                                                         <div className="no-print-map-controls" style={{ display: 'flex', gap: '0.5rem', marginLeft: '1rem' }}>
                                                             {isSelectionMode && selectedBatchIds.size > 0 && (
-                                                                <button
-                                                                    onClick={handleBulkDeleteFirstStep}
-                                                                    style={{
-                                                                        background: '#e53e3e',
-                                                                        color: 'white',
-                                                                        border: 'none',
-                                                                        borderRadius: '0.375rem',
-                                                                        padding: '0.5rem 1rem',
-                                                                        fontSize: '0.85rem',
-                                                                        fontWeight: 600,
-                                                                        cursor: 'pointer',
-                                                                        boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
-                                                                        display: 'flex', alignItems: 'center', gap: '0.5rem',
-                                                                        transition: 'background 0.2s'
-                                                                    }}
-                                                                >
-                                                                    <FaTrash />
-                                                                    Eliminar ({selectedBatchIds.size})
-                                                                </button>
+                                                                <>
+                                                                    {/* BULK ACTIONS DROPDOWN */}
+                                                                    <div style={{ position: 'relative' }}>
+                                                                        <button
+                                                                            onClick={(e) => { e.stopPropagation(); setIsBulkActionsOpen(!isBulkActionsOpen); }}
+                                                                            style={{
+                                                                                background: '#3182ce',
+                                                                                color: 'white',
+                                                                                border: 'none',
+                                                                                borderRadius: '0.375rem',
+                                                                                padding: '0.5rem 1rem',
+                                                                                fontSize: '0.85rem',
+                                                                                fontWeight: 600,
+                                                                                cursor: 'pointer',
+                                                                                boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+                                                                                display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                                                                transition: 'background 0.2s'
+                                                                            }}
+                                                                        >
+                                                                            Acciones ({selectedBatchIds.size}) <FaChevronDown />
+                                                                        </button>
+
+                                                                        {isBulkActionsOpen && (
+                                                                            <div style={{
+                                                                                position: 'absolute',
+                                                                                top: '110%',
+                                                                                right: 0,
+                                                                                background: 'white',
+                                                                                border: '1px solid #e2e8f0',
+                                                                                borderRadius: '0.5rem',
+                                                                                boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06)',
+                                                                                zIndex: 50,
+                                                                                minWidth: '200px',
+                                                                                overflow: 'hidden'
+                                                                            }}>
+                                                                                <div style={{ padding: '0.5rem 0.75rem', fontSize: '0.75rem', color: '#718096', borderBottom: '1px solid #edf2f7', background: '#f7fafc', fontWeight: 600 }}>
+                                                                                    SELECCIÓN: {selectedBatchIds.size} LOTES
+                                                                                </div>
+
+                                                                                {room?.type === 'living_soil' && (
+                                                                                    <>
+                                                                                        <button
+                                                                                            onClick={() => { setIsBulkActionsOpen(false); setIsStageModalOpen(true); }}
+                                                                                            style={{ width: '100%', textAlign: 'left', padding: '0.75rem 1rem', background: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#2d3748', fontSize: '0.9rem', transition: 'background 0.1s' }}
+                                                                                            onMouseEnter={e => e.currentTarget.style.background = '#ebf8ff'}
+                                                                                            onMouseLeave={e => e.currentTarget.style.background = 'white'}
+                                                                                        >
+                                                                                            <FaExchangeAlt color="#3182ce" /> Cambiar Fase
+                                                                                        </button>
+                                                                                        <button
+                                                                                            onClick={() => { setIsBulkActionsOpen(false); setIsObservationModalOpen(true); }}
+                                                                                            style={{ width: '100%', textAlign: 'left', padding: '0.75rem 1rem', background: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#2d3748', fontSize: '0.9rem', transition: 'background 0.1s' }}
+                                                                                            onMouseEnter={e => e.currentTarget.style.background = '#fffaf0'}
+                                                                                            onMouseLeave={e => e.currentTarget.style.background = 'white'}
+                                                                                        >
+                                                                                            <FaExclamationTriangle color="#d69e2e" /> Registrar Observación
+                                                                                        </button>
+                                                                                    </>
+                                                                                )}
+
+                                                                                <div style={{ borderTop: '1px solid #edf2f7', margin: '0.25rem 0' }}></div>
+
+                                                                                <button
+                                                                                    onClick={() => { setIsBulkActionsOpen(false); handleBulkDeleteFirstStep(); }}
+                                                                                    style={{ width: '100%', textAlign: 'left', padding: '0.75rem 1rem', background: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#e53e3e', fontSize: '0.9rem', transition: 'background 0.1s' }}
+                                                                                    onMouseEnter={e => e.currentTarget.style.background = '#fff5f5'}
+                                                                                    onMouseLeave={e => e.currentTarget.style.background = 'white'}
+                                                                                >
+                                                                                    <FaTrash color="#e53e3e" /> Eliminar Selección
+                                                                                </button>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+
+                                                                    {/* Overlay to close menu on click outside */}
+                                                                    {isBulkActionsOpen && (
+                                                                        <div
+                                                                            style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 40 }}
+                                                                            onClick={() => setIsBulkActionsOpen(false)}
+                                                                        />
+                                                                    )}
+                                                                </>
                                                             )}
                                                             <button
                                                                 onClick={() => setActiveMapId(null)}
@@ -2901,12 +3112,14 @@ const RoomDetail: React.FC = () => {
                                                                         return {
                                                                             rows: activeMap?.grid_rows || 20,
                                                                             cols: activeMap?.grid_columns || 10,
-                                                                            batches: (room?.batches || []).filter(b => b.clone_map_id === activeMapId && b.quantity > 0)
+                                                                            batches: (room?.batches || []).filter(b => b.clone_map_id === activeMapId && b.quantity > 0),
+                                                                            mapId: activeMapId || undefined // Pass mapId for zoom persistence
                                                                         }
                                                                     })()}
                                                                     onBatchClick={handleBatchClick}
                                                                     selectedBatchIds={selectedBatchIds}
                                                                     isSelectionMode={isSelectionMode}
+                                                                    onToggleSelectionMode={setIsSelectionMode}
                                                                     onSelectionChange={(newSet) => setSelectedBatchIds(newSet)}
                                                                 />
                                                             ) : (
@@ -2917,6 +3130,7 @@ const RoomDetail: React.FC = () => {
                                                                     onBatchClick={(b) => { if (b) isSelectionMode ? handleBatchSelection(b) : handleBatchClick(b); }}
                                                                     selectionMode={isSelectionMode}
                                                                     selectedBatchIds={selectedBatchIds}
+                                                                    onSelectionChange={(newSet) => setSelectedBatchIds(newSet)}
                                                                 />
                                                             )}
                                                         </div>
@@ -4821,6 +5035,47 @@ const RoomDetail: React.FC = () => {
                     />
                 )
             }
+            {/* OBSEVATION MODAL */}
+            {isObservationModalOpen && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ background: 'white', padding: '1.5rem', borderRadius: '0.5rem', width: '90%', maxWidth: '400px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}>
+                        <h3 style={{ marginTop: 0, color: '#2d3748', marginBottom: '0.5rem' }}>Registrar Observación</h3>
+                        <p style={{ color: '#718096', fontSize: '0.9rem', marginBottom: '1rem' }}>
+                            Esto agregará una nota y una alerta a los {selectedBatchIds.size} lotes seleccionados.
+                        </p>
+                        <textarea
+                            value={observationText}
+                            onChange={(e) => setObservationText(e.target.value)}
+                            placeholder="Escribe tu observación aquí..."
+                            style={{
+                                width: '100%',
+                                minHeight: '100px',
+                                padding: '0.75rem',
+                                borderRadius: '0.375rem',
+                                border: '1px solid #e2e8f0',
+                                marginBottom: '1rem',
+                                fontFamily: 'inherit',
+                                resize: 'vertical'
+                            }}
+                            autoFocus
+                        />
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                            <button
+                                onClick={() => setIsObservationModalOpen(false)}
+                                style={{ padding: '0.5rem 1rem', background: 'white', border: '1px solid #cbd5e0', borderRadius: '0.375rem', cursor: 'pointer', color: '#4a5568' }}
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleRegisterObservation}
+                                style={{ padding: '0.5rem 1rem', background: '#d69e2e', border: 'none', borderRadius: '0.375rem', cursor: 'pointer', color: 'white', fontWeight: 600 }}
+                            >
+                                Guardar Observación
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
             <ToastModal
                 isOpen={toastState.isOpen}
                 message={toastState.message}
@@ -4890,7 +5145,106 @@ const RoomDetail: React.FC = () => {
                     </div>
                 )
             }
-        </Container >
+            {/* Stage Selection Modal */}
+            <StageSelectionModal
+                isOpen={isStageModalOpen}
+                onClose={() => setIsStageModalOpen(false)}
+                onConfirm={handleBulkStageChange}
+                currentStage={undefined}
+                count={selectedBatchIds.size}
+            />
+            {/* PRINTABLE REPORT SECTION (VISIBLE ONLY ON PRINT) */}
+            <div className="printable-report">
+                <style>
+                    {`
+                    @media print {
+                        .printable-report table { page-break-inside: auto; }
+                        .printable-report tr { page-break-inside: avoid; page-break-after: auto; }
+                        .printable-report thead { display: table-header-group; }
+                        .printable-report tfoot { display: table-footer-group; }
+                    }
+                `}
+                </style>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '2px solid #000', paddingBottom: '0.5rem' }}>
+                    <h2 style={{ margin: 0 }}>Reporte: {room?.name}</h2>
+                    <div><strong>Fecha:</strong> {new Date().toLocaleDateString()}</div>
+                </div>
+
+                {/* COMPRESSED MAP (Only for Living Soil) */}
+                {room?.type === 'living_soil' && (
+                    <div style={{ border: '1px solid #000', padding: '10px', marginBottom: '2rem', pageBreakInside: 'avoid' }}>
+                        <h3 style={{ marginTop: 0, fontSize: '1rem', marginBottom: '0.5rem' }}>Mapa de Distribución (Vista Compacta)</h3>
+                        {/* We scale it down to ensure it fits, centered */}
+                        <div style={{ display: 'flex', justifyContent: 'center' }}>
+                            <div style={{ transform: 'scale(0.7)', transformOrigin: 'top center', marginBottom: '-25%' }}>
+                                <LivingSoilGrid
+                                    {...(() => {
+                                        const activeMap = cloneMaps.find(m => m.id === activeMapId) || cloneMaps[0];
+                                        return {
+                                            rows: activeMap?.grid_rows || 20,
+                                            cols: activeMap?.grid_columns || 10,
+                                            batches: (room?.batches || []).filter(b => b.clone_map_id === activeMap?.id && b.quantity > 0),
+                                            mapId: undefined // Force default zoom since we don't want persistent zoom here
+                                        }
+                                    })()}
+                                    onBatchClick={() => { }} // No interaction on print
+                                    selectedBatchIds={new Set()} // No selection on print
+                                    isSelectionMode={false}
+                                />
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* DATA GRID */}
+                <div>
+                    <h3 style={{ fontSize: '1rem', borderBottom: '1px solid #000', paddingBottom: '0.25rem', marginTop: 0 }}>Detalle de Lotes Activos</h3>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9pt' }}>
+                        <thead>
+                            <tr style={{ background: '#f0f0f0', borderBottom: '1px solid #000' }}>
+                                <th style={{ padding: '4px', textAlign: 'left', border: '1px solid #ccc' }}>Pos</th>
+                                <th style={{ padding: '4px', textAlign: 'left', border: '1px solid #ccc' }}>Genética / Lote</th>
+                                <th style={{ padding: '4px', textAlign: 'center', border: '1px solid #ccc' }}>Cant.</th>
+                                <th style={{ padding: '4px', textAlign: 'center', border: '1px solid #ccc' }}>Fase</th>
+                                <th style={{ padding: '4px', textAlign: 'center', border: '1px solid #ccc' }}>Estado</th>
+                                <th style={{ padding: '4px', textAlign: 'left', border: '1px solid #ccc' }}>Notas / Observaciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {(room?.batches || [])
+                                .filter(b => b.quantity > 0 && (!activeMapId || b.clone_map_id === activeMapId))
+                                .sort((a, b) => {
+                                    const posA = a.grid_position || "";
+                                    const posB = b.grid_position || "";
+                                    return posA.localeCompare(posB, undefined, { numeric: true, sensitivity: 'base' });
+                                })
+                                .map((b, idx) => (
+                                    <tr key={b.id} style={{ borderBottom: '1px solid #eee', background: idx % 2 === 0 ? 'white' : '#f9f9f9' }}>
+                                        <td style={{ padding: '4px', border: '1px solid #ccc', fontWeight: 'bold' }}>{b.grid_position}</td>
+                                        <td style={{ padding: '4px', border: '1px solid #ccc' }}>
+                                            <div style={{ fontWeight: '600' }}>{b.genetic?.name || b.name}</div>
+                                            {b.tracking_code && <div style={{ fontSize: '0.85em', color: '#666' }}>{b.tracking_code}</div>}
+                                        </td>
+                                        <td style={{ padding: '4px', textAlign: 'center', border: '1px solid #ccc' }}>
+                                            {b.quantity}
+                                        </td>
+                                        <td style={{ padding: '4px', textAlign: 'center', border: '1px solid #ccc' }}>
+                                            {b.stage === 'vegetation' ? 'VEG' : 'FLOR'}
+                                        </td>
+                                        <td style={{ padding: '4px', textAlign: 'center', border: '1px solid #ccc' }}>
+                                            {b.has_alert ? '⚠️' : 'OK'}
+                                        </td>
+                                        <td style={{ padding: '4px', border: '1px solid #ccc', maxWidth: '300px', wordWrap: 'break-word' }}>
+                                            {b.notes || ''}
+                                        </td>
+                                    </tr>
+                                ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </Container>
     );
 };
 

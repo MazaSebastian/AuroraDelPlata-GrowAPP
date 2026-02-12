@@ -386,6 +386,19 @@ export const roomsService = {
         }
     },
 
+    async updateBatchAlert(batchId: string, hasAlert: boolean): Promise<boolean> {
+        const { error } = await getClient()
+            .from('batches')
+            .update({ has_alert: hasAlert })
+            .eq('id', batchId);
+
+        if (error) {
+            console.error('Error updating batch alert:', error);
+            return false;
+        }
+        return true;
+    },
+
     async updateBatchStage(batchId: string, newStage: BatchStage): Promise<boolean> {
         const { error } = await getClient()
             .from('batches')
@@ -452,43 +465,50 @@ export const roomsService = {
     async deleteBatches(batchIds: string[], reason?: string): Promise<boolean> {
         if (batchIds.length === 0) return true;
 
-        // 1. Mark as discarded
-        const { error } = await getClient()
-            .from('batches')
-            .update({
-                discarded_at: new Date().toISOString(),
-                // discard_reason: reason || 'Eliminación Masiva', // Removing to avoid potential 400 error
-                current_room_id: null,
-                clone_map_id: null,
-                grid_position: null
-            })
-            .in('id', batchIds);
+        const CHUNK_SIZE = 50;
+        let hasError = false;
 
-        if (error) {
-            console.error('Error soft deleting batches (bulk):', error);
-            console.error('Error details:', error.message, error.details, error.hint, error.code);
+        // 1. Mark as discarded in Chunks
+        for (let i = 0; i < batchIds.length; i += CHUNK_SIZE) {
+            const chunk = batchIds.slice(i, i + CHUNK_SIZE);
 
-            // Fallback: Try deleting one by one
-            console.log("Attempting sequential delete fallback...");
-            let allSuccess = true;
-            for (const id of batchIds) {
-                const subSuccess = await this.deleteBatch(id, reason);
-                if (!subSuccess) allSuccess = false;
+            const { error } = await getClient()
+                .from('batches')
+                .update({
+                    discarded_at: new Date().toISOString(),
+                    // discard_reason: reason || 'Eliminación Masiva', // Removing to avoid potential 400 error
+                    current_room_id: null,
+                    clone_map_id: null,
+                    grid_position: null
+                })
+                .in('id', chunk);
+
+            if (error) {
+                console.error(`Error soft deleting batches chunk ${i} - ${i + CHUNK_SIZE}:`, error);
+                hasError = true;
             }
-            return allSuccess;
         }
 
-        // 2. Log (Simplified for bulk)
-        const logs = batchIds.map(id => ({
+        if (hasError) {
+            console.warn("Some chunks failed during bulk delete. Attempting fallback on remaining/failed items is complex. Returning false to indicate partial failure.");
+            return false;
+        }
+
+        // 2. Log Movements (Chunked)
+        const allLogs = batchIds.map(id => ({
             batch_id: id,
             from_room_id: null,
             to_room_id: null,
             notes: `Eliminado/Baja Masiva: ${reason || 'Manual'}`
         }));
 
-        const { error: logError } = await getClient().from('batch_movements').insert(logs);
-        if (logError) {
-            console.error('Error logging batch movements:', logError);
+        const LOG_CHUNK_SIZE = 100;
+        for (let i = 0; i < allLogs.length; i += LOG_CHUNK_SIZE) {
+            const logChunk = allLogs.slice(i, i + LOG_CHUNK_SIZE);
+            const { error: logError } = await getClient().from('batch_movements').insert(logChunk);
+            if (logError) {
+                console.error('Error logging batch movements chunk:', logError);
+            }
         }
 
         return true;
