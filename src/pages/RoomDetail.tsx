@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import styled from 'styled-components';
 import { useAuth } from '../context/AuthContext';
-import { FaArrowLeft, FaLeaf, FaTemperatureHigh, FaThermometerHalf, FaTint, FaRulerCombined, FaVectorSquare, FaPlus, FaCalendarAlt, FaSeedling, FaEraser, FaMapMarkedAlt, FaSave, FaExchangeAlt, FaExpandArrowsAlt, FaStickyNote, FaTrash, FaHistory, FaDna, FaClock, FaCheck, FaExclamationTriangle, FaLayerGroup, FaPrint, FaCut, FaPen, FaEdit, FaTasks, FaTimes } from 'react-icons/fa';
+import { FaArrowLeft, FaThermometerHalf, FaPlus, FaCalendarAlt, FaSeedling, FaMapMarkedAlt, FaExchangeAlt, FaExpandArrowsAlt, FaStickyNote, FaTrash, FaHistory, FaDna, FaClock, FaCheck, FaExclamationTriangle, FaPrint, FaCut, FaPen, FaEdit, FaTasks, FaTimes } from 'react-icons/fa';
 // FaExclamationTriangle, FaTint, FaCut, FaSkull, FaLeaf, FaFlask, FaBroom
 import {
     format, startOfWeek, endOfWeek, startOfMonth, endOfMonth,
@@ -17,18 +17,19 @@ import { tasksService } from '../services/tasksService';
 import { stickiesService } from '../services/stickiesService';
 import { Room } from '../types/rooms';
 import { Task, StickyNote, RecurrenceConfig } from '../types';
-import { LoadingSpinner } from '../components/LoadingSpinner';
+
 
 import { GroupDetailModal } from '../components/GroupDetailModal';
-import { TuyaManager } from '../components/TuyaManager';
+import { LoadingSpinner } from '../components/LoadingSpinner';
+
 import { EsquejeraGrid } from '../components/Esquejera/EsquejeraGrid';
-import { DndContext, DragEndEvent, useSensor, useSensors, MouseSensor, TouchSensor, pointerWithin, closestCenter, useDraggable, useDroppable, DragOverlay } from '@dnd-kit/core';
+import { DndContext, DragEndEvent, useSensor, useSensors, MouseSensor, TouchSensor, pointerWithin, useDraggable, useDroppable, DragOverlay } from '@dnd-kit/core';
 import { getGeneticColor } from '../utils/geneticColors';
 import { Batch, CloneMap } from '../types/rooms';
 import { Genetic } from '../types/genetics';
-import { geneticsService } from '../services/geneticsService';
+
 import { ConfirmationModal } from '../components/ConfirmationModal';
-import { PrintableMapReport } from '../components/Esquejera/PrintableMapReport';
+
 import { TransplantModal } from '../components/Esquejera/TransplantModal';
 import { HarvestModal } from '../components/Flowering/HarvestModal';
 import { ToastModal } from '../components/ToastModal';
@@ -228,26 +229,8 @@ const ModalContent = styled.div`
 
 
 
-const TrashDropZone = () => {
-    const { setNodeRef, isOver } = useDroppable({ id: 'trash-zone' });
-    return (
-        <div ref={setNodeRef} style={{
-            position: 'fixed', bottom: '30px', right: '30px',
-            width: '60px', height: '60px',
-            borderRadius: '50%',
-            background: isOver ? '#fed7d7' : 'white',
-            color: isOver ? '#c53030' : '#a0aec0',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-            border: isOver ? '2px solid #c53030' : '1px solid #e2e8f0',
-            zIndex: 9999,
-            transition: 'all 0.2s',
-            cursor: 'pointer'
-        }}>
-            <FaTrash size={24} />
-        </div>
-    );
-};
+
+
 
 const CreateMapDropZone = ({ children }: { children: React.ReactNode }) => {
     const { setNodeRef, isOver } = useDroppable({ id: 'create-map-zone' });
@@ -350,57 +333,38 @@ const ActionButton = styled.button<{ $variant?: 'primary' | 'danger' | 'success'
   }
 `;
 
-const MapActionButton = styled.button<{ $variant: 'warning' | 'danger' | 'primary' }>`
-  background: ${p => p.$variant === 'warning' ? '#ecc94b' : p.$variant === 'danger' ? '#fc8181' : '#4299e1'};
-  color: ${p => p.$variant === 'warning' ? '#744210' : '#fff'};
-  border: none;
-  border-radius: 0.375rem;
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s;
-  font-size: 0.8rem;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
 
-  &:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(0,0,0,0.15);
-    background: ${p => p.$variant === 'warning' ? '#d69e2e' : p.$variant === 'danger' ? '#e53e3e' : '#3182ce'};
-  }
-`;
+
 
 const FormGroup = styled.div`
-  margin-bottom: 1.5rem;
-  label { 
-    display: block; 
-    margin-bottom: 0.5rem; 
-    font-weight: 600; 
-    color: #4a5568; 
-    font-size: 0.9rem; 
-  }
-  input, select, textarea { 
-    width: 100%; 
-    padding: 0.75rem; 
-    border: 1px solid #e2e8f0; 
-    border-radius: 0.5rem; 
+margin-bottom: 1.5rem;
+  label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    color: #4a5568;
+    font-size: 0.9rem;
+}
+input, select, textarea {
+    width: 100 %;
+    padding: 0.75rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.5rem;
     font-size: 0.95rem;
     color: #2d3748;
     background: #fff;
     transition: all 0.2s;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 
     &:focus {
-      outline: none;
-      border-color: #3182ce;
-      box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.1);
+        outline: none;
+        border-color: #3182ce;
+        box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.1);
     }
     &::placeholder {
-      color: #a0aec0;
+        color: #a0aec0;
     }
-  }
+}
   textarea { min-height: 100px; resize: vertical; font-family: inherit; }
 `;
 
@@ -428,7 +392,7 @@ transition: transform 0.2s, box-shadow 0.2s;
 
   &:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 6px-1px rgba(0, 0, 0, 0.1);
 }
   
   h3 {
@@ -455,25 +419,12 @@ transition: transform 0.2s, box-shadow 0.2s;
 }
 `;
 
-const GeneticsList = styled.div`
-display: flex;
-flex - wrap: wrap;
-gap: 0.5rem;
-margin - top: 0.5rem;
-`;
 
-const GeneticTag = styled.span`
-background: #ebf8ff;
-color: #2b6cb0;
-font - size: 0.75rem;
-padding: 0.25rem 0.5rem;
-border - radius: 0.25rem;
-font - weight: 600;
-`;
+
 
 const DraggableStockBatch = ({ batch, onClick }: { batch: Batch, onClick?: () => void }) => {
     const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-        id: `stock - ${batch.id} `,
+        id: `stock-${batch.id} `,
         data: { type: 'batch', batch, fromStock: true }
     });
 
@@ -514,7 +465,7 @@ const DraggableStockBatch = ({ batch, onClick }: { batch: Batch, onClick?: () =>
 
 const DraggableGenetic = ({ genetic }: { genetic: Genetic }) => {
     const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-        id: `genetic - ${genetic.id} `,
+        id: `genetic-${genetic.id} `,
         data: { type: 'genetic', genetic, fromSidebar: true }
     });
 
@@ -670,7 +621,7 @@ const groupBatchesByGeneticDate = (batches: Batch[]) => {
 
 const SidebarBatchGroup = ({ group, expanded, onToggleExpand, childrenRender, onBatchGroupClick, renderHeaderActions }: { group: any, expanded: boolean, onToggleExpand: () => void, childrenRender: (batch: any) => React.ReactNode, onBatchGroupClick?: (batch: any) => void, renderHeaderActions?: (batch: any) => React.ReactNode }) => {
     const { root, children } = group;
-    const hasChildren = children.length > 0;
+
 
     const totalQty = root.quantity + children.reduce((acc: number, c: any) => acc + c.quantity, 0);
     const displayDate = new Date(root.start_date || root.created_at).toLocaleDateString();
@@ -685,7 +636,7 @@ const SidebarBatchGroup = ({ group, expanded, onToggleExpand, childrenRender, on
         if (true) { // Default Smart Naming
             const geneticName = root.genetic?.name || root.name || 'Desconocida';
             const prefix = geneticName.substring(0, 6).toUpperCase();
-            displayName = `Lote ${prefix} - ${displayDate}`;
+            displayName = `Lote ${prefix}-${displayDate}`;
         }
     }
 
@@ -833,22 +784,33 @@ const RoomDetail: React.FC = () => {
     const [metricsData, setMetricsData] = useState<any[]>([]);
     const [loadingMetrics, setLoadingMetrics] = useState(false);
 
-    const handleOpenMetrics = async () => {
-        if (!id) return;
-        setLoadingMetrics(true);
-        setIsMetricsModalOpen(true);
-        try {
-            const data = await roomsService.getCloneSuccessMetrics(id);
-            setMetricsData(data);
-        } catch (error) {
-            console.error("Error loading metrics", error);
-        } finally {
-            setLoadingMetrics(false);
-        }
-    };
 
     // Genetics Modal State
     const [isGeneticsModalOpen, setIsGeneticsModalOpen] = useState(false);
+
+    // Transplant Modal
+    const [transplantRoom, setTransplantRoom] = useState<Room | null>(null);
+
+    // Plant Detail Modal
+
+    // Move/Delete/Assign confirmations
+
+    // History
+
+    // Harvest Modal
+
+
+
+
+
+
+
+
+
+
+    // Batch Selection State
+    const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
+
 
     // Create Batch Modal State
     const [isCreateBatchModalOpen, setIsCreateBatchModalOpen] = useState(false);
@@ -896,7 +858,7 @@ const RoomDetail: React.FC = () => {
     const [isStickyModalOpen, setIsStickyModalOpen] = useState(false);
     const [stickyContent, setStickyContent] = useState('');
     const [stickyColor, setStickyColor] = useState<StickyNote['color']>('yellow');
-    const [selectedSticky, /** setSelectedSticky unused */] = useState<StickyNote | null>(null);
+    const [selectedSticky, setSelectedSticky] = useState<StickyNote | null>(null);
 
 
     // Interactive Calendar State
@@ -1013,9 +975,9 @@ const RoomDetail: React.FC = () => {
         batch: null
     });
 
-    // Click-to-Fill State (Legacy - keeping for potentially manual, or removing if fully replaced)
+    // Click-to-Fill State (Legacy-keeping for potentially manual, or removing if fully replaced)
     // We will replace handleBatchClick to open modal instead.
-    const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
+
 
     // Relocation State
     const [movingBatch, setMovingBatch] = useState<Batch | null>(null);
@@ -1067,7 +1029,7 @@ const RoomDetail: React.FC = () => {
 
     // Transplant Modal State
     const [isTransplantModalOpen, setIsTransplantModalOpen] = useState(false);
-    const [transplantRoom, setTransplantRoom] = useState<Room | null>(null);
+
     const [isSingleDistributeConfirmOpen, setIsSingleDistributeConfirmOpen] = useState(false);
     const [singleDistributionData, setSingleDistributionData] = useState<{ batchId: string, position: string, quantity: number, mapId: string } | null>(null);
 
@@ -1253,13 +1215,8 @@ const RoomDetail: React.FC = () => {
         }
     };
 
-    const handleOpenEditMap = (map: CloneMap) => {
-        setEditingMapId(map.id);
-        setEditMapName(map.name);
-        setEditMapRows(map.grid_rows);
-        setEditMapCols(map.grid_columns);
-        setIsEditMapModalOpen(true);
-    };
+
+
 
     const handleCreateMap = async () => {
         if (!newMapName || !newMapRows || !newMapCols) {
@@ -1334,12 +1291,13 @@ const RoomDetail: React.FC = () => {
         try {
             const { usersService } = await import('../services/usersService');
 
-            const [roomData, tasksData, usersData, stickiesData, mapsData] = await Promise.all([
+            const [roomData, tasksData, usersData, stickiesData, mapsData, metricsResult] = await Promise.all([
                 roomsService.getRoomById(roomId),
                 tasksService.getTasksByRoomId(roomId),
                 usersService.getUsers(),
                 stickiesService.getStickies(roomId),
-                roomsService.getCloneMaps(roomId)
+                roomsService.getCloneMaps(roomId),
+                roomsService.getCloneSuccessMetrics(roomId)
             ]);
 
             setRoom(roomData);
@@ -1347,6 +1305,7 @@ const RoomDetail: React.FC = () => {
             setUsers(usersData);
             setStickies(stickiesData);
             setCloneMaps(mapsData);
+            setMetricsData(metricsResult);
 
             // Load Genetics only if needed (Esquejera/Germinacion)
             if (['clones', 'esquejes', 'esquejera', 'germinacion', 'germinación', 'germination', 'semillero'].includes((roomData?.type as string)?.toLowerCase())) {
@@ -1378,7 +1337,8 @@ const RoomDetail: React.FC = () => {
         }
     };
 
-    const handleDeleteMap = (mapId: string) => {
+
+    const handleOpenDeleteMap = (mapId: string) => {
         setMapIdToDelete(mapId);
         setIsDeleteMapModalOpen(true);
     };
@@ -1437,7 +1397,10 @@ const RoomDetail: React.FC = () => {
         }
 
         // 2. Normal Interactions
+        // 2. Normal Interactions
         if (!batch) return;
+
+        setSelectedBatchId(batch.id === selectedBatchId ? null : batch.id);
 
         // Case A: Clicked STOCK batch -> Open Detail Modal (Unified behavior)
         if (!batch.clone_map_id) {
@@ -1508,7 +1471,8 @@ const RoomDetail: React.FC = () => {
         }
     };
 
-    const handleGroupClick = (groupName: string) => {
+
+    const handleOpenGroupDetail = (groupName: string) => {
         setSelectedGroupName(groupName);
         setIsGroupDetailModalOpen(true);
     };
@@ -1719,8 +1683,7 @@ const RoomDetail: React.FC = () => {
         // If we are dropping on create-map-zone, we don't need an active map
         if (over.id !== 'create-map-zone' && !activeMapId) return;
 
-        const batch = active.data.current?.batch as Batch;
-        const fromStock = active.data.current?.fromStock;
+
         const targetId = over.id as string;
 
         if (targetId.startsWith('cell-')) {
@@ -1770,13 +1733,13 @@ const RoomDetail: React.FC = () => {
                 const totalPlants = allBatches.reduce((a, b) => a + b.quantity, 0);
 
                 // Calculate available slots from start position
-                console.log("Distribution Debug - Target ID:", targetId);
-                console.log("Distribution Debug - Resolved Position:", position);
+                console.log("Distribution Debug-Target ID:", targetId);
+                console.log("Distribution Debug-Resolved Position:", position);
 
                 const startRow = position.charAt(0).charCodeAt(0) - 64;
                 const startCol = parseInt(position.slice(1), 10);
 
-                console.log("Distribution Debug - StartRow:", startRow, "StartCol:", startCol);
+                console.log("Distribution Debug-StartRow:", startRow, "StartCol:", startCol);
 
                 const existingBatchesInMap = room?.batches?.filter(b => b.clone_map_id === activeMapId && b.quantity > 0) || [];
                 const occupiedSet = new Set(existingBatchesInMap.map(b => b.grid_position));
@@ -1907,7 +1870,7 @@ const RoomDetail: React.FC = () => {
 
             try {
                 // Explicit reason for metrics
-                await roomsService.deleteBatch(batch.id, 'Baja - Eliminado del Mapa');
+                await roomsService.deleteBatch(batch.id, 'Baja-Eliminado del Mapa');
                 if (id) await loadData(id);
             } catch (err) {
                 console.error(err);
@@ -1961,7 +1924,7 @@ const RoomDetail: React.FC = () => {
             const rows = Math.ceil(total / cols);
 
             // 2. Create Map
-            const newMapName = `${pendingMapBatch.name} - ${format(new Date(), 'dd/MM HH:mm')} `;
+            const newMapName = `${pendingMapBatch.name}-${format(new Date(), 'dd/MM HH:mm')} `;
 
             const { data: newMap, error: mapError } = await supabase
                 .from('clone_maps')
@@ -2030,7 +1993,7 @@ const RoomDetail: React.FC = () => {
                 const geneticName = root.genetic?.name || root.name || 'Desconocida';
                 const prefix = geneticName.substring(0, 6).toUpperCase();
                 const displayDate = new Date(root.start_date || root.created_at).toLocaleDateString();
-                newMapName = `Lote ${prefix} - ${displayDate}`;
+                newMapName = `Lote ${prefix}-${displayDate}`;
             }
 
             const { data: newMap, error: mapError } = await supabase
@@ -2078,7 +2041,7 @@ const RoomDetail: React.FC = () => {
     const handleSaveSticky = async () => {
         if (!id) return;
 
-        // No specific date - general room note
+        // No specific date-general room note
         const targetDate = undefined;
 
         if (selectedSticky) {
@@ -2117,7 +2080,7 @@ const RoomDetail: React.FC = () => {
 
 
     // Batch Management Handlers
-    // Batch Management Handlers - REMOVED
+    // Batch Management Handlers-REMOVED
 
 
     // Calendar Handlers (Interactive)
@@ -2379,7 +2342,7 @@ const RoomDetail: React.FC = () => {
                         </div>
                     </StatCard>
 
-                    {/* Date - CHANGED to Start Date */}
+                    {/* Date-CHANGED to Start Date */}
                     <StatCard>
                         <h3><FaCalendarAlt /> Fecha Inicio</h3>
                         <div className="value" style={{ fontSize: '1.5rem', textTransform: 'capitalize' }}>
@@ -2886,7 +2849,7 @@ const RoomDetail: React.FC = () => {
                                     border: '1px solid #e2e8f0',
                                     display: 'flex',
                                     flexDirection: 'column',
-                                    height: 'calc(100vh - 160px)',
+                                    height: 'calc(100vh-160px)',
                                     position: 'sticky',
                                     top: '1rem'
                                 }}>
@@ -2979,7 +2942,7 @@ const RoomDetail: React.FC = () => {
                                     const geneticName = root.genetic?.name || root.name || 'Desconocida';
                                     const prefix = geneticName.substring(0, 6).toUpperCase();
                                     const dateStr = new Date(root.start_date || root.created_at).toLocaleDateString();
-                                    displayName = `Lote ${prefix} - ${dateStr}`;
+                                    displayName = `Lote ${prefix}-${dateStr}`;
                                     // Override if name is simple
                                     if (root.name && !root.name.includes('Lote')) displayName = `Lote ${root.name}`;
                                 }
@@ -3136,7 +3099,7 @@ const RoomDetail: React.FC = () => {
                                                 // For now, simply trust the projection.
                                                 virtualTasks.push({
                                                     ...task,
-                                                    id: `virtual - ${task.id} -${nextDate.getTime()} `,
+                                                    id: `virtual-${task.id} -${nextDate.getTime()} `,
                                                     due_date: format(nextDate, 'yyyy-MM-dd'),
                                                     status: 'pending',
                                                     title: `${task.title} (Proyectada)`,
@@ -3193,7 +3156,7 @@ const RoomDetail: React.FC = () => {
                                                 const color = getTaskColor(t);
                                                 return `${color} ${i * step}% ${(i + 1) * step}% `;
                                             }).join(', ');
-                                            dayBg = `linear - gradient(135deg, ${stops})`;
+                                            dayBg = `linear-gradient(135deg, ${stops})`;
                                         }
                                     }
 
@@ -3324,7 +3287,7 @@ const RoomDetail: React.FC = () => {
 
 
 
-            {/* Task Modal - Interactive */}
+            {/* Task Modal-Interactive */}
             {
                 isTaskModalOpen && (
                     <PortalModalOverlay>
@@ -4301,7 +4264,7 @@ const RoomDetail: React.FC = () => {
                                 const geneticName = pendingMapGroup.root.genetic?.name || pendingMapGroup.root.name || 'Desconocida';
                                 const prefix = geneticName.substring(0, 6).toUpperCase();
                                 const displayDate = new Date(pendingMapGroup.root.start_date || pendingMapGroup.root.created_at).toLocaleDateString();
-                                const displayName = `Lote ${prefix} - ${displayDate}`;
+                                const displayName = `Lote ${prefix}-${displayDate}`;
 
                                 return (
                                     <p style={{ marginBottom: '1rem', color: '#4a5568' }}>
