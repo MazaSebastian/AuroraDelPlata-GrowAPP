@@ -257,5 +257,79 @@ export const patientsService = {
         };
 
         return await this.upsertPatient(payload);
+    },
+
+    // ==========================================
+    // Clinical Module Methods
+    // ==========================================
+
+    async getClinicalAdmission(patientId: string): Promise<any | null> {
+        if (!supabase) return null;
+
+        const { data, error } = await supabase
+            .from('clinical_admissions')
+            .select('*')
+            .eq('patient_id', patientId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+
+        if (error && error.code !== 'PGRST116') { // Ignore "no rows" error
+            console.error("Error fetching clinical admission:", error);
+        }
+        return data || null;
+    },
+
+    async createClinicalAdmission(admission: any): Promise<any | null> {
+        if (!supabase) return null;
+
+        // Generate simple hash if not provided (server-side would be better but MVP logic here)
+        // We'll use a simple random string for "anonymized" view if not generated.
+        // Real HIPAA compliance requires meaningful irreversible hash or tokenization service.
+        const hash = admission.patient_hash || Math.random().toString(36).substring(7);
+
+        const { data, error } = await supabase
+            .from('clinical_admissions')
+            .insert([{ ...admission, patient_hash: hash }])
+            .select()
+            .single();
+
+        if (error) {
+            console.error("Error creating admission:", error);
+            throw error;
+        }
+        return data;
+    },
+
+    async getEvolutions(admissionId: string): Promise<any[]> {
+        if (!supabase) return [];
+
+        const { data, error } = await supabase
+            .from('clinical_evolutions')
+            .select('*')
+            .eq('admission_id', admissionId)
+            .order('date', { ascending: false }); // Newest first
+
+        if (error) {
+            console.error("Error fetching evolutions:", error);
+            return [];
+        }
+        return data;
+    },
+
+    async addEvolution(evolution: any): Promise<any | null> {
+        if (!supabase) return null;
+
+        const { data, error } = await supabase
+            .from('clinical_evolutions')
+            .insert([evolution])
+            .select()
+            .single();
+
+        if (error) {
+            console.error("Error adding evolution:", error);
+            throw error;
+        }
+        return data;
     }
 };

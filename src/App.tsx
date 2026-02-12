@@ -21,6 +21,7 @@ import Insumos from './pages/Insumos';
 import Expenses from './pages/Expenses';
 import Metrics from './pages/Metrics'; // New Import
 import Patients from './pages/Patients';
+import ClinicalFollowUp from './pages/ClinicalFollowUp';
 import { notificationService } from './services/notificationService';
 import Login from './pages/Login';
 import { useAuth } from './context/AuthContext';
@@ -185,6 +186,13 @@ function App() {
           <RequireAuth>
             <MainContent>
               <Patients />
+            </MainContent>
+          </RequireAuth>
+        } />
+        <Route path="/patients/:id/clinical" element={
+          <RequireAuth>
+            <MainContent>
+              <ClinicalFollowUp />
             </MainContent>
           </RequireAuth>
         } />

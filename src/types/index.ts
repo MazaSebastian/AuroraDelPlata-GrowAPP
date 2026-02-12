@@ -170,3 +170,59 @@ export interface StickyNote {
   room_id?: string;
   target_date?: string; // ISO Date "YYYY-MM-DD"
 }
+
+// ==========================
+// Tipos para Seguimiento Clínico (Clinical Module)
+// ==========================
+
+export interface ClinicalAdmission {
+  id: string;
+  patient_id: string;
+  patient_hash: string;
+  created_at: string;
+
+  // Diagnosis
+  diagnosis_cie11: string[]; // Codes or Names
+
+  // Pharmacology
+  medications: Medication[];
+
+  // Baseline Metrics
+  baseline_qol: number; // 0-100
+  baseline_pain_avg: number; // 0-10
+  baseline_pain_worst: number; // 0-10
+
+  notes?: string;
+}
+
+export interface Medication {
+  name: string;
+  dose: string;
+  frequency: string;
+  interaction_risk?: 'high' | 'moderate' | 'low' | 'none'; // CYP3A4 / CYP2C9
+}
+
+export interface ClinicalEvolution {
+  id: string;
+  admission_id: string;
+  date: string; // YYYY-MM-DD
+
+  // Traceability
+  batch_id?: string;
+
+  // Assessment
+  eva_score: number; // 0-10
+  improvement_percent?: number;
+
+  // Effects
+  sparing_effect: any[]; // JSON
+  adverse_effects: AdverseEffect[];
+
+  notes?: string;
+  created_at: string;
+}
+
+export interface AdverseEffect {
+  effect: string;
+  intensity: 'mild' | 'moderate' | 'severe';
+}

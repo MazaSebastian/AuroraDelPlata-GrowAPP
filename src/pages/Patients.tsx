@@ -424,11 +424,25 @@ const Patients: React.FC = () => {
                             </p>
                             {/* Show extra info if available */}
                             {patient.document_number && <p style={{ fontSize: '0.8rem', color: '#a0aec0' }}>DNI: {patient.document_number}</p>}
-                            {patient.expiration_date && (
-                                <small style={{ color: new Date(patient.expiration_date) < new Date() ? 'red' : 'green', display: 'block', marginTop: '0.5rem' }}>
-                                    Vence: {patient.expiration_date}
+                            {(patient as any).expiration_date && (
+                                <small style={{ color: new Date((patient as any).expiration_date!) < new Date() ? 'red' : 'green', display: 'block', marginTop: '0.5rem' }}>
+                                    Vence: {(patient as any).expiration_date}
                                 </small>
                             )}
+
+                            <div style={{ marginTop: '1rem', borderTop: '1px solid #e2e8f0', paddingTop: '1rem' }}>
+                                <ActionButton
+                                    as="button"
+                                    style={{ width: '100%', justifyContent: 'center', background: '#4299E1', fontSize: '0.9rem' }}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        window.location.href = `/patients/${patient.id || patient.profile_id}/clinical`; // Using href for now to ensure clean load, or use navigate
+                                        // navigate(\`/patients/\${patient.id}/clinical\`); 
+                                    }}
+                                >
+                                    <FaFileAlt /> Historia Clínica
+                                </ActionButton>
+                            </div>
                         </PatientCard>
                     ))}
                 </CardGrid>
