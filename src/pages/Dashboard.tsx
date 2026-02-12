@@ -640,17 +640,11 @@ const Dashboard: React.FC = () => {
                 const vegWeeks = genetic?.vegetative_weeks || 4;
                 const floraWeeks = genetic?.flowering_weeks || 9;
 
-                let targetDate = new Date();
-                let nextStageName = '';
                 let totalDays = 0;
 
                 if (room.type === 'vegetation') {
-                  targetDate = addWeeks(startDate, vegWeeks);
-                  nextStageName = 'Floración';
                   totalDays = vegWeeks * 7;
                 } else {
-                  targetDate = addWeeks(startDate, floraWeeks);
-                  nextStageName = 'Cosecha';
                   totalDays = floraWeeks * 7;
                 }
 

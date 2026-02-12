@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import styled, { createGlobalStyle } from 'styled-components';
 import {
     FaHistory, FaBarcode, FaExchangeAlt, FaMinusCircle, FaEdit, FaTrash,
-    FaCut, FaTimes, FaLevelUpAlt, FaPlus, FaPrint, FaAngleRight, FaAngleDown,
+    FaCut, FaTimes, FaLevelUpAlt, FaPlus, FaAngleRight, FaAngleDown,
     FaCheckCircle, FaDna
 } from 'react-icons/fa';
 import { Tooltip } from '../components/Tooltip';
@@ -488,6 +488,8 @@ const Clones: React.FC = () => {
             roomsService.getRooms()
         ]);
 
+        setRooms(allRooms);
+
         const clonesRoom = allRooms.find(r => r.type === 'clones');
 
         if (clonesRoom) {
@@ -935,7 +937,7 @@ const Clones: React.FC = () => {
                                 <tbody>
                                     {/* RENDER BY GROUPS (ALL) - Aggregated View */}
                                     {cloneBatches.map(group => {
-                                        const { root, children } = group;
+                                        const { root } = group;
 
 
                                         return (

@@ -34,12 +34,9 @@ import {
   FaTimes, // Re-added for Modal
   FaCheckCircle,
   FaRegCircle,
-  FaPalette,
   FaExchangeAlt,
-  FaFileImport,
   FaBarcode,
   FaFileUpload,
-  FaMapMarkedAlt,
   FaExclamationTriangle,
 } from 'react-icons/fa';
 
@@ -1227,19 +1224,7 @@ const CropDetail: React.FC = () => {
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false); // Success Modal State
   const [isAssigning, setIsAssigning] = useState(false); // Validating preventing multiple clicks
 
-  const handleOpenAssign = async (e: React.MouseEvent, room: any) => {
-    e.stopPropagation();
-    setAssignRoom(room);
-    setIsAssignModalOpen(true);
 
-    // Fetch available batches (from rooms of type 'clones')
-    const { roomsService } = await import('../services/roomsService');
-    const allBatches = await roomsService.getBatches();
-    // Filter batches that are in a 'clones' room
-    const clones = allBatches.filter(b => b.room?.type === 'clones' || b.current_room_id === null || (b.room && b.room.name.toLowerCase().includes('esqueje')));
-    setAvailableCloneBatches(clones);
-    setAssignQuantity(0); // Reset
-  };
 
   const handleConfirmAssign = async () => {
     if (!assignRoom || !selectedBatchId || isAssigning) return;
@@ -1337,22 +1322,7 @@ const CropDetail: React.FC = () => {
     quantity: 0
   });
 
-  const handleOpenTransplant = (e: React.MouseEvent, room: any) => {
-    e.stopPropagation();
-    setTransplantRoom(room);
-    // Determine default batch if any
-    const batches = room.batches?.filter((b: any) => b.current_room_id === room.id) || [];
-    const firstBatchId = batches.length > 0 ? batches[0].id : '';
-    const firstBatchQty = batches.length > 0 ? batches[0].quantity : 0;
 
-    setTransplantForm({
-      targetRoomId: '',
-      batchId: firstBatchId,
-      medium: 'Maceta',
-      quantity: firstBatchQty
-    });
-    setIsTransplantModalOpen(true);
-  };
 
   const handleTransplantSave = async () => {
     if (!transplantRoom || !transplantForm.targetRoomId || !transplantForm.batchId) {
@@ -1545,10 +1515,7 @@ const CropDetail: React.FC = () => {
     return <LoadingSpinner text="Cargando detalles del cultivo..." fullScreen />;
   }
 
-  const handleDeleteCropClick = () => {
-    if (!crop) return;
-    setIsDeleteProtectionOpen(true);
-  };
+
 
   const executeDeleteCrop = async () => {
     if (!crop) return;
