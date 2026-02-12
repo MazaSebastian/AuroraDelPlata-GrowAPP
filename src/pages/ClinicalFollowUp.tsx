@@ -106,6 +106,15 @@ const ClinicalFollowUp: React.FC = () => {
     const [admission, setAdmission] = useState<any | null>(null);
     const [evolutions, setEvolutions] = useState<any[]>([]);
 
+    // Evolution Form State
+    const [isEvolutionModalOpen, setIsEvolutionModalOpen] = useState(false);
+    const [newEvolution, setNewEvolution] = useState({
+        eva_score: 0,
+        notes: '',
+        sparing_effect: [] as any[],
+        adverse_effects: [] as any[]
+    });
+
     // Admission Form State
     const [isAdmitting, setIsAdmitting] = useState(false);
     const [newAdmission, setNewAdmission] = useState({
@@ -155,6 +164,36 @@ const ClinicalFollowUp: React.FC = () => {
             setIsAdmitting(false);
         } catch (e) {
             alert("Error creating admission");
+        }
+    };
+
+    const handleAddEvolution = async () => {
+        if (!admission) return;
+        try {
+            // Calculate improvement (Simple logic: Baseline Pain - Current Pain / Baseline * 100)
+            // Or just subjective % for now. Let's use logic if possible, or manual input.
+            // Let's infer improvement from QoL or Pain. 
+            // improved = (BaselinePain - CurrentPain) / BaselinePain * 100
+            let improvement = 0;
+            if (admission.baseline_pain_avg > 0) {
+                improvement = ((admission.baseline_pain_avg - newEvolution.eva_score) / admission.baseline_pain_avg) * 100;
+            }
+
+            await patientsService.addEvolution({
+                admission_id: admission.id,
+                date: new Date().toISOString().split('T')[0], // Today
+                eva_score: newEvolution.eva_score,
+                improvement_percent: parseFloat(improvement.toFixed(2)),
+                notes: newEvolution.notes,
+                sparing_effect: newEvolution.sparing_effect,
+                adverse_effects: newEvolution.adverse_effects
+            });
+
+            loadData(id || '');
+            setIsEvolutionModalOpen(false);
+            setNewEvolution({ eva_score: 0, notes: '', sparing_effect: [], adverse_effects: [] }); // Reset
+        } catch (e) {
+            alert("Error adding evolution");
         }
     };
 
@@ -271,7 +310,9 @@ const ClinicalFollowUp: React.FC = () => {
                 <Card color="#48BB78">
                     <CardTitle>
                         <FaChartLine /> Evolución
-                        <button style={{ marginLeft: 'auto', background: '#ebf8ff', color: '#3182ce', border: 'none', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>
+                        <button
+                            onClick={() => setIsEvolutionModalOpen(true)}
+                            style={{ marginLeft: 'auto', background: '#ebf8ff', color: '#3182ce', border: 'none', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                             <FaPlus /> Nueva Evolución
                         </button>
                     </CardTitle>
@@ -280,20 +321,72 @@ const ClinicalFollowUp: React.FC = () => {
                         <p style={{ color: '#718096', fontStyle: 'italic' }}>No hay evoluciones registradas.</p>
                     ) : (
                         <div>
-                            {/* Mini Sparkline Logic Placeholder */}
-                            <p>Última visita: {evolutions[0].date}</p>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '1rem' }}>
-                                <div style={{ flex: 1, padding: '1rem', background: '#F0FFF4', borderRadius: '0.5rem' }}>
-                                    <small style={{ color: '#2F855A', fontWeight: 'bold' }}>MEJORÍA GLOBAL</small>
-                                    <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#22543D' }}>
-                                        {evolutions[0].improvement_percent || 0}%
+                            {/* Latest Evolution Highlight */}
+                            <div style={{ marginBottom: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid #e2e8f0' }}>
+                                <p style={{ fontSize: '0.9rem', color: '#718096', marginBottom: '0.5rem' }}>Última visita: {evolutions[0].date}</p>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                    <div style={{ flex: 1, padding: '1rem', background: '#F0FFF4', borderRadius: '0.5rem', border: '1px solid #C6F6D5' }}>
+                                        <small style={{ color: '#2F855A', fontWeight: 'bold' }}>MEJORÍA GLOBAL</small>
+                                        <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#22543D' }}>
+                                            {evolutions[0].improvement_percent > 0 ? '+' : ''}{evolutions[0].improvement_percent || 0}%
+                                        </div>
+                                    </div>
+                                    <div style={{ flex: 1, padding: '1rem', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '0.5rem' }}>
+                                        <small style={{ color: '#718096', fontWeight: 'bold' }}>DOLOR ACTUAL (EVA)</small>
+                                        <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#2d3748' }}>
+                                            {evolutions[0].eva_score} <span style={{ fontSize: '0.8rem', fontWeight: 'normal', color: '#a0aec0' }}>/ 10</span>
+                                        </div>
                                     </div>
                                 </div>
+                            </div>
+
+                            {/* History List */}
+                            <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                                {evolutions.map((evo, idx) => (
+                                    <div key={idx} style={{ padding: '0.75rem', borderBottom: '1px solid #f7fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div>
+                                            <div style={{ fontWeight: 'bold', color: '#4a5568' }}>{evo.date}</div>
+                                            <div style={{ fontSize: '0.85rem', color: '#718096' }}>EVA: {evo.eva_score}</div>
+                                        </div>
+                                        <div style={{ color: evo.improvement_percent >= 0 ? '#48bb78' : '#e53e3e', fontWeight: 'bold', fontSize: '0.9rem' }}>
+                                            {evo.improvement_percent > 0 ? '+' : ''}{evo.improvement_percent}%
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         </div>
                     )}
                 </Card>
             </Grid>
+
+            {/* EVOLUTION MODAL */}
+            {isEvolutionModalOpen && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+                    <Card style={{ width: '100%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto' }}>
+                        <CardTitle>Registrar Evolución</CardTitle>
+
+                        <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold', color: '#4A5568' }}>Dolor Actual (EVA {newEvolution.eva_score})</label>
+                        <ChromaticSlider
+                            type="range" min="0" max="10"
+                            value={newEvolution.eva_score}
+                            onChange={e => setNewEvolution({ ...newEvolution, eva_score: Number(e.target.value) })}
+                        />
+
+                        <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold', color: '#4A5568', marginTop: '1.5rem' }}>Notas de Evolución</label>
+                        <textarea
+                            style={{ width: '100%', height: '100px', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #CBD5E0', fontFamily: 'inherit' }}
+                            placeholder="Describa la evolución del paciente, efectos, etc..."
+                            value={newEvolution.notes}
+                            onChange={e => setNewEvolution({ ...newEvolution, notes: e.target.value })}
+                        />
+
+                        <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
+                            <button onClick={() => setIsEvolutionModalOpen(false)} style={{ padding: '0.75rem 1.5rem', background: '#CBD5E0', border: 'none', borderRadius: '0.5rem', cursor: 'pointer' }}>Cancelar</button>
+                            <button onClick={handleAddEvolution} style={{ padding: '0.75rem 1.5rem', background: '#319795', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 'bold' }}>Guardar</button>
+                        </div>
+                    </Card>
+                </div>
+            )}
         </Container>
     );
 };
