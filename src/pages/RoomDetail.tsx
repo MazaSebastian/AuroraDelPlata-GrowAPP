@@ -782,14 +782,25 @@ const RoomDetail: React.FC = () => {
 
     const [isMetricsModalOpen, setIsMetricsModalOpen] = useState(false);
     const [metricsData, setMetricsData] = useState<any[]>([]);
-    const [loadingMetrics, setLoadingMetrics] = useState(false);
 
 
-    // Genetics Modal State
-    const [isGeneticsModalOpen, setIsGeneticsModalOpen] = useState(false);
+
+    // Transplant Modal (Use constants to satisfy unused implementation for now)
+    const loadingMetrics = false;
+    // const transplantRoom = room; // Unused warning fix
+
+    // ...
+
+    // Group Detail Modal State
+    // const [selectedGroupName, setSelectedGroupName] = useState<string | null>(null); // Unused warning fix
+    const [selectedGroupName] = useState<string | null>(null);
+
+    // ...
+
+    // const handleOpenGroupDetail = ... (Already removed)
 
     // Transplant Modal
-    const [transplantRoom, setTransplantRoom] = useState<Room | null>(null);
+
 
     // Plant Detail Modal
 
@@ -858,7 +869,7 @@ const RoomDetail: React.FC = () => {
     const [isStickyModalOpen, setIsStickyModalOpen] = useState(false);
     const [stickyContent, setStickyContent] = useState('');
     const [stickyColor, setStickyColor] = useState<StickyNote['color']>('yellow');
-    const [selectedSticky, setSelectedSticky] = useState<StickyNote | null>(null);
+    const [selectedSticky] = useState<StickyNote | null>(null);
 
 
     // Interactive Calendar State
@@ -1338,10 +1349,7 @@ const RoomDetail: React.FC = () => {
     };
 
 
-    const handleOpenDeleteMap = (mapId: string) => {
-        setMapIdToDelete(mapId);
-        setIsDeleteMapModalOpen(true);
-    };
+
 
     const handleClearMap = async () => {
         if (!activeMapId) return;
@@ -1413,7 +1421,7 @@ const RoomDetail: React.FC = () => {
 
     const handleOpenTransplant = (e: React.MouseEvent, room: Room, batch: Batch | null) => {
         e.stopPropagation();
-        setTransplantRoom(room);
+
         if (batch) {
             setTransplantForm({ ...transplantForm, batchId: batch.id, quantity: batch.quantity });
         } else {
@@ -1472,10 +1480,7 @@ const RoomDetail: React.FC = () => {
     };
 
 
-    const handleOpenGroupDetail = (groupName: string) => {
-        setSelectedGroupName(groupName);
-        setIsGroupDetailModalOpen(true);
-    };
+
 
     const handleDeleteBatchFromGroup = async (batch: Batch, quantityDiscard: number) => {
         // Validation

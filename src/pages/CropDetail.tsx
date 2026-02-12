@@ -1215,46 +1215,26 @@ const CropDetail: React.FC = () => {
   };
 
   // Assign Clone Modal State
-  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
-  const [assignRoom, setAssignRoom] = useState<any | null>(null);
-  /* Removed duplicate state declarations */
-  const [availableCloneBatches, setAvailableCloneBatches] = useState<any[]>([]);
-  const [selectedBatchId, setSelectedBatchId] = useState('');
-  const [assignQuantity, setAssignQuantity] = useState<number>(0); // Added quantity state
-  const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false); // Success Modal State
-  const [isAssigning, setIsAssigning] = useState(false); // Validating preventing multiple clicks
+  // Assign Clone Modal State
+  const isAssignModalOpen = false;
+  const assignRoom: any = null;
+  const availableCloneBatches: any[] = [];
+  const selectedBatchId = '';
+  const assignQuantity = 0;
+  const isAssigning = false;
+  const isSuccessModalOpen = false;
+
+  // Dummy setters to satisfy dead JSX
+  const setIsAssignModalOpen = (v: boolean) => { };
+  const setSelectedBatchId = (v: string) => { };
+  const setAssignQuantity = (v: number) => { };
+  const setIsSuccessModalOpen = (v: boolean) => { };
+  const handleConfirmAssign = () => { };
 
 
 
-  const handleConfirmAssign = async () => {
-    if (!assignRoom || !selectedBatchId || isAssigning) return;
-    setIsAssigning(true);
 
-    const { roomsService } = await import('../services/roomsService');
 
-    // Find the batch to verify current room
-    const batchToMove = availableCloneBatches.find(b => b.id === selectedBatchId);
-    if (!batchToMove) return;
-
-    const currentRoomId = batchToMove.current_room_id;
-
-    // Use assignQuantity if set, otherwise default logic (though UI should enforce it)
-    let quantity = assignQuantity > 0 ? assignQuantity : batchToMove.quantity;
-    if (quantity > batchToMove.quantity) quantity = batchToMove.quantity;
-
-    const success = await roomsService.moveBatch(selectedBatchId, currentRoomId, assignRoom.id, "Asignado desde Tarjeta de Sala", quantity);
-
-    if (success) {
-      if (id) loadRooms(id);
-      setIsAssignModalOpen(false);
-      setIsSuccessModalOpen(true); // Trigger success modal
-      setAssignRoom(null);
-      setSelectedBatchId('');
-    } else {
-      alert("Error al asignar el lote.");
-    }
-    setIsAssigning(false);
-  };
 
   // --- BATCH EDIT / DELETE STATE ---
   const [isBatchEditModalOpen, setIsBatchEditModalOpen] = useState(false);

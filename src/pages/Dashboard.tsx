@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { format, differenceInDays, addWeeks } from 'date-fns';
+import { format, differenceInDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { tasksService } from '../services/tasksService';
 import { cropsService } from '../services/cropsService';
