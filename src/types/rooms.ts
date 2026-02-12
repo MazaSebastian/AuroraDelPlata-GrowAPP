@@ -1,4 +1,4 @@
-export type RoomType = 'vegetation' | 'flowering' | 'drying' | 'curing' | 'mother' | 'clones' | 'general' | 'germination';
+export type RoomType = 'vegetation' | 'flowering' | 'drying' | 'curing' | 'mother' | 'clones' | 'general' | 'germination' | 'living_soil';
 export type BatchStage = 'seedling' | 'vegetation' | 'flowering' | 'drying' | 'curing' | 'completed';
 
 export interface Room {

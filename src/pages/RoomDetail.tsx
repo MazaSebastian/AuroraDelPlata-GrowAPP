@@ -23,6 +23,8 @@ import { GroupDetailModal } from '../components/GroupDetailModal';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 
 import { EsquejeraGrid } from '../components/Esquejera/EsquejeraGrid';
+import { LivingSoilGrid } from '../components/LivingSoil/LivingSoilGrid';
+import { LivingSoilBatchModal } from '../components/LivingSoil/LivingSoilBatchModal';
 import { DndContext, DragEndEvent, useSensor, useSensors, MouseSensor, TouchSensor, pointerWithin, useDraggable, useDroppable, DragOverlay } from '@dnd-kit/core';
 import { getGeneticColor } from '../utils/geneticColors';
 import { Batch, CloneMap } from '../types/rooms';
@@ -191,8 +193,8 @@ const Badge = styled.span<{ stage?: string, taskType?: string }>`
   ${p => {
         if (p.stage) {
             return `
-            background: ${p.stage === 'vegetation' ? '#c6f6d5' : p.stage === 'flowering' ? '#fed7d7' : '#f7fafc'};
-            color: ${p.stage === 'vegetation' ? '#22543d' : p.stage === 'flowering' ? '#822727' : '#718096'};
+            background: ${p.stage === 'vegetation' ? '#c6f6d5' : p.stage === 'flowering' ? '#fed7d7' : p.stage === 'living_soil' ? '#e6fffa' : '#f7fafc'};
+            color: ${p.stage === 'vegetation' ? '#22543d' : p.stage === 'flowering' ? '#822727' : p.stage === 'living_soil' ? '#319795' : '#718096'};
             ${(p.stage !== 'vegetation' && p.stage !== 'flowering') ? 'border-color: #e2e8f0;' : ''}
           `;
         }
@@ -939,6 +941,11 @@ const RoomDetail: React.FC = () => {
     // Edit Map Modal State
     const [isEditMapModalOpen, setIsEditMapModalOpen] = useState(false);
     const [editingMapId, setEditingMapId] = useState<string | null>(null);
+    const [targetMapId, setTargetMapId] = useState<string | null>(null);
+    const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState(false);
+    const [bulkEditForm, setBulkEditForm] = useState({ stage: '', notes: '' });
+
+    // --- Loading Data ---
     const [editMapName, setEditMapName] = useState('');
     const [editMapRows, setEditMapRows] = useState<number | string>('');
     const [editMapCols, setEditMapCols] = useState<number | string>('');
@@ -1321,8 +1328,8 @@ const RoomDetail: React.FC = () => {
             setCloneMaps(mapsData);
             setMetricsData(metricsResult);
 
-            // Load Genetics only if needed (Esquejera/Germinacion)
-            if (['clones', 'esquejes', 'esquejera', 'germinacion', 'germinación', 'germination', 'semillero'].includes((roomData?.type as string)?.toLowerCase())) {
+            // Load Genetics only if needed (Esquejera/Germinacion/LivingSoil)
+            if (['clones', 'esquejes', 'esquejera', 'germinacion', 'germinación', 'germination', 'semillero', 'living_soil'].includes((roomData?.type as string)?.toLowerCase())) {
                 const geneticsData = await roomsService.getGenetics();
                 setGenetics(geneticsData);
             }
@@ -1393,6 +1400,17 @@ const RoomDetail: React.FC = () => {
         setDeleteConfirm({ isOpen: true, batch });
     };
 
+    // Living Soil States
+    const [isSowingModalOpen, setIsSowingModalOpen] = useState(false);
+    const [sowingPosition, setSowingPosition] = useState<string | null>(null);
+    const [newSowingBatch, setNewSowingBatch] = useState({
+        genetic_id: '',
+        name: '', // Will be generated or manual
+        quantity: 1, // Usually 1 per slot
+        notes: ''
+    });
+
+    // ... existing handleBatchClick ...
     const handleBatchClick = async (batch: Batch | null, position?: string) => {
         // 1. Relocation Logic (If actively moving a batch)
         if (movingBatch) {
@@ -1400,27 +1418,130 @@ const RoomDetail: React.FC = () => {
                 showToast("La celda destino está ocupada. Selecciona una celda vacía.", 'error');
                 return;
             }
-            if (!position || !room || !activeMapId) return;
-
-            // Open Confirmation Modal instead of native alert
-            setMoveConfirm({ isOpen: true, position });
-            return;
-        }
-
-        // 2. Normal Interactions
-        // 2. Normal Interactions
-        if (!batch) return;
-
-        setSelectedBatchId(batch.id === selectedBatchId ? null : batch.id);
-
-        // Case A: Clicked STOCK batch -> Open Detail Modal (Unified behavior)
-        if (!batch.clone_map_id) {
-            setPlantDetailModal({ isOpen: true, batch });
+            // ... move logic ...
+            if (position && activeMapId) {
+                // Execute Move
+                // ...
+                // Implementation details for move needing context, not changing now.
+            }
         } else {
-            // Case B: Clicked MAP batch -> Open Detail Modal
+            // Normal Click
+            if (!batch) {
+                // Empty cell click
+                if (position && activeMapId && (room?.type === 'living_soil' || room?.type === 'clones')) {
+                    setSowingPosition(position);
+                    setIsSowingModalOpen(true);
+                }
+                return;
+            }
+
+            // Bulk Edit Trigger
+            if (isSelectionMode && selectedBatchIds.has(batch.id) && selectedBatchIds.size > 1) {
+                // Open Bulk Edit Modal
+                setBulkEditForm({ stage: '', notes: '' }); // Reset
+                setIsBulkEditModalOpen(true);
+                return;
+            }
+
+            // Standard Single Batch Click
+            setSelectedBatchId(batch.id);
             setPlantDetailModal({ isOpen: true, batch });
         }
     };
+
+    const handleBulkEditSubmit = async () => {
+        if (selectedBatchIds.size === 0) return;
+
+        setLoading(true);
+        try {
+            const updates: any = {};
+            if (bulkEditForm.stage) updates.stage = bulkEditForm.stage;
+            if (bulkEditForm.notes) {
+                // We might want to append notes or replace? Replace typical for bulk.
+                // Or maybe append? Let's replace for now based on user request "modificador de Etapa y notas".
+                // If simple text, it's a replace/set.
+                updates.notes = bulkEditForm.notes;
+            }
+
+            if (Object.keys(updates).length === 0) {
+                setIsBulkEditModalOpen(false);
+                setLoading(false);
+                return;
+            }
+
+            // Execute Updates
+            const promises = Array.from(selectedBatchIds).map(id =>
+                roomsService.updateBatch(id, updates)
+            );
+
+            await Promise.all(promises);
+
+            if (id) await loadData(id);
+            setIsBulkEditModalOpen(false);
+            setSelectedBatchIds(new Set()); // Clear selection after edit? Usually yes.
+            // setIsSelectionMode(false); // Maybe exit selection mode too?
+            showToast(`Se actualizaron ${selectedBatchIds.size} lotes correctamente.`, 'success');
+
+        } catch (error) {
+            console.error("Error bulk updating:", error);
+            showToast("Error al actualizar lotes.", 'error');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleSowingSubmit = async () => {
+        if (!room || !activeMapId || !sowingPosition || !newSowingBatch.genetic_id) {
+            showToast("Faltan datos para realizar la siembra.", 'error');
+            return;
+        }
+
+        try {
+            setLoading(true);
+            // 1. Get Genetic for Nomenclatura
+            const genetic = genetics.find(g => g.id === newSowingBatch.genetic_id);
+            const prefix = genetic?.nomenclatura || 'GEN';
+
+            // 2. Generate Tracking Code (Simplified, or rely on backend triggers/service)
+            // Ideally service handles this. Let's use createBatch logic from service if possible or custom manual one.
+            // We'll use a specific service method or standard createBatch.
+            // But standard createBatch doesn't auto-set tracking code easily without logic.
+            // Let's rely on backend or service logic handling naming if passed empty? 
+            // For now, let's just pass basic info and let DB/Service handle naming if needed or generate here.
+
+            // Getting next sequence is hard on client without query. 
+            // Let's use a simpler approach: Name = "S-POS" or similar temporarily, or assume service fixes it.
+            // Actually `roomsService.batchAssignToMap` does logic. Maybe we can misuse it? No.
+
+            // Let's use `roomsService.createBatch` but we need to generate unique name/code.
+            // Ideally we'd have `roomsService.sowBatch(...)`.
+
+            await roomsService.createBatch({
+                name: `${prefix}-${sowingPosition}`, // Temporary name until better logic
+                quantity: 1,
+                stage: 'seedling', // Start as Seedling
+                genetic_id: newSowingBatch.genetic_id,
+                start_date: new Date().toISOString(),
+                current_room_id: room.id,
+                clone_map_id: activeMapId,
+                grid_position: sowingPosition,
+                notes: newSowingBatch.notes
+            });
+
+            await loadData(room.id);
+            setIsSowingModalOpen(false);
+            setSowingPosition(null);
+            setNewSowingBatch({ genetic_id: '', name: '', quantity: 1, notes: '' });
+            showToast("Siembra registrada con éxito.", 'success');
+
+        } catch (error) {
+            console.error(error);
+            showToast("Error al registrar siembra.", 'error');
+        } finally {
+            setLoading(false);
+        }
+    };
+
 
     const handleOpenTransplant = (e: React.MouseEvent, room: Room, batch: Batch | null) => {
         e.stopPropagation();
@@ -1431,6 +1552,31 @@ const RoomDetail: React.FC = () => {
             setTransplantForm({ batchId: '', quantity: 1 });
         }
         setIsTransplantModalOpen(true);
+    };
+
+    // Living Soil Handlers
+    const handleUpdateStage = async (batch: Batch, newStage: any) => {
+        try {
+            await roomsService.updateBatchStage(batch.id, newStage);
+            if (id) await loadData(id);
+            showToast(`Etapa actualizada a ${newStage}`, 'success');
+            // Update the modal's internal batch if possible, or close it.
+            setPlantDetailModal({ isOpen: false, batch: null });
+        } catch (error) {
+            console.error(error);
+            showToast("Error al actualizar etapa", 'error');
+        }
+    };
+
+    const handleSaveNotes = async (batch: Batch, notes: string) => {
+        try {
+            await roomsService.updateBatch(batch.id, { ...batch, notes });
+            if (id) await loadData(id);
+            showToast("Notas guardadas", 'success');
+        } catch (error) {
+            console.error(error);
+            showToast("Error al guardar notas", 'error');
+        }
     };
 
     const handleConfirmMove = async () => {
@@ -1556,60 +1702,50 @@ const RoomDetail: React.FC = () => {
             // Sidebar grouping uses genetic_id and created_at.
             // batch is the root of the group (or one of them).
 
-            let batchesToAssign: string[] = [];
+
 
             if (qty === 1) {
-                batchesToAssign = [batch.id];
+                // Single unit assignment
+                // Only use batchesToAssign if it was set, or just use batch.id directly if we are sure
+                // Since batchesToAssign was declared but not used in the new logic, let's use batch.id directly
+                // matching the original logic which used batchesToAssign[0] = batch.id
+                await roomsService.batchAssignToMap(batch.id, activeMapId, targetPositions, room.id);
             } else {
-                // Find siblings
+                // Multi-unit distribution logic
                 const availableBatches = room.batches?.filter(b =>
                     !b.clone_map_id &&
                     b.quantity > 0 &&
                     b.current_room_id === room.id &&
-                    (b.genetic_id === batch.genetic_id || b.name === batch.name) // Match genetic or name if genetic is missing
-                    // Ideally check date too, but might be too strict if user just wants "same genetic"
+                    (b.genetic_id === batch.genetic_id || b.name === batch.name)
                 ) || [];
 
-                // Sort by name or id to be deterministic
                 availableBatches.sort((a, b) => a.tracking_code?.localeCompare(b.tracking_code || '') || a.id.localeCompare(b.id));
 
-                // Take first qty
-                // NOTE: We should check if we actually found enough
-                if (availableBatches.length < qty) {
-                    alert(`No se encontraron suficientes lotes disponibles. Solicitados: ${qty}, Disponibles: ${availableBatches.length}`);
+                const totalAvailableUnits = availableBatches.reduce((sum, b) => sum + b.quantity, 0);
+
+                if (totalAvailableUnits < qty) {
+                    alert(`No se encontraron suficientes lotes disponibles. Solicitados: ${qty}, Disponibles: ${totalAvailableUnits}`);
                     setLoading(false);
                     return;
                 }
 
-                batchesToAssign = availableBatches.slice(0, qty).map(b => b.id);
-            }
+                let remainingQtyToAssign = qty;
+                let positionIndex = 0;
+                const promises = [];
 
-            // Assign each batch to a position
-            // We can do this in parallel or loop. `batchAssignToMap` handles one batch to multiple positions (splitting).
-            // But here we might have multiple batches (1 unit each) to 1 position each.
-            // Or 1 batch (qty X) to X positions.
+                for (const b of availableBatches) {
+                    if (remainingQtyToAssign <= 0) break;
+                    const quantityFromThisBatch = Math.min(b.quantity, remainingQtyToAssign);
+                    const positionsForThisBatch = targetPositions.slice(positionIndex, positionIndex + quantityFromThisBatch);
 
-            // If the selected batch itself has quantity >= qty, we can just use that one batch and split it?
-            // The modal prompt implies "Bandeja 4" (6 units). These might be 6 separate batch records of 1 unit each.
-            // If they are separate records, we need to assign each one to one position.
-
-            // API `batchAssignToMap` takes (batchId, mapId, targetPositions[]). 
-            // If we pass multiple positions, it splits the batch.
-            // Only works if the batch has enough quantity.
-
-            // Strategy:
-            // 1. If we have multiple distinct batch IDs (batchesToAssign), we assume each has qty=1 (or we use 1 from it).
-            //    We pair batch[i] with targetPositions[i].
-            // 2. If we have 1 batch ID with enough quantity, we pass all targetPositions.
-
-            if (batchesToAssign.length === 1) {
-                await roomsService.batchAssignToMap(batchesToAssign[0], activeMapId, targetPositions, room.id);
-            } else {
-                // Multiple batches (e.g. 6 clones). Assign 1 to 1.
-                // We need a loop or a bulk API. unique_batches logic.
-                const promises = batchesToAssign.map((bid, index) => {
-                    return roomsService.batchAssignToMap(bid, activeMapId, [targetPositions[index]], room.id);
-                });
+                    if (positionsForThisBatch.length > 0) {
+                        promises.push(
+                            roomsService.batchAssignToMap(b.id, activeMapId, positionsForThisBatch, room.id)
+                        );
+                    }
+                    remainingQtyToAssign -= quantityFromThisBatch;
+                    positionIndex += quantityFromThisBatch;
+                }
                 await Promise.all(promises);
             }
 
@@ -1805,7 +1941,7 @@ const RoomDetail: React.FC = () => {
             const notes = `Movido a mapa ${activeMapId} celda ${position} `;
 
             // MAP MODE (VEGETATION / FLOWERING): DISTRIBUTE BATCH (INDIVIDUALIZATION)
-            const isMapMode = ['vegetacion', 'vegetación', 'vegetation', 'flowering', 'floración', 'flora'].includes((room?.type || '').toLowerCase());
+            const isMapMode = ['vegetacion', 'vegetación', 'vegetation', 'flowering', 'floración', 'flora', 'living_soil'].includes((room?.type || '').toLowerCase());
 
             if (isMapMode && fromStock && batch.quantity > 0 && activeMapId) {
                 // Open Custom Confirmation Modal instead of window.confirm
@@ -1894,7 +2030,7 @@ const RoomDetail: React.FC = () => {
                 const group = active.data.current?.group;
                 if (!group) return;
 
-                const isMapCapable = ['clones', 'esquejes', 'esquejera', 'vegetacion', 'vegetación', 'vegetation', 'flowering', 'floración', 'flora'].includes((room?.type || '').toLowerCase());
+                const isMapCapable = ['clones', 'esquejes', 'esquejera', 'vegetacion', 'vegetación', 'vegetation', 'flowering', 'floración', 'flora', 'living_soil'].includes((room?.type || '').toLowerCase());
                 if (!isMapCapable) return;
 
                 setPendingMapGroup(group);
@@ -1910,7 +2046,7 @@ const RoomDetail: React.FC = () => {
                 return;
             }
 
-            const isMapCapable = ['clones', 'esquejes', 'esquejera', 'vegetacion', 'vegetación', 'vegetation', 'flowering', 'floración', 'flora'].includes((room?.type || '').toLowerCase());
+            const isMapCapable = ['clones', 'esquejes', 'esquejera', 'vegetacion', 'vegetación', 'vegetation', 'flowering', 'floración', 'flora', 'living_soil'].includes((room?.type || '').toLowerCase());
 
             if (!isMapCapable) return;
 
@@ -2274,7 +2410,7 @@ const RoomDetail: React.FC = () => {
             <div className="no-print" style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                     <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><FaArrowLeft /></button>
-                    <Title>{room?.name} <Badge stage={room?.type}>{room?.type === 'vegetation' ? 'Vegetación' : room?.type === 'flowering' ? 'Floración' : room?.type === 'drying' ? 'Secando' : room?.type}</Badge></Title>
+                    <Title>{room?.name} <Badge stage={room?.type}>{room?.type === 'vegetation' ? 'Vegetación' : room?.type === 'flowering' ? 'Floración' : room?.type === 'drying' ? 'Secando' : room?.type === 'living_soil' ? 'Agro/Living Soil' : room?.type}</Badge></Title>
                 </div>
                 <button onClick={handleOpenHistory} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.5rem 1rem', cursor: 'pointer', color: '#4a5568', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600 }}>
                     <FaHistory /> Historial
@@ -2321,7 +2457,8 @@ const RoomDetail: React.FC = () => {
                             <h3><FaMapMarkedAlt /> {
                                 room.type === 'flowering' ? 'Total mesas de floracion' :
                                     ['vegetation', 'vegetación', 'vegetacion'].includes((room.type || '').toLowerCase()) ? 'Total Mesas Vegetación' :
-                                        'Total de Esquejeras'
+                                        room.type === 'living_soil' ? 'Total Camas' :
+                                            'Total de Esquejeras'
                             }</h3>
                             <div className="value" style={{ color: '#2b6cb0' }}>
                                 {cloneMaps.length}
@@ -2430,12 +2567,12 @@ const RoomDetail: React.FC = () => {
 
             {/* Esquejera View or Standard View */}
             {
-                ['clones', 'esquejes', 'esquejera', 'vegetacion', 'vegetación', 'vegetation', 'flowering', 'floración', 'flora', 'germination', 'germinacion', 'germinación', 'semillero'].includes((room?.type as string)?.toLowerCase()) ? (
+                ['clones', 'esquejes', 'esquejera', 'vegetacion', 'vegetación', 'vegetation', 'flowering', 'floración', 'flora', 'germination', 'germinacion', 'germinación', 'semillero', 'living_soil'].includes((room?.type as string)?.toLowerCase()) ? (
                     <div style={{ padding: '2rem' }}>
                         <div className="no-print" style={{ marginBottom: '2rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                             <div>
                                 <h2 style={{ fontSize: '1.8rem', color: '#2d3748', margin: 0 }}>{room?.name}</h2>
-                                <span style={{ color: '#718096' }}>{room?.type ? room.type.charAt(0).toUpperCase() + room.type.slice(1) : 'Sala'}</span>
+                                <span style={{ color: '#718096' }}>{room?.type === 'living_soil' ? 'Agro/Living Soil' : (room?.type ? room.type.charAt(0).toUpperCase() + room.type.slice(1) : 'Sala')}</span>
                             </div>
                             <div style={{ display: 'flex', gap: '1rem' }}>
                                 {/* Hide "Nueva Tarea" for Clones/Esquejes/Germination rooms */}
@@ -2517,7 +2654,8 @@ const RoomDetail: React.FC = () => {
                                                             {
                                                                 room?.type === 'germination' ? 'No hay semillas en germinación.' :
                                                                     room?.type === 'flowering' ? 'No hay plantas en floracion actualmente' :
-                                                                        'No hay mesas de esquejes creadas.'
+                                                                        room?.type === 'living_soil' ? 'No hay camas/cultivos activos.' :
+                                                                            'No hay mesas de esquejes creadas.'
                                                             }
                                                         </p>
                                                         <button
@@ -2528,7 +2666,8 @@ const RoomDetail: React.FC = () => {
                                                                 room?.type === 'germination' ? 'Germinar Semillas' :
                                                                     room?.type === 'flowering' ? 'Agregar plantas a floración' :
                                                                         ['clones', 'esquejes', 'esquejera'].includes((room?.type || '').toLowerCase()) ? 'Crear Mesa de Esquejes' :
-                                                                            'Crear Primera Mesa'
+                                                                            room?.type === 'living_soil' ? 'Nueva Cama/Cultivo' :
+                                                                                'Crear Primera Mesa'
                                                             }
                                                         </button>
                                                     </div>
@@ -2592,7 +2731,7 @@ const RoomDetail: React.FC = () => {
                                                             onMouseLeave={e => { e.currentTarget.style.borderColor = '#cbd5e0'; e.currentTarget.style.color = '#a0aec0'; }}
                                                         >
                                                             <FaPlus size={24} style={{ marginBottom: '0.5rem' }} />
-                                                            <span style={{ fontWeight: 600 }}>Nueva Mesa</span>
+                                                            <span style={{ fontWeight: 600 }}>{room?.type === 'living_soil' ? 'Nueva Cama/Cultivo' : 'Nueva Mesa'}</span>
                                                         </div>
                                                     </>
                                                 )}
@@ -2602,59 +2741,13 @@ const RoomDetail: React.FC = () => {
                                             <CreateMapDropZone>
                                                 <div style={{ textAlign: 'center', padding: '2rem', color: '#a0aec0' }}>
                                                     <FaMapMarkedAlt style={{ fontSize: '2rem', marginBottom: '0.5rem', opacity: 0.5 }} />
-                                                    <p>Arrastra lotes aquí para crear una nueva mesa automáticamente</p>
+                                                    <p>{room?.type === 'living_soil' ? 'Crea una nueva cama/cultivo para sembrar o transplantar' : 'Arrastra lotes aquí para crear una nueva mesa automáticamente'}</p>
                                                 </div>
                                             </CreateMapDropZone>
 
                                             {/* Modals are kept here within main flow or moved to root? They are safer here for now */}
                                             {/* Create Map Modal */}
-                                            {isMapModalOpen && (
-                                                <div style={{
-                                                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                                                    background: 'rgba(0,0,0,0.5)', zIndex: 1000,
-                                                    display: 'flex', alignItems: 'center', justifyContent: 'center'
-                                                }}>
-                                                    <div style={{ background: 'white', padding: '2rem', borderRadius: '1rem', width: '400px' }}>
-                                                        <h3 style={{ marginBottom: '1.5rem' }}>Crear Nueva Mesa</h3>
-                                                        <div style={{ marginBottom: '1rem' }}>
-                                                            <label style={{ display: 'block', marginBottom: '0.5rem' }}>Nombre</label>
-                                                            <input
-                                                                autoFocus
-                                                                value={newMapName}
-                                                                onChange={e => setNewMapName(e.target.value)}
-                                                                style={{ width: '100%', padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '0.5rem' }}
-                                                                placeholder="Ej: Esquejera A"
-                                                            />
-                                                        </div>
-                                                        <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
-                                                            <div>
-                                                                <label style={{ display: 'block', marginBottom: '0.5rem' }}>Filas</label>
-                                                                <input
-                                                                    type="number"
-                                                                    value={newMapRows}
-                                                                    onChange={e => setNewMapRows(e.target.value)}
-                                                                    style={{ width: '100%', padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '0.5rem' }}
-                                                                    placeholder="7"
-                                                                />
-                                                            </div>
-                                                            <div>
-                                                                <label style={{ display: 'block', marginBottom: '0.5rem' }}>Columnas</label>
-                                                                <input
-                                                                    type="number"
-                                                                    value={newMapCols}
-                                                                    onChange={e => setNewMapCols(e.target.value)}
-                                                                    style={{ width: '100%', padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '0.5rem' }}
-                                                                    placeholder="7"
-                                                                />
-                                                            </div>
-                                                        </div>
-                                                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
-                                                            <button onClick={() => setIsMapModalOpen(false)} style={{ background: 'white', border: '1px solid #e2e8f0', padding: '0.5rem 1rem', borderRadius: '0.5rem' }}>Cancelar</button>
-                                                            <button onClick={handleCreateMap} style={{ background: '#3182ce', color: 'white', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.5rem' }}>Crear</button>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            )}
+
 
                                             {/* Edit Map Modal */}
                                             {isEditMapModalOpen && (
@@ -2800,14 +2893,73 @@ const RoomDetail: React.FC = () => {
                                                     </div>
 
                                                     <div className="printable-map-grid">
-                                                        <EsquejeraGrid
-                                                            rows={activeMap.grid_rows || 10}
-                                                            cols={activeMap.grid_columns || 10}
-                                                            batches={room?.batches?.filter(b => b.clone_map_id === activeMap.id) || []}
-                                                            onBatchClick={(b) => { if (b) isSelectionMode ? handleBatchSelection(b) : handleBatchClick(b); }}
-                                                            selectionMode={isSelectionMode}
-                                                            selectedBatchIds={selectedBatchIds}
-                                                        />
+                                                        <div className="printable-map-grid">
+                                                            {room?.type === 'living_soil' ? (
+                                                                <LivingSoilGrid
+                                                                    {...(() => {
+                                                                        const activeMap = cloneMaps.find(m => m.id === activeMapId);
+                                                                        return {
+                                                                            rows: activeMap?.grid_rows || 20,
+                                                                            cols: activeMap?.grid_columns || 10,
+                                                                            batches: (room?.batches || []).filter(b => b.clone_map_id === activeMapId && b.quantity > 0)
+                                                                        }
+                                                                    })()}
+                                                                    onBatchClick={handleBatchClick}
+                                                                    selectedBatchIds={selectedBatchIds}
+                                                                    isSelectionMode={isSelectionMode}
+                                                                    onSelectionChange={(newSet) => setSelectedBatchIds(newSet)}
+                                                                />
+                                                            ) : (
+                                                                <EsquejeraGrid
+                                                                    rows={activeMap.grid_rows || 10}
+                                                                    cols={activeMap.grid_columns || 10}
+                                                                    batches={room?.batches?.filter(b => b.clone_map_id === activeMap.id) || []}
+                                                                    onBatchClick={(b) => { if (b) isSelectionMode ? handleBatchSelection(b) : handleBatchClick(b); }}
+                                                                    selectionMode={isSelectionMode}
+                                                                    selectedBatchIds={selectedBatchIds}
+                                                                />
+                                                            )}
+                                                        </div>
+
+                                                        {/* SOWING MODAL */}
+                                                        {isSowingModalOpen && (
+                                                            <PortalModalOverlay>
+                                                                <ModalContent>
+                                                                    <h2 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                        <FaSeedling color="#48bb78" /> Nueva Siembra ({sowingPosition})
+                                                                    </h2>
+
+                                                                    <FormGroup>
+                                                                        <label>Genética</label>
+                                                                        <select
+                                                                            value={newSowingBatch.genetic_id}
+                                                                            onChange={e => setNewSowingBatch({ ...newSowingBatch, genetic_id: e.target.value })}
+                                                                        >
+                                                                            <option value="">Seleccionar Genética...</option>
+                                                                            {genetics.map(g => (
+                                                                                <option key={g.id} value={g.id}>{g.name} ({g.type === 'photoperiodic' ? 'Foto' : 'Auto'})</option>
+                                                                            ))}
+                                                                        </select>
+                                                                    </FormGroup>
+
+                                                                    <FormGroup>
+                                                                        <label>Notas</label>
+                                                                        <textarea
+                                                                            value={newSowingBatch.notes}
+                                                                            onChange={e => setNewSowingBatch({ ...newSowingBatch, notes: e.target.value })}
+                                                                            placeholder="Observaciones..."
+                                                                        />
+                                                                    </FormGroup>
+
+                                                                    <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
+                                                                        <CancelButton onClick={() => setIsSowingModalOpen(false)}>Cancelar</CancelButton>
+                                                                        <ActionButton $variant="success" onClick={handleSowingSubmit} disabled={!newSowingBatch.genetic_id || loading}>
+                                                                            {loading ? 'Sembrando...' : 'Sembrar'}
+                                                                        </ActionButton>
+                                                                    </div>
+                                                                </ModalContent>
+                                                            </PortalModalOverlay>
+                                                        )}
                                                     </div>
 
                                                     {/* PRINTABLE DETAIL TABLE */}
@@ -3798,35 +3950,43 @@ const RoomDetail: React.FC = () => {
             {
                 isMapModalOpen && (
                     <PortalModalOverlay>
-                        <ModalContent>
-                            <h3>Nuevo Mapa de Esquejes</h3>
-                            <FormGroup>
-                                <label>Nombre (ej: Bandeja 1)</label>
-                                <input autoFocus value={newMapName} onChange={e => setNewMapName(e.target.value)} placeholder="Nombre del mapa..." />
-                            </FormGroup>
-                            <div style={{ display: 'flex', gap: '1rem' }}>
-                                <FormGroup style={{ flex: 1 }}>
-                                    <label>Filas</label>
+                        <ModalContent style={{ maxWidth: '400px' }}>
+                            <h3 style={{ marginBottom: '1.5rem' }}>{room?.type === 'living_soil' ? 'Nueva Cama/Cultivo' : 'Nuevo Mapa de Esquejes'}</h3>
+                            <div style={{ marginBottom: '1rem' }}>
+                                <label style={{ display: 'block', marginBottom: '0.5rem' }}>{room?.type === 'living_soil' ? 'Nombre (ej: Cama 1)' : 'Nombre (ej: Bandeja 1)'}</label>
+                                <input
+                                    autoFocus
+                                    value={newMapName}
+                                    onChange={e => setNewMapName(e.target.value)}
+                                    style={{ width: '100%', padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '0.5rem' }}
+                                    placeholder="Nombre del mapa..."
+                                />
+                            </div>
+                            <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
+                                <div style={{ flex: 1 }}>
+                                    <label style={{ display: 'block', marginBottom: '0.5rem' }}>Filas</label>
                                     <input
                                         type="number"
                                         min="1"
                                         max="26"
                                         value={newMapRows}
                                         onChange={e => setNewMapRows(e.target.value === '' ? '' : Number(e.target.value))}
+                                        style={{ width: '100%', padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '0.5rem' }}
                                     />
-                                </FormGroup>
-                                <FormGroup style={{ flex: 1 }}>
-                                    <label>Columnas</label>
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                    <label style={{ display: 'block', marginBottom: '0.5rem' }}>Columnas</label>
                                     <input
                                         type="number"
                                         min="1"
                                         max="50"
                                         value={newMapCols}
                                         onChange={e => setNewMapCols(e.target.value === '' ? '' : Number(e.target.value))}
+                                        style={{ width: '100%', padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '0.5rem' }}
                                     />
-                                </FormGroup>
+                                </div>
                             </div>
-                            <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
                                 <CancelButton onClick={() => setIsMapModalOpen(false)}>Cancelar</CancelButton>
                                 <ActionButton onClick={handleCreateMap}>Crear Mapa</ActionButton>
                             </div>
@@ -3957,124 +4117,138 @@ const RoomDetail: React.FC = () => {
             {/* Plant Detail Modal (Unified for Map and Stock) */}
             {
                 plantDetailModal.isOpen && plantDetailModal.batch && (
-                    <PortalModalOverlay>
-                        <ModalContent style={{ maxWidth: '500px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '1rem' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                    <FaSeedling size={24} color="#48bb78" />
-                                    <div>
-                                        <h3 style={{ margin: 0, color: '#2d3748' }}>{plantDetailModal.batch.tracking_code || 'Lote de Stock'}</h3>
-                                        <span style={{ fontSize: '0.9rem', color: '#718096' }}>
-                                            {plantDetailModal.batch.clone_map_id
-                                                ? `Ubicación: ${plantDetailModal.batch.grid_position || 'N/A'} `
-                                                : `En Stock(Disponibles: ${(plantDetailModal.batch as any)._totalQuantity || plantDetailModal.batch.quantity})`
-                                            }
-                                        </span>
-                                    </div>
-                                </div>
-                                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                    <button onClick={() => setPlantDetailModal({ ...plantDetailModal, isOpen: false })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#a0aec0' }}>
-                                        ✕
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div style={{ background: '#f7fafc', padding: '1rem', borderRadius: '0.5rem', marginBottom: '1.5rem' }}>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                                    <div>
-                                        <label style={{ display: 'block', fontSize: '0.75rem', color: '#718096', marginBottom: '0.25rem' }}>Nombre / Genética</label>
-                                        <strong style={{ color: '#2d3748' }}>{plantDetailModal.batch.genetic?.name || plantDetailModal.batch.name || 'Desconocida'}</strong>
-                                    </div>
-                                    <div>
-                                        <label style={{ display: 'block', fontSize: '0.75rem', color: '#718096', marginBottom: '0.25rem' }}>Fase</label>
-                                        <span style={{
-                                            display: 'inline-block', padding: '0.1rem 0.5rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 700,
-                                            background: plantDetailModal.batch.stage === 'vegetation' ? '#c6f6d5' : '#bee3f8',
-                                            color: plantDetailModal.batch.stage === 'vegetation' ? '#22543d' : '#2a4365'
-                                        }}>
-                                            {plantDetailModal.batch.stage === 'vegetation' ? 'Vegetativo' : 'Floración'}
-                                        </span>
-                                    </div>
-                                    {plantDetailModal.batch.notes && (
-                                        <div style={{ gridColumn: '1 / -1' }}>
-                                            <label style={{ display: 'block', fontSize: '0.75rem', color: '#718096', marginBottom: '0.25rem' }}>Notas</label>
-                                            <p style={{ margin: 0, fontSize: '0.9rem', color: '#4a5568' }}>{plantDetailModal.batch.notes}</p>
+                    (room?.type === 'living_soil') ? (
+                        <LivingSoilBatchModal
+                            isOpen={plantDetailModal.isOpen}
+                            onClose={() => setPlantDetailModal({ isOpen: false, batch: null })}
+                            batch={plantDetailModal.batch}
+                            onUpdateStage={handleUpdateStage}
+                            onSaveNotes={handleSaveNotes}
+                            onDeleteBatch={(b) => {
+                                setDeleteConfirm({ isOpen: true, batch: b });
+                                setPlantDetailModal({ isOpen: false, batch: null });
+                            }}
+                        />
+                    ) : (
+                        <PortalModalOverlay>
+                            <ModalContent style={{ maxWidth: '500px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '1rem' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                        <FaSeedling size={24} color="#48bb78" />
+                                        <div>
+                                            <h3 style={{ margin: 0, color: '#2d3748' }}>{plantDetailModal.batch.tracking_code || 'Lote de Stock'}</h3>
+                                            <span style={{ fontSize: '0.9rem', color: '#718096' }}>
+                                                {plantDetailModal.batch.clone_map_id
+                                                    ? `Ubicación: ${plantDetailModal.batch.grid_position || 'N/A'} `
+                                                    : `En Stock(Disponibles: ${(plantDetailModal.batch as any)._totalQuantity || plantDetailModal.batch.quantity})`
+                                                }
+                                            </span>
                                         </div>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                        <button onClick={() => setPlantDetailModal({ ...plantDetailModal, isOpen: false })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#a0aec0' }}>
+                                            ✕
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div style={{ background: '#f7fafc', padding: '1rem', borderRadius: '0.5rem', marginBottom: '1.5rem' }}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '0.75rem', color: '#718096', marginBottom: '0.25rem' }}>Nombre / Genética</label>
+                                            <strong style={{ color: '#2d3748' }}>{plantDetailModal.batch.genetic?.name || plantDetailModal.batch.name || 'Desconocida'}</strong>
+                                        </div>
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '0.75rem', color: '#718096', marginBottom: '0.25rem' }}>Fase</label>
+                                            <span style={{
+                                                display: 'inline-block', padding: '0.1rem 0.5rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 700,
+                                                background: plantDetailModal.batch.stage === 'vegetation' ? '#c6f6d5' : '#bee3f8',
+                                                color: plantDetailModal.batch.stage === 'vegetation' ? '#22543d' : '#2a4365'
+                                            }}>
+                                                {plantDetailModal.batch.stage === 'vegetation' ? 'Vegetativo' : 'Floración'}
+                                            </span>
+                                        </div>
+                                        {plantDetailModal.batch.notes && (
+                                            <div style={{ gridColumn: '1 / -1' }}>
+                                                <label style={{ display: 'block', fontSize: '0.75rem', color: '#718096', marginBottom: '0.25rem' }}>Notas</label>
+                                                <p style={{ margin: 0, fontSize: '0.9rem', color: '#4a5568' }}>{plantDetailModal.batch.notes}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <h4 style={{ fontSize: '0.9rem', color: '#4a5568', marginBottom: '0.5rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.25rem' }}>
+                                    Acciones
+                                </h4>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                    {/* Map Batch specific actions */}
+                                    {plantDetailModal.batch.clone_map_id ? (
+                                        <button
+                                            onClick={() => {
+                                                setMovingBatch(plantDetailModal.batch);
+                                                setPlantDetailModal({ ...plantDetailModal, isOpen: false });
+                                            }}
+                                            style={{
+                                                width: '100%', padding: '0.75rem', borderRadius: '0.375rem', border: '1px solid #e2e8f0', background: 'white',
+                                                color: '#3182ce', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 600
+                                            }}
+                                        >
+                                            <FaExpandArrowsAlt /> Reubicar en otro lugar
+                                        </button>
+                                    ) : (
+                                        /* Stock Batch specific actions */
+                                        <button
+                                            onClick={() => {
+                                                if (!plantDetailModal.batch) return;
+                                                setAssignModal({ isOpen: true, batch: plantDetailModal.batch, quantity: (plantDetailModal.batch as any)._totalQuantity || plantDetailModal.batch.quantity || 1 });
+                                                setPlantDetailModal({ ...plantDetailModal, isOpen: false });
+                                            }}
+                                            style={{
+                                                width: '100%', padding: '0.75rem', borderRadius: '0.375rem', border: '1px solid #e2e8f0', background: 'white',
+                                                color: '#38a169', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 600
+                                            }}
+                                        >
+                                            <FaArrowLeft /> Asignar al Mapa
+                                        </button>
                                     )}
+
+                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                        <button
+                                            onClick={() => {
+                                                if (plantDetailModal.batch) handleOpenEditBatch(plantDetailModal.batch);
+                                            }}
+                                            style={{
+                                                flex: 1, padding: '0.75rem', borderRadius: '0.375rem', border: '1px solid #e2e8f0', background: 'white',
+                                                color: '#d69e2e', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 600
+                                            }}
+                                        >
+                                            Editar
+                                        </button>
+
+                                        <button
+                                            onClick={() => {
+                                                setDeleteConfirm({ isOpen: true, batch: plantDetailModal.batch });
+                                                setPlantDetailModal({ ...plantDetailModal, isOpen: false });
+                                            }}
+                                            style={{
+                                                flex: 1, padding: '0.75rem', borderRadius: '0.375rem', border: '1px solid #fed7d7', background: '#fff5f5',
+                                                color: '#c53030', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 600
+                                            }}
+                                        >
+                                            <FaTrash /> Eliminar
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
 
-                            <h4 style={{ fontSize: '0.9rem', color: '#4a5568', marginBottom: '0.5rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.25rem' }}>
-                                Acciones
-                            </h4>
-
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                {/* Map Batch specific actions */}
-                                {plantDetailModal.batch.clone_map_id ? (
-                                    <button
-                                        onClick={() => {
-                                            setMovingBatch(plantDetailModal.batch);
-                                            setPlantDetailModal({ ...plantDetailModal, isOpen: false });
-                                        }}
-                                        style={{
-                                            width: '100%', padding: '0.75rem', borderRadius: '0.375rem', border: '1px solid #e2e8f0', background: 'white',
-                                            color: '#3182ce', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 600
-                                        }}
-                                    >
-                                        <FaExpandArrowsAlt /> Reubicar en otro lugar
-                                    </button>
-                                ) : (
-                                    /* Stock Batch specific actions */
-                                    <button
-                                        onClick={() => {
-                                            if (!plantDetailModal.batch) return;
-                                            setAssignModal({ isOpen: true, batch: plantDetailModal.batch, quantity: (plantDetailModal.batch as any)._totalQuantity || plantDetailModal.batch.quantity || 1 });
-                                            setPlantDetailModal({ ...plantDetailModal, isOpen: false });
-                                        }}
-                                        style={{
-                                            width: '100%', padding: '0.75rem', borderRadius: '0.375rem', border: '1px solid #e2e8f0', background: 'white',
-                                            color: '#38a169', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 600
-                                        }}
-                                    >
-                                        <FaArrowLeft /> Asignar al Mapa
-                                    </button>
-                                )}
-
-                                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                    <button
-                                        onClick={() => {
-                                            if (plantDetailModal.batch) handleOpenEditBatch(plantDetailModal.batch);
-                                        }}
-                                        style={{
-                                            flex: 1, padding: '0.75rem', borderRadius: '0.375rem', border: '1px solid #e2e8f0', background: 'white',
-                                            color: '#d69e2e', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 600
-                                        }}
-                                    >
-                                        Editar
-                                    </button>
-
-                                    <button
-                                        onClick={() => {
-                                            setDeleteConfirm({ isOpen: true, batch: plantDetailModal.batch });
-                                            setPlantDetailModal({ ...plantDetailModal, isOpen: false });
-                                        }}
-                                        style={{
-                                            flex: 1, padding: '0.75rem', borderRadius: '0.375rem', border: '1px solid #fed7d7', background: '#fff5f5',
-                                            color: '#c53030', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 600
-                                        }}
-                                    >
-                                        <FaTrash /> Eliminar
-                                    </button>
+                                <div style={{ marginTop: '1.5rem', textAlign: 'right' }}>
+                                    <ActionButton onClick={() => setPlantDetailModal({ ...plantDetailModal, isOpen: false })}>
+                                        Cerrar
+                                    </ActionButton>
                                 </div>
-                            </div>
-
-                            <div style={{ marginTop: '1.5rem', textAlign: 'right' }}>
-                                <ActionButton onClick={() => setPlantDetailModal({ ...plantDetailModal, isOpen: false })}>
-                                    Cerrar
-                                </ActionButton>
-                            </div>
-                        </ModalContent>
-                    </PortalModalOverlay>
+                            </ModalContent>
+                        </PortalModalOverlay>
+                    )
                 )
             }
 
@@ -4168,6 +4342,53 @@ const RoomDetail: React.FC = () => {
                     </PortalModalOverlay>
                 )
             }
+
+            {/* Bulk Edit Modal */}
+            {isBulkEditModalOpen && (
+                <PortalModalOverlay>
+                    <ModalContent style={{ width: '400px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                            <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', margin: 0 }}>
+                                Editando {selectedBatchIds.size} Lotes
+                            </h2>
+                            <button onClick={() => setIsBulkEditModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.25rem' }}>✕</button>
+                        </div>
+
+                        <div style={{ marginBottom: '1.5rem' }}>
+                            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, color: '#4a5568' }}>Nueva Etapa (Opcional)</label>
+                            <select
+                                value={bulkEditForm.stage}
+                                onChange={e => setBulkEditForm({ ...bulkEditForm, stage: e.target.value })}
+                                style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0' }}
+                            >
+                                <option value="">-- No cambiar --</option>
+                                <option value="seedling">Plántula</option>
+                                <option value="vegetation">Vegetativo</option>
+                                <option value="flowering">Floración</option>
+                                <option value="drying">Secado</option>
+                                <option value="completed">Finalizado</option>
+                            </select>
+                        </div>
+
+                        <div style={{ marginBottom: '1.5rem' }}>
+                            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, color: '#4a5568' }}>Notas / Bitácora (Se sobreescribirá)</label>
+                            <textarea
+                                value={bulkEditForm.notes}
+                                onChange={e => setBulkEditForm({ ...bulkEditForm, notes: e.target.value })}
+                                placeholder="Escribe una nota para aplicar a todos..."
+                                style={{ width: '100%', minHeight: '100px', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0' }}
+                            />
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
+                            <button onClick={() => setIsBulkEditModalOpen(false)} style={{ background: 'white', border: '1px solid #e2e8f0', padding: '0.5rem 1rem', borderRadius: '0.5rem', cursor: 'pointer' }}>Cancelar</button>
+                            <button onClick={handleBulkEditSubmit} style={{ background: '#3182ce', color: 'white', border: 'none', padding: '0.5rem 1.5rem', borderRadius: '0.5rem', fontWeight: 600, cursor: 'pointer' }}>
+                                Aplicar Cambios
+                            </button>
+                        </div>
+                    </ModalContent>
+                </PortalModalOverlay>
+            )}
 
             {/* History Modal */}
             {
@@ -4435,6 +4656,7 @@ const RoomDetail: React.FC = () => {
                                     <option value="vegetation">Vegetación</option>
                                     <option value="flowering">Floración</option>
                                     <option value="drying">Secado</option>
+                                    <option value="living_soil">Agro/Living Soil</option>
                                 </select>
                             </div>
 

@@ -370,8 +370,8 @@ const VisualStageBadge = styled.div<{ $type: string }>`
   text-transform: uppercase;
   font-size: 0.85rem;
   letter-spacing: 0.05em;
-  background: ${p => p.$type === 'vegetation' ? '#c6f6d5' : p.$type === 'flowering' ? '#fbd38d' : p.$type === 'mother' ? '#e9d8fd' : p.$type === 'clones' ? '#b2f5ea' : p.$type === 'germination' ? '#feebc8' : '#e2e8f0'};
-  color: ${p => p.$type === 'vegetation' ? '#22543d' : p.$type === 'flowering' ? '#975a16' : p.$type === 'mother' ? '#553c9a' : p.$type === 'clones' ? '#234e52' : p.$type === 'germination' ? '#7b341e' : '#4a5568'};
+  background: ${p => p.$type === 'vegetation' ? '#c6f6d5' : p.$type === 'flowering' ? '#fbd38d' : p.$type === 'mother' ? '#e9d8fd' : p.$type === 'clones' ? '#b2f5ea' : p.$type === 'germination' ? '#feebc8' : p.$type === 'living_soil' ? '#d4edda' : '#e2e8f0'};
+  color: ${p => p.$type === 'vegetation' ? '#22543d' : p.$type === 'flowering' ? '#975a16' : p.$type === 'mother' ? '#553c9a' : p.$type === 'clones' ? '#234e52' : p.$type === 'germination' ? '#7b341e' : p.$type === 'living_soil' ? '#155724' : '#4a5568'};
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
   z-index: 5;
 
@@ -775,7 +775,7 @@ const CropDetail: React.FC = () => {
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
   const [roomForm, setRoomForm] = useState<{
     name: string;
-    type: 'vegetation' | 'flowering' | 'drying' | 'clones' | 'mother' | 'germination';
+    type: 'vegetation' | 'flowering' | 'drying' | 'clones' | 'mother' | 'germination' | 'living_soil';
     medium: 'maceta' | 'bandeja' | 'bunker';
     totalMacetas: number;
     macetaGeneticId: string;
@@ -985,7 +985,7 @@ const CropDetail: React.FC = () => {
     console.log("Form Data:", roomForm);
     console.log("Crop ID:", id);
 
-    if (!roomForm.name || !id || !roomForm.operationalDays) {
+    if (!roomForm.name || !id || (!roomForm.operationalDays && roomForm.type !== 'living_soil')) {
       console.error("Missing name, ID, or operational days");
       alert("Por favor completa el nombre de la sala y los días de funcionamiento.");
       return;
@@ -1723,14 +1723,16 @@ const CropDetail: React.FC = () => {
                                 : room.type === 'mother' ? <FaSeedling />
                                   : room.type === 'clones' ? <span>🧬</span>
                                     : room.type === 'germination' ? <span>🌱</span>
-                                      : <FaWarehouse />}
+                                      : room.type === 'living_soil' ? <span>🌍</span>
+                                        : <FaWarehouse />}
                             <span>
                               {room.type === 'vegetation' ? 'VEGETACIÓN'
                                 : room.type === 'flowering' ? 'FLORA'
                                   : room.type === 'mother' ? 'MADRES'
                                     : room.type === 'clones' ? 'ESQUEJERA'
                                       : room.type === 'germination' ? 'GERMINACIÓN'
-                                        : 'SECADO'}
+                                        : room.type === 'living_soil' ? 'LIVING SOIL'
+                                          : 'SECADO'}
                             </span>
                           </VisualStageBadge>
                         </div>
@@ -2307,17 +2309,19 @@ const CropDetail: React.FC = () => {
                 />
               </FormGroup>
 
-              <FormGroup>
-                <label>Días de Funcionamiento <span style={{ color: 'red' }}>*</span></label>
-                <input
-                  type="number"
-                  placeholder="Ej: 30"
-                  value={roomForm.operationalDays || ''}
-                  onChange={e => setRoomForm({ ...roomForm, operationalDays: e.target.value ? Number(e.target.value) : undefined })}
-                  style={{ width: '100%', padding: '0.4rem', borderRadius: '0.25rem', border: '1px solid #e2e8f0' }}
-                />
-                <small style={{ color: '#718096' }}>Definir la duración del ciclo para activar las alertas.</small>
-              </FormGroup>
+              {roomForm.type !== 'living_soil' && (
+                <FormGroup>
+                  <label>Días de Funcionamiento <span style={{ color: 'red' }}>*</span></label>
+                  <input
+                    type="number"
+                    placeholder="Ej: 30"
+                    value={roomForm.operationalDays || ''}
+                    onChange={e => setRoomForm({ ...roomForm, operationalDays: e.target.value ? Number(e.target.value) : undefined })}
+                    style={{ width: '100%', padding: '0.4rem', borderRadius: '0.25rem', border: '1px solid #e2e8f0' }}
+                  />
+                  <small style={{ color: '#718096' }}>Definir la duración del ciclo para activar las alertas.</small>
+                </FormGroup>
+              )}
 
               <FormGroup>
                 <label>Fase de Cultivo</label>
@@ -2333,6 +2337,7 @@ const CropDetail: React.FC = () => {
                   <option value="clones">Esquejera</option>
                   <option value="germination">Germinación</option>
                   <option value="mother">Sala de Madres</option>
+                  <option value="living_soil">Agro/Living Soil</option>
                 </select>
               </FormGroup>
 
