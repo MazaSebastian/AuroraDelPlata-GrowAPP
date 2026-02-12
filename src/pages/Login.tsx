@@ -244,7 +244,7 @@ const Login: React.FC = () => {
       <LoginCard>
         <Logo>
           <div className="icon-wrapper">
-            <img src="/logo.png" alt="Aurora Del Plata Logo" />
+            <img src="/LOGO APIDC.png" alt="Aurora Del Plata Logo" />
           </div>
           <h1>Bienvenido/a a Aurora Del Plata</h1>
           <p>Gestión de Cultivos</p>
