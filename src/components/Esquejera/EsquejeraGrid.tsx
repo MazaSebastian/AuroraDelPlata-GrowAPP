@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import styled from 'styled-components';
 import { useDroppable } from '@dnd-kit/core';
 import { Batch } from '../../types/rooms';

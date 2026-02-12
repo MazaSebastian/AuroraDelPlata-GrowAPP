@@ -1,13 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import styled from 'styled-components';
 import { Room, Batch, CloneMap } from '../../types/rooms';
-import { FaExchangeAlt, FaArrowRight, FaSeedling, FaMap, FaBoxOpen, FaPlus, FaTrash, FaCheckSquare, FaRegSquare, FaPrint } from 'react-icons/fa';
+import { FaExchangeAlt, FaMap, FaPlus, FaTrash, FaCheckSquare, FaRegSquare, FaPrint } from 'react-icons/fa';
 
 
 import { EsquejeraGrid } from './EsquejeraGrid';
 import { PrintableBatchLabels } from './PrintableBatchLabels'; // Import the new component
-import { DndContext, DragOverlay, useDraggable, useDroppable, DragEndEvent, useSensor, useSensors, PointerSensor } from '@dnd-kit/core';
+import { DndContext, useDraggable, useDroppable, DragEndEvent, useSensor, useSensors, PointerSensor } from '@dnd-kit/core';
 import ToastModal from '../ToastModal';
+
+// ... (Rest of imports and styled components unchanged) ...
+
+// Skipping to component definition for brevity in this tool call, 
+// using TargetContent to match the block I want to change. 
+// Wait, I can't skip content in ReplacementContent if I'm replacing a block.
+// I will split this into multiple calls or just target the specific blocks.
+
+// Block 1: Imports
+
 
 interface TransplantModalProps {
     isOpen: boolean;
@@ -204,7 +214,7 @@ export const TransplantModal: React.FC<TransplantModalProps> = ({ isOpen, onClos
     // Initialize Active Map
     useEffect(() => {
         if (cloneMaps.length > 0 && !activeMapId) setActiveMapId(cloneMaps[0].id);
-    }, [cloneMaps]);
+    }, [cloneMaps, activeMapId]);
 
     // Filter suitable rooms based on current room type
     const targetRooms = rooms.filter(r => {
@@ -345,46 +355,7 @@ export const TransplantModal: React.FC<TransplantModalProps> = ({ isOpen, onClos
         setOrganizeSelection(new Set());
     };
 
-    // Selection Box Logic
-    useEffect(() => {
-        if (!selectionBox) return;
-
-        const handleMouseMove = (e: MouseEvent) => {
-            setSelectionBox(prev => prev ? { ...prev, currentX: e.clientX, currentY: e.clientY } : null);
-        };
-
-        const handleMouseUp = () => {
-            if (selectionBox && singlesContainerRef.current) {
-                // Finalize selection logic could be here if we wanted "select on mouse up",
-                // but usually "live selection" is better.
-                // We perform the final calculation here just to be sure, or rely on live updates.
-                // For performance, let's do live updates in a separate effect or throttled.
-                // Actually, let's calculate intersection on mouse up to avoid lag?
-                // No, users expect visual feedback.
-
-                // Let's do the intersection calculation HERE to ensure final state is correct.
-                calculateSelection(selectionBox.startX, selectionBox.startY, selectionBox.currentX, selectionBox.currentY, false);
-            }
-            setSelectionBox(null);
-        };
-
-        window.addEventListener('mousemove', handleMouseMove);
-        window.addEventListener('mouseup', handleMouseUp);
-
-        return () => {
-            window.removeEventListener('mousemove', handleMouseMove);
-            window.removeEventListener('mouseup', handleMouseUp);
-        };
-    }, [selectionBox]); // Dependency on selectionBox existence
-
-    // Live Selection Calculation (Throttled ideally, but simple for now)
-    useEffect(() => {
-        if (!selectionBox) return;
-        calculateSelection(selectionBox.startX, selectionBox.startY, selectionBox.currentX, selectionBox.currentY, true);
-    }, [selectionBox?.currentX, selectionBox?.currentY]);
-
-
-    const calculateSelection = (startX: number, startY: number, currentX: number, currentY: number, isLive: boolean) => {
+    const calculateSelection = useCallback((startX: number, startY: number, currentX: number, currentY: number, isLive: boolean) => {
         if (!singlesContainerRef.current) return;
 
         const boxRect = {
@@ -398,48 +369,66 @@ export const TransplantModal: React.FC<TransplantModalProps> = ({ isOpen, onClos
         if (Math.abs(currentX - startX) < 5 && Math.abs(currentY - startY) < 5) return;
 
         const items = singlesContainerRef.current.querySelectorAll('[data-draggable-id]');
-        const newSelection = new Set(organizeSelection);
 
-        // If not holding Ctrl/Shift, maybe clear first? 
-        // Classic desktop: separate click vs drag. 
-        // If I start dragging on empty space, usually it selects NEW items.
-        // Let's assume additive for now or implementing a "SelectionMode" state (replace vs add).
-        // Let's implement active selection = (Previous Selection) U (Items in Box)
-        // BUT wait, standard behavior is:
-        // Click on background -> Clear selection based.
-        // Drag -> Select items in box.
+        setOrganizeSelection(prev => {
+            const newSelection = new Set(prev);
 
-        // Complex: We need to know what was selected BEFORE the drag started if we want "Add to selection".
-        // For simplicity: Dragging on background CLEARS previous selection and selects ONLY what is in box (unless Ctrl is held).
+            items.forEach((item) => {
+                const rect = item.getBoundingClientRect();
+                // Intersection Check
+                const intersects = !(rect.right < boxRect.left ||
+                    rect.left > boxRect.right ||
+                    rect.bottom < boxRect.top ||
+                    rect.top > boxRect.bottom);
 
-        // We can't easily implement "Ctrl key held" check inside useEffect without tracking key state or passing it.
-        // Let's simplify: Dragging box ADDS to selection.
-
-        // Better:
-        // On MouseDown: If not Ctrl, clear selection.
-
-        items.forEach((item) => {
-            const rect = item.getBoundingClientRect();
-            // Intersection Check
-            const intersects = !(rect.right < boxRect.left ||
-                rect.left > boxRect.right ||
-                rect.bottom < boxRect.top ||
-                rect.top > boxRect.bottom);
-
-            const id = item.getAttribute('data-draggable-id');
-            if (id) {
-                if (intersects) {
-                    newSelection.add(id);
-                } else if (!isLive) {
-                    // If we want "Select ONLY what is in box", we remove if not intersecting?
-                    // No, that's tricky if we are adding.
-                    // Let's stick to "Add to selection" for this iteration.
+                const id = item.getAttribute('data-draggable-id');
+                if (id) {
+                    if (intersects) {
+                        newSelection.add(id);
+                    }
                 }
-            }
+            });
+            return newSelection;
         });
+    }, []);
 
-        setOrganizeSelection(newSelection);
-    };
+    // Initialize Active Map
+    useEffect(() => {
+        if (cloneMaps.length > 0 && !activeMapId) setActiveMapId(cloneMaps[0].id);
+    }, [cloneMaps, activeMapId]);
+
+    // Selection Box Logic
+    useEffect(() => {
+        if (!selectionBox) return;
+
+        const handleMouseMove = (e: MouseEvent) => {
+            setSelectionBox(prev => prev ? { ...prev, currentX: e.clientX, currentY: e.clientY } : null);
+        };
+
+        const handleMouseUp = () => {
+            if (selectionBox && singlesContainerRef.current) {
+                calculateSelection(selectionBox.startX, selectionBox.startY, selectionBox.currentX, selectionBox.currentY, false);
+            }
+            setSelectionBox(null);
+        };
+
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [selectionBox, calculateSelection]);
+
+    // Live Selection Calculation (Throttled ideally, but simple for now)
+    useEffect(() => {
+        if (!selectionBox) return;
+        calculateSelection(selectionBox.startX, selectionBox.startY, selectionBox.currentX, selectionBox.currentY, true);
+    }, [selectionBox, calculateSelection]);
+
+
+
 
     const handleContainerMouseDown = (e: React.MouseEvent) => {
         // Only if clicking on valid background

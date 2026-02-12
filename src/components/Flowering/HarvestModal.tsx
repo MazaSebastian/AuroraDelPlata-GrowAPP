@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import styled from 'styled-components';
 import { Batch, Room } from '../../types/rooms';
-import { FaLeaf, FaTimes, FaCut, FaCheck } from 'react-icons/fa';
+import { FaTimes, FaCut, FaCheck } from 'react-icons/fa';
 
 interface HarvestModalProps {
     isOpen: boolean;

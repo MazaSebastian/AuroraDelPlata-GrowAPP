@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import styled from 'styled-components';
 import { tuyaService, TuyaDevice } from '../services/tuyaService';
 import { FaLightbulb, FaPlug, FaThermometerHalf, FaTint, FaPowerOff, FaSync, FaExclamationTriangle } from 'react-icons/fa';
-import { LoadingSpinner } from './LoadingSpinner';
+// import { LoadingSpinner } from './LoadingSpinner';
 import { DeviceDetailModal } from './DeviceDetailModal';
 
 const Container = styled.div`
