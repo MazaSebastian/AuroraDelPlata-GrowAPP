@@ -9,7 +9,7 @@ import { stickiesService } from '../services/stickiesService';
 import { Crop } from '../types';
 import { Room } from '../types/rooms';
 
-import styled from 'styled-components';
+import styled, { keyframes, css } from 'styled-components';
 
 import {
   FaSeedling,
@@ -159,6 +159,12 @@ const ContentGrid = styled.div`
   }
 `;
 
+const heartbeat = keyframes`
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(229, 62, 62, 0.7); }
+  70% { transform: scale(1.02); box-shadow: 0 0 0 10px rgba(229, 62, 62, 0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(229, 62, 62, 0); }
+`;
+
 const CountdownGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -166,20 +172,48 @@ const CountdownGrid = styled.div`
   margin-bottom: 2rem;
 `;
 
-const CountdownCard = styled.div<{ stage: string }>`
+interface CountdownCardProps {
+  stage: string;
+  $alertLevel?: number; // 0: None, 1: Badge Red, 2: Border Red, 3: Heartbeat
+}
+
+const CountdownCard = styled.div<CountdownCardProps>`
   background: white;
   border-radius: 1rem;
   padding: 1.5rem;
   border: 1px solid #e2e8f0;
   border-left: 5px solid ${p => p.stage === 'vegetation' ? '#48bb78' : p.stage === 'flowering' ? '#ed8936' : '#cbd5e0'};
   box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  transition: all 0.3s ease;
+
+  // Level 2 Alert: Red Border
+  ${p => p.$alertLevel && p.$alertLevel >= 2 && css`
+      border: 2px solid #e53e3e;
+      border-left: 5px solid #e53e3e;
+  `}
+
+  // Level 3 Alert: Heartbeat
+  ${p => p.$alertLevel && p.$alertLevel >= 3 && css`
+      animation: ${heartbeat} 2s infinite;
+  `}
   
   .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
   .room-name { font-weight: 700; color: #2d3748; font-size: 1.1rem; }
+  
+  .active-badges {
+      display: flex; gap: 0.5rem;
+  }
+
   .stage-badge { 
     font-size: 0.75rem; font-weight: 700; text-transform: uppercase; padding: 0.25rem 0.5rem; border-radius: 999px;
     background: ${p => p.stage === 'vegetation' ? '#c6f6d5' : p.stage === 'flowering' ? '#bee3f8' : '#edf2f7'}; // Note: flowering usually warm colors, but let's distinguish.
     color: ${p => p.stage === 'vegetation' ? '#22543d' : p.stage === 'flowering' ? '#2c5282' : '#4a5568'};
+  }
+
+  // Level 1 Alert: Red Badge for "Days Remaining"
+  .warning-badge {
+      font-size: 0.75rem; font-weight: 700; text-transform: uppercase; padding: 0.25rem 0.5rem; border-radius: 999px;
+      background: #fed7d7; color: #c53030; display: flex; align-items: center; gap: 0.25rem;
   }
   
   .countdown { font-size: 1.25rem; font-weight: 600; color: #4a5568; display: flex; align-items: center; gap: 0.5rem; }
@@ -620,12 +654,18 @@ const Dashboard: React.FC = () => {
                   totalDays = floraWeeks * 7;
                 }
 
-                const daysRemaining = differenceInDays(targetDate, new Date());
-                const daysElapsed = totalDays - daysRemaining;
+                const daysElapsed = differenceInDays(new Date(), startDate);
+                const daysRemaining = totalDays - daysElapsed;
                 const progress = Math.min(100, Math.max(0, (daysElapsed / totalDays) * 100));
 
+                // ALERT LOGIC
+                let alertLevel = 0;
+                if (daysRemaining <= 3) alertLevel = 3;      // Heartbeat
+                else if (daysRemaining <= 5) alertLevel = 2; // Red Border
+                else if (daysRemaining <= 7) alertLevel = 1; // Red Badge only
+
                 return (
-                  <CountdownCard key={room.id} stage={room.type}>
+                  <CountdownCard key={room.id} stage={room.type} $alertLevel={alertLevel}>
                     <div className="header">
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
                         <span className="room-name">{room.name}</span>
@@ -633,17 +673,18 @@ const Dashboard: React.FC = () => {
                           {crops.find(c => c.id === room.spot_id)?.name || 'Sin Crop Asignado'}
                         </span>
                       </div>
-                      <span className="stage-badge">{room.type === 'vegetation' ? 'Vegetativo' : 'Floración'}</span>
+                      <div className="active-badges">
+                        {alertLevel >= 1 && (
+                          <span className="warning-badge">
+                            <FaExclamationTriangle /> Faltan {Math.max(0, daysRemaining)} días
+                          </span>
+                        )}
+                        <span className="stage-badge">{room.type === 'vegetation' ? 'Vegetativo' : 'Floración'}</span>
+                      </div>
                     </div>
 
                     <div className="countdown">
-                      {daysRemaining > 0 ? (
-                        <>
-                          Faltan <span className="days">{daysRemaining}</span> días para {nextStageName}
-                        </>
-                      ) : (
-                        <span style={{ color: '#e53e3e' }}>¡Listo para {nextStageName}!</span>
-                      )}
+                      Van <span className="days">{daysElapsed}</span> días de {room.type === 'vegetation' ? 'Vegetativo' : 'Floración'}
                     </div>
 
                     <div className="progress-bar">

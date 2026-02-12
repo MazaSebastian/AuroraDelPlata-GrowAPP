@@ -334,8 +334,36 @@ const Rooms: React.FC = () => {
                                 <option value="curing">Curado</option>
                                 <option value="clones">Esquejera</option>
                                 <option value="general">General/Mixta</option>
+
                             </select>
                         </FormGroup>
+
+                        {newRoom.type === 'clones' && (
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                <FormGroup>
+                                    <label>Filas (A-Z)</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="26"
+                                        value={(newRoom as any).grid_rows || ''}
+                                        onChange={e => setNewRoom({ ...newRoom, grid_rows: parseInt(e.target.value) } as any)}
+                                        placeholder="Ej: 5"
+                                    />
+                                </FormGroup>
+                                <FormGroup>
+                                    <label>Columnas (1-N)</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="20"
+                                        value={(newRoom as any).grid_columns || ''}
+                                        onChange={e => setNewRoom({ ...newRoom, grid_columns: parseInt(e.target.value) } as any)}
+                                        placeholder="Ej: 10"
+                                    />
+                                </FormGroup>
+                            </div>
+                        )}
 
                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem' }}>
                             <button onClick={closeModal} style={{ padding: '0.75rem', background: 'none', border: '1px solid #e2e8f0', borderRadius: '0.5rem', cursor: 'pointer' }}>Cancelar</button>
@@ -345,7 +373,8 @@ const Rooms: React.FC = () => {
                         </div>
                     </ModalContent>
                 </ModalOverlay>
-            )}
+            )
+            }
 
             <ConfirmModal
                 isOpen={isConfirmDeleteOpen}
@@ -356,7 +385,7 @@ const Rooms: React.FC = () => {
                 confirmText="Eliminar"
                 isDanger
             />
-        </Container>
+        </Container >
     );
 };
 

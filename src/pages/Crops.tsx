@@ -14,7 +14,7 @@ import { cropsService } from '../services/cropsService';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import type { Crop } from '../types';
 import { PromptModal } from '../components/PromptModal';
-import { ConfirmModal } from '../components/ConfirmModal';
+import { DeleteProtectionModal } from '../components/DeleteProtectionModal';
 import { ColorPickerModal } from '../components/ColorPickerModal';
 import { FaPalette } from 'react-icons/fa';
 import { ToastModal } from '../components/ToastModal';
@@ -399,9 +399,18 @@ const Crops: React.FC = () => {
     if (success) {
       loadCrops();
       setConfirmOpen(false);
+
+      // Show Success Toast
+      setToastMessage(`El cultivo "${cropToDelete.name}" ha sido eliminado correctamente.`);
+      setToastType('success');
+      setToastOpen(true);
+
       setCropToDelete(null);
     } else {
-      alert("Error al eliminar el Spot.");
+      // Show Error Toast instead of alert
+      setToastMessage("Error al eliminar el Cultivo. Inténtalo de nuevo.");
+      setToastType('error');
+      setToastOpen(true);
     }
   };
 
@@ -602,15 +611,13 @@ const Crops: React.FC = () => {
         onConfirm={handleSaveCropName}
       />
 
-      {/* Confirm Delete Modal */}
-      <ConfirmModal
+      {/* Confirm Delete Modal (Protected) */}
+      <DeleteProtectionModal
         isOpen={confirmOpen}
-        title="Eliminar Spot"
-        message={`¿Estás seguro de que deseas eliminar el Spot "${cropToDelete?.name}"? Esta acción no se puede deshacer y borrará todas las salas y datos asociados.`}
+        itemType="Cultivo/Spot"
+        itemName={cropToDelete?.name || ''}
         onClose={() => setConfirmOpen(false)}
         onConfirm={handleConfirmDelete}
-        confirmText="Eliminar"
-        isDanger
       />
 
       {/* Color Picker Modal */}

@@ -6,7 +6,7 @@ import Dashboard from './pages/Dashboard';
 import Crops from './pages/Crops';
 import CropDetail from './pages/CropDetail';
 import Rooms from './pages/Rooms';
-import RoomsMap from './pages/RoomsMap';
+
 import RoomDetail from './pages/RoomDetail';
 import Genetics from './pages/Genetics';
 import Clones from './pages/Clones';
@@ -100,13 +100,7 @@ function App() {
             </MainContent>
           </RequireAuth>
         } />
-        <Route path="/rooms/map" element={
-          <RequireAuth>
-            <MainContent>
-              <RoomsMap />
-            </MainContent>
-          </RequireAuth>
-        } />
+
         <Route path="/rooms/:id" element={
           <RequireAuth>
             <MainContent>

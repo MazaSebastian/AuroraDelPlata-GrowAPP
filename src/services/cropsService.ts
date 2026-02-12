@@ -1,5 +1,6 @@
 import { supabase } from './supabaseClient';
 import { Crop } from '../types';
+import { roomsService } from './roomsService';
 import { notificationService } from './notificationService';
 
 export const cropsService = {
@@ -110,6 +111,27 @@ export const cropsService = {
     async deleteCrop(id: string): Promise<boolean> {
         if (!supabase) return false;
 
+        // 1. Delete associated Rooms (and their tasks/batches via roomsService)
+        const { data: rooms } = await supabase
+            .from('rooms')
+            .select('id')
+            .eq('spot_id', id);
+
+        if (rooms && rooms.length > 0) {
+            for (const room of rooms) {
+                // We use roomsService because it handles tasks/batches cleanup
+                const success = await roomsService.deleteRoom(room.id);
+                if (!success) {
+                    console.error(`Failed to delete room ${room.id} for crop ${id}`);
+                    // Continue or abort? Abort to avoid partial state if possible, but usually better to try all.
+                }
+            }
+        }
+
+        // 2. Delete Harvest Logs (if any)
+        await supabase.from('chakra_harvest_logs').delete().eq('crop_id', id);
+
+        // 3. Delete Crop
         const { error } = await supabase
             .from('chakra_crops')
             .delete()

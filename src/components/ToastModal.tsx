@@ -73,41 +73,43 @@ const Button = styled.button<{ type: 'success' | 'error' | 'info' }>`
 `;
 
 interface ToastModalProps {
-    isOpen: boolean;
-    message: string;
-    onClose: () => void;
-    type?: 'success' | 'error' | 'info';
+  isOpen: boolean;
+  message: string;
+  onClose: () => void;
+  type?: 'success' | 'error' | 'info';
 }
 
 export const ToastModal: React.FC<ToastModalProps> = ({
-    isOpen,
-    message,
-    onClose,
-    type = 'info'
+  isOpen,
+  message,
+  onClose,
+  type = 'info'
 }) => {
-    useEffect(() => {
-        const handleEsc = (e: KeyboardEvent) => {
-            if (isOpen && e.key === 'Escape') onClose();
-        };
-        window.addEventListener('keydown', handleEsc);
-        return () => window.removeEventListener('keydown', handleEsc);
-    }, [isOpen, onClose]);
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (isOpen && e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [isOpen, onClose]);
 
-    if (!isOpen) return null;
+  if (!isOpen) return null;
 
-    return (
-        <Overlay onClick={onClose}>
-            <Content onClick={e => e.stopPropagation()}>
-                <IconWrapper type={type}>
-                    {type === 'success' && <FaCheckCircle />}
-                    {type === 'error' && <FaExclamationCircle />}
-                    {type === 'info' && <FaInfoCircle />}
-                </IconWrapper>
-                <Message>{message}</Message>
-                <Button onClick={onClose} type={type}>
-                    Aceptar
-                </Button>
-            </Content>
-        </Overlay>
-    );
+  return (
+    <Overlay onClick={onClose}>
+      <Content onClick={e => e.stopPropagation()}>
+        <IconWrapper type={type}>
+          {type === 'success' && <FaCheckCircle />}
+          {type === 'error' && <FaExclamationCircle />}
+          {type === 'info' && <FaInfoCircle />}
+        </IconWrapper>
+        <Message>{message}</Message>
+        <Button onClick={onClose} type={type}>
+          Aceptar
+        </Button>
+      </Content>
+    </Overlay>
+  );
 };
+
+export default ToastModal;

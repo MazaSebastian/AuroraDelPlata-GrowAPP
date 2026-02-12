@@ -26,7 +26,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
     if (!isOpen) return null;
 
     return (
-        <Overlay onClick={onCancel}>
+        <Overlay>
             <ModalContainer onClick={(e) => e.stopPropagation()}>
                 <IconWrapper $isDestructive={isDestructive}>
                     <FaExclamationTriangle size={24} />

@@ -1,0 +1,30 @@
+
+// Create Map Drop Zone Component (Functional)
+const CreateMapDropZoneComponent = ({ children }: { children: React.ReactNode }) => {
+    const { setNodeRef, isOver } = useDroppable({
+        id: 'create-map-zone',
+        data: { type: 'create-map-zone' }
+    });
+
+    return (
+        <CreateMapDropZone ref={setNodeRef} $isOver={isOver}>
+            {children}
+            {isOver && (
+                 <div style={{
+                    position: 'absolute',
+                    top: 0, left: 0, right: 0, bottom: 0,
+                    background: 'rgba(72, 187, 120, 0.1)',
+                    border: '2px dashed #48bb78',
+                    borderRadius: '0.5rem',
+                    zIndex: 10,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    pointerEvents: 'none'
+                 }}>
+                    <h3 style={{ color: '#2f855a', background: 'white', padding: '0.5rem 1rem', borderRadius: '0.5rem', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+                        <FaPlus /> Soltar para crear Mesa
+                    </h3>
+                 </div>
+            )}
+        </CreateMapDropZone>
+    );
+};

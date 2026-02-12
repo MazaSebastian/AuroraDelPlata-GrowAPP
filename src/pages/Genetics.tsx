@@ -224,6 +224,7 @@ const Genetics: React.FC = () => {
 
         const geneticData = {
             name: newGenetic.name,
+            nomenclatura: newGenetic.nomenclatura, // Added missing field
             type: newGenetic.type as GeneticType,
             vegetative_weeks: newGenetic.vegetative_weeks || 0,
             flowering_weeks: newGenetic.flowering_weeks || 0,

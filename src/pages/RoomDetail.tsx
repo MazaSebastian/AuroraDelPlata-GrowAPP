@@ -1,17 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useMemo } from 'react';
+import { supabase } from '../services/supabaseClient';
+import { createPortal } from 'react-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import styled from 'styled-components';
 import { useAuth } from '../context/AuthContext';
-import {
-    FaArrowLeft, FaPlus, FaCalendarAlt, FaCheck, FaExclamationTriangle,
-    FaSeedling, FaDna, FaThermometerHalf, FaTint, FaClock, FaTrash
-    // Task Icons
-    // FaExclamationTriangle, FaTint, FaCut, FaSkull, FaLeaf, FaFlask, FaBroom
-} from 'react-icons/fa';
+import { FaArrowLeft, FaLeaf, FaTemperatureHigh, FaThermometerHalf, FaTint, FaRulerCombined, FaVectorSquare, FaPlus, FaCalendarAlt, FaSeedling, FaEraser, FaMapMarkedAlt, FaSave, FaExchangeAlt, FaExpandArrowsAlt, FaStickyNote, FaTrash, FaHistory, FaDna, FaClock, FaCheck, FaExclamationTriangle, FaLayerGroup, FaPrint, FaCut, FaPen, FaEdit, FaTasks, FaTimes } from 'react-icons/fa';
+// FaExclamationTriangle, FaTint, FaCut, FaSkull, FaLeaf, FaFlask, FaBroom
 import {
     format, startOfWeek, endOfWeek, startOfMonth, endOfMonth,
     eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths,
-    addDays, addWeeks
+    addDays, addWeeks, differenceInDays
 } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { roomsService } from '../services/roomsService';
@@ -20,8 +18,136 @@ import { stickiesService } from '../services/stickiesService';
 import { Room } from '../types/rooms';
 import { Task, StickyNote, RecurrenceConfig } from '../types';
 import { LoadingSpinner } from '../components/LoadingSpinner';
-import { FaStickyNote } from 'react-icons/fa';
+
+import { GroupDetailModal } from '../components/GroupDetailModal';
 import { TuyaManager } from '../components/TuyaManager';
+import { EsquejeraGrid } from '../components/Esquejera/EsquejeraGrid';
+import { DndContext, DragEndEvent, useSensor, useSensors, MouseSensor, TouchSensor, pointerWithin, closestCenter, useDraggable, useDroppable, DragOverlay } from '@dnd-kit/core';
+import { getGeneticColor } from '../utils/geneticColors';
+import { Batch, CloneMap } from '../types/rooms';
+import { Genetic } from '../types/genetics';
+import { geneticsService } from '../services/geneticsService';
+import { ConfirmationModal } from '../components/ConfirmationModal';
+import { PrintableMapReport } from '../components/Esquejera/PrintableMapReport';
+import { TransplantModal } from '../components/Esquejera/TransplantModal';
+import { HarvestModal } from '../components/Flowering/HarvestModal';
+import { ToastModal } from '../components/ToastModal';
+
+import { createGlobalStyle } from 'styled-components';
+
+// Global Print Styles
+// Handles hiding the report on screen, and hiding everything ELSE on print.
+const GlobalPrintStyles = createGlobalStyle`
+@media screen {
+    .printable-area {
+        display: none!important;
+    }
+    .printable-map-details {
+        display: none !important;
+    }
+}
+
+@media print {
+    @page { size: landscape; margin: 10mm; }
+
+    /* Hide everything by default using a class-based approach + broad selectors */
+    .no-print, nav, aside, header, footer,
+    /* Also hide direct children of root that aren't the print area if needed, 
+       but here we rely on the extensive use of .no-print class */
+    .Toastify {
+        display: none!important;
+    }
+
+    body {
+        background: white;
+        margin: 0;
+        padding: 0;
+        -webkit-print-color-adjust: exact;
+    }
+
+    .printable-area {
+        display: block!important;
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 9999;
+        background: white;
+    }
+
+    /* SPECIFIC MAP PRINT STYLES */
+    /* Use visibility to hide everything but keep the active map */
+    body.printing-map {
+        visibility: hidden;
+    }
+
+    body.printing-map .active-map-container {
+        visibility: visible;
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        background: white;
+        z-index: 10000;
+        padding: 20px;
+        /* SCALING TO FIT PAGE */
+        zoom: 60%; /* Simple zoom for browsers that support it */
+        transform-origin: top left;
+        display: block;
+    }
+    
+    /* Ensure all children of the map are visible */
+    body.printing-map .active-map-container * {
+        visibility: visible;
+    }
+
+    /* Hide specific controls even if they are inside the visible container */
+    body.printing-map .no-print-map-controls {
+        display: none !important;
+    }
+    
+    body.printing-map .map-grid-item {
+        break-inside: avoid;
+        border: 1px solid #000 !important;
+        color: black !important;
+    }
+
+    body.printing-map .printable-map-grid {
+        overflow: visible !important;
+        width: 100% !important;
+        display: block !important;
+    }
+    
+    body.printing-map .printable-map-grid > div {
+         overflow: visible !important;
+         width: 100% !important;
+    }
+
+    /* PRINT DETAIL TABLE STYLES */
+    body.printing-map .printable-map-details {
+        display: block !important;
+        margin-top: 2rem;
+        page-break-before: auto;
+    }
+
+    body.printing-map .printable-map-details table {
+        width: 100%;
+        page-break-inside: auto;
+    }
+
+    body.printing-map .printable-map-details tr {
+        page-break-inside: avoid;
+        page-break-after: auto;
+    }
+    
+    body.printing-map .printable-map-details th,
+    body.printing-map .printable-map-details td {
+        color: black !important;
+        border-color: #000 !important;
+    }
+}
+`;
 
 const Container = styled.div`
   padding: 2rem;
@@ -52,20 +178,28 @@ const getTaskStyles = (type: string) => {
 
 // Badges
 const Badge = styled.span<{ stage?: string, taskType?: string }>`
-  padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid transparent; 
   
   ${p => {
         if (p.stage) {
             return `
-            background: ${p.stage === 'vegetation' ? '#c6f6d5' : p.stage === 'flowering' ? '#fed7d7' : '#edf2f7'};
-            color: ${p.stage === 'vegetation' ? '#22543d' : p.stage === 'flowering' ? '#822727' : '#4a5568'};
+            background: ${p.stage === 'vegetation' ? '#c6f6d5' : p.stage === 'flowering' ? '#fed7d7' : '#f7fafc'};
+            color: ${p.stage === 'vegetation' ? '#22543d' : p.stage === 'flowering' ? '#822727' : '#718096'};
+            ${(p.stage !== 'vegetation' && p.stage !== 'flowering') ? 'border-color: #e2e8f0;' : ''}
           `;
         }
         if (p.taskType) {
             const s = getTaskStyles(p.taskType || '');
             return `background: ${s.bg}; color: ${s.color};`;
         }
-        return `background: #edf2f7; color: #4a5568;`;
+        return `background: #f7fafc; color: #718096; border-color: #e2e8f0;`;
     }}
 `;
 
@@ -76,90 +210,666 @@ const Title = styled.h1` font-size: 1.8rem; color: #2d3748; margin: 1rem 0 0.5re
 
 // Modal Utils
 const ModalOverlay = styled.div`
-  position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000;
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); z-index: 10001;
   display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px);
 `;
+
+const PortalModalOverlay = ({ children }: { children: React.ReactNode }) => {
+    return createPortal(
+        <ModalOverlay onClick={(e) => e.stopPropagation()}>
+            {children}
+        </ModalOverlay>,
+        document.body
+    );
+};
 const ModalContent = styled.div`
   background: white; padding: 2rem; border-radius: 1rem; width: 90%; max-width: 500px; max-height: 90vh; overflow-y: auto;
 `;
 
 
 
+const TrashDropZone = () => {
+    const { setNodeRef, isOver } = useDroppable({ id: 'trash-zone' });
+    return (
+        <div ref={setNodeRef} style={{
+            position: 'fixed', bottom: '30px', right: '30px',
+            width: '60px', height: '60px',
+            borderRadius: '50%',
+            background: isOver ? '#fed7d7' : 'white',
+            color: isOver ? '#c53030' : '#a0aec0',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            border: isOver ? '2px solid #c53030' : '1px solid #e2e8f0',
+            zIndex: 9999,
+            transition: 'all 0.2s',
+            cursor: 'pointer'
+        }}>
+            <FaTrash size={24} />
+        </div>
+    );
+};
+
+const CreateMapDropZone = ({ children }: { children: React.ReactNode }) => {
+    const { setNodeRef, isOver } = useDroppable({ id: 'create-map-zone' });
+
+    return (
+        <div ref={setNodeRef} style={{
+            position: 'relative',
+            minHeight: '200px',
+            borderRadius: '0.5rem',
+            border: isOver ? '2px dashed #48bb78' : '2px dashed transparent',
+            background: isOver ? 'rgba(72, 187, 120, 0.1)' : 'transparent',
+            transition: 'all 0.2s'
+        }}>
+            {children}
+            {isOver && (
+                <div style={{
+                    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: 'rgba(255,255,255,0.8)', zIndex: 10,
+                    pointerEvents: 'none'
+                }}>
+                    <div style={{ color: '#2f855a', fontWeight: 'bold', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <FaPlus /> Soltar para crear Mesa
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+const DroppableMapCard = ({ map, children, onClick }: { map: CloneMap, children: React.ReactNode, onClick: () => void }) => {
+    const { setNodeRef, isOver } = useDroppable({
+        id: `map-${map.id}`,
+        data: { type: 'map', map }
+    });
+
+    return (
+        <div
+            ref={setNodeRef}
+            onClick={onClick}
+            style={{
+                border: isOver ? '2px solid #3182ce' : '1px solid #e2e8f0',
+                borderRadius: '0.5rem',
+                padding: '1.5rem',
+                background: isOver ? '#ebf8ff' : 'white',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                boxShadow: isOver ? '0 4px 6px -1px rgba(0, 0, 0, 0.1)' : '0 1px 3px 0 rgba(0, 0, 0, 0.1)'
+            }}
+        >
+            {children}
+        </div>
+    );
+};
+
+
+
+
 const CancelButton = styled.button`
-  flex: 1; padding: 0.6rem; border: 1px solid #e2e8f0; border-radius: 0.5rem; 
-  background: white; color: #4a5568; cursor: pointer; font-weight: 600;
+  flex: 1; 
+  padding: 0.6rem; 
+  border: 1px solid #e2e8f0; 
+  border-radius: 0.5rem;
+  background: white; 
+  color: #4a5568; 
+  cursor: pointer; 
+  font-weight: 600;
   transition: all 0.2s;
   &:hover { background: #f7fafc; }
   &:disabled { opacity: 0.6; cursor: not-allowed; }
 `;
 
 const ActionButton = styled.button<{ $variant?: 'primary' | 'danger' | 'success' }>`
-  flex: 1; padding: 0.6rem; border: none; border-radius: 0.5rem; 
-  background: ${p => p.$variant === 'danger' ? '#fc8181' : p.$variant === 'success' ? '#48bb78' : '#3182ce'}; 
-  color: white; cursor: pointer; font-weight: 600;
+  flex: 1; 
+  padding: 0.75rem 1rem; 
+  border: none; 
+  border-radius: 0.5rem;
+  background: ${p => p.$variant === 'danger' ? '#fc8181' : p.$variant === 'success' ? '#48bb78' : '#3182ce'};
+  color: white; 
+  cursor: pointer; 
+  font-weight: 600;
+  font-size: 0.9rem;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
   transition: all 0.2s;
-  &:hover { filter: brightness(1.1); }
-  &:disabled { background: #a0aec0; cursor: not-allowed; }
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+
+  &:hover { 
+    filter: brightness(1.1); 
+    transform: translateY(-1px);
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  }
+  &:disabled { 
+    background: #a0aec0; 
+    cursor: not-allowed; 
+    transform: none;
+    box-shadow: none;
+  }
+`;
+
+const MapActionButton = styled.button<{ $variant: 'warning' | 'danger' | 'primary' }>`
+  background: ${p => p.$variant === 'warning' ? '#ecc94b' : p.$variant === 'danger' ? '#fc8181' : '#4299e1'};
+  color: ${p => p.$variant === 'warning' ? '#744210' : '#fff'};
+  border: none;
+  border-radius: 0.375rem;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.8rem;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+    background: ${p => p.$variant === 'warning' ? '#d69e2e' : p.$variant === 'danger' ? '#e53e3e' : '#3182ce'};
+  }
 `;
 
 const FormGroup = styled.div`
-  margin-bottom: 1rem;
-  label { display: block; margin-bottom: 0.5rem; font-weight: 600; color: #4a5568; font-size: 0.9rem; }
-  input, select, textarea { width: 100%; padding: 0.6rem; border: 1px solid #e2e8f0; border-radius: 0.4rem; }
-  textarea { min-height: 80px; }
+  margin-bottom: 1.5rem;
+  label { 
+    display: block; 
+    margin-bottom: 0.5rem; 
+    font-weight: 600; 
+    color: #4a5568; 
+    font-size: 0.9rem; 
+  }
+  input, select, textarea { 
+    width: 100%; 
+    padding: 0.75rem; 
+    border: 1px solid #e2e8f0; 
+    border-radius: 0.5rem; 
+    font-size: 0.95rem;
+    color: #2d3748;
+    background: #fff;
+    transition: all 0.2s;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+
+    &:focus {
+      outline: none;
+      border-color: #3182ce;
+      box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.1);
+    }
+    &::placeholder {
+      color: #a0aec0;
+    }
+  }
+  textarea { min-height: 100px; resize: vertical; font-family: inherit; }
 `;
 
 // Room Header Components
+
+
 const HeaderGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
-  margin-bottom: 2rem;
+display: grid;
+grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+gap: 1.5rem;
+margin-bottom: 2rem;
 `;
 
 const StatCard = styled.div`
-  background: white;
-  padding: 1.5rem;
-  border-radius: 1rem;
-  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  border: 1px solid #e2e8f0;
+background: white;
+padding: 1.5rem;
+border-radius: 1rem;
+box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+display: flex;
+flex-direction: column;
+justify-content: center;
+align-items: flex-start;
+border: 1px solid #e2e8f0;
+transition: transform 0.2s, box-shadow 0.2s;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
   
-  h3 { font-size: 0.85rem; color: #718096; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; display: flex; alignItems: center; gap: 0.5rem; }
-  .value { font-size: 1.5rem; font-weight: 800; color: #2d3748; }
-  .sub { font-size: 0.85rem; color: #a0aec0; margin-top: 0.25rem; }
+  h3 {
+    font-size: 0.75rem;
+    color: #718096;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+}
+  .value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #2d3748;
+    line-height: 1.2;
+}
+  .sub {
+    font-size: 0.875rem;
+    color: #a0aec0;
+    margin-top: 0.25rem;
+}
 `;
 
 const GeneticsList = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
+display: flex;
+flex - wrap: wrap;
+gap: 0.5rem;
+margin - top: 0.5rem;
 `;
 
 const GeneticTag = styled.span`
-  background: #ebf8ff;
-  color: #2b6cb0;
-  font-size: 0.75rem;
-  padding: 0.25rem 0.5rem;
-  border-radius: 0.25rem;
-  font-weight: 600;
-  border: 1px solid #bee3f8;
+background: #ebf8ff;
+color: #2b6cb0;
+font - size: 0.75rem;
+padding: 0.25rem 0.5rem;
+border - radius: 0.25rem;
+font - weight: 600;
 `;
 
-// ... (existing helper definitions) ...
+const DraggableStockBatch = ({ batch, onClick }: { batch: Batch, onClick?: () => void }) => {
+    const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+        id: `stock - ${batch.id} `,
+        data: { type: 'batch', batch, fromStock: true }
+    });
+
+    const geneticName = batch.genetic?.name || batch.name;
+    const colors = getGeneticColor(geneticName);
+
+    return (
+        <div
+            ref={setNodeRef} {...listeners} {...attributes}
+            onClick={onClick}
+            style={{
+                transform: isDragging ? 'translate3d(0,0,0)' : undefined,
+                opacity: isDragging ? 0.5 : 1,
+                background: 'white',
+                padding: '0.5rem',
+                marginBottom: '0',
+                borderRadius: '0.5rem',
+                border: `1px solid ${colors.border} `,
+                borderLeft: `4px solid ${colors.border} `,
+                cursor: 'grab',
+                boxShadow: '0 1px 1px rgba(0,0,0,0.05)',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+            }}
+        >
+            <div>
+                <div style={{ fontWeight: 'bold', fontSize: '0.8rem', color: '#2d3748' }}>{geneticName}</div>
+                <div style={{ fontSize: '0.7rem', color: '#718096' }}>{batch.tracking_code || batch.name}</div>
+            </div>
+            <div style={{
+                background: '#ebf8ff', color: '#2b6cb0', fontWeight: 'bold',
+                padding: '0.15rem 0.4rem', borderRadius: '4px', fontSize: '0.75rem'
+            }}>
+                x{batch.quantity}
+            </div>
+        </div>
+    );
+};
+
+const DraggableGenetic = ({ genetic }: { genetic: Genetic }) => {
+    const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+        id: `genetic - ${genetic.id} `,
+        data: { type: 'genetic', genetic, fromSidebar: true }
+    });
+
+    return (
+        <div
+            ref={setNodeRef} {...listeners} {...attributes}
+            style={{
+                transform: isDragging ? 'translate3d(0,0,0)' : undefined,
+                opacity: isDragging ? 0.5 : 1,
+                background: 'white', padding: '0.75rem', marginBottom: '0.5rem',
+                borderRadius: '0.5rem', border: '1px solid #e2e8f0',
+                cursor: 'grab', boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+            }}
+        >
+            <div>
+                <div style={{ fontWeight: 'bold', fontSize: '0.9rem', color: '#2d3748' }}>{genetic.name}</div>
+                <div style={{ fontSize: '0.75rem', color: '#718096' }}>{genetic.type === 'photoperiodic' ? 'Fotoperiódica' : 'Automática'}</div>
+            </div>
+            <div style={{
+                background: '#ebf8ff', color: '#2b6cb0', fontWeight: 'bold',
+                padding: '0.25rem 0.5rem', borderRadius: '999px', fontSize: '0.8rem'
+            }}>
+                <FaDna />
+            </div>
+        </div>
+    );
+};
+
+
+// --- SIDEBAR GROUPING UTILS ---
+const groupBatchesByGeneticDate = (batches: Batch[]) => {
+    // 1. Identify Roots & Orphans
+    const batchMap = new Map();
+    batches.forEach(b => batchMap.set(b.id, { ...b, children: [] }));
+
+    const roots: any[] = [];
+    const orphans: any[] = [];
+
+    batches.forEach(b => {
+        if (b.parent_batch_id && batchMap.has(b.parent_batch_id)) {
+            batchMap.get(b.parent_batch_id).children.push(b);
+        } else {
+            if (b.parent_batch_id) orphans.push(b); // Orphaned child
+            else roots.push(batchMap.get(b.id)); // Proper Root
+        }
+    });
+
+    // 2. Initial Grouping (Parent-Child)
+    const groups: any[] = [];
+    roots.forEach(root => {
+        root.children.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        groups.push({ root, children: root.children });
+    });
+    orphans.forEach(o => groups.push({ root: o, children: [] }));
+
+    // 3. Smart Grouping (Virtual Batches)
+    const smartGroups: any[] = [];
+    const groupMap = new Map<string, any[]>();
+
+    groups.forEach(group => {
+        const { root } = group;
+
+        // Check for Custom Group Tag in Notes
+        const notes = root.notes || '';
+        const groupMatch = notes.match(/\[Grupo:\s*(.*?)\]/);
+
+        if (groupMatch) {
+            // Priority Grouping by "Grupo: X"
+            const groupName = groupMatch[1].trim();
+            const key = `GROUP|${groupName}`;
+            if (!groupMap.has(key)) {
+                groupMap.set(key, []);
+            }
+            groupMap.get(key)!.push(group);
+        } else {
+            // Default Grouping
+            const dateKey = new Date(root.start_date || root.created_at).toLocaleDateString();
+            // Key: GeneticID | Date
+            const key = `${root.genetic_id || 'unk'}|${dateKey}`;
+
+            if (!groupMap.has(key)) {
+                groupMap.set(key, []);
+            }
+            groupMap.get(key)!.push(group);
+        }
+    });
+
+    groupMap.forEach((bundledGroups, key) => {
+        // If it's a Custom Group, we merge EVERYTHING under that name
+        if (key.startsWith('GROUP|')) {
+            const groupName = key.split('|')[1];
+
+            // Sort by name inside the group for consistency?
+            bundledGroups.sort((a, b) => a.root.name.localeCompare(b.root.name));
+
+            const primary = bundledGroups[0];
+            const rest = bundledGroups.slice(1);
+            const mergedChildren = [...primary.children];
+
+            rest.forEach(g => {
+                mergedChildren.push(g.root);
+                mergedChildren.push(...g.children);
+            });
+
+            // We need a "Fake Root" or use the primary one but Override the Name display?
+            // Let's attach a special property to the root or handle it in the renderer?
+            // The renderer uses `root.name` or smart logic. 
+            // Let's modify the root's `displayName` property if we could, but these are raw objects.
+            // Best way: The SidebarBatchGroup component logic needs to be aware of this scope.
+            // OR we attach a "virtual name" to the root object here.
+
+            // Important: Use the first batch as root, but we must signal that this is a "Named Group"
+            // We can inject a property into the root object (it's a copy effectively in usage or we mutate it carefully)
+            // Actually `roots` are references to objects in memory. Mutating them might be risky if reused.
+            // But valid for this render cycle.
+
+            // Let's create a proxy root for the group?
+            // Currently `SidebarBatchGroup` takes `{ root, children }`.
+            // We can pass `{ root: { ...primary.root, _virtualGroupName: groupName }, children: mergedChildren }`
+
+            smartGroups.push({
+                root: { ...primary.root, _virtualGroupName: groupName },
+                children: mergedChildren
+            });
+
+        } else {
+            // Standard Logic
+            if (bundledGroups.length === 1) {
+                smartGroups.push(bundledGroups[0]);
+            } else {
+                // Merge
+                bundledGroups.sort((a, b) => a.root.name.localeCompare(b.root.name));
+                const primary = bundledGroups[0];
+                const rest = bundledGroups.slice(1);
+                const mergedChildren = [...primary.children];
+                rest.forEach(g => {
+                    mergedChildren.push(g.root);
+                    mergedChildren.push(...g.children);
+                });
+                mergedChildren.sort((a: any, b: any) => a.name.localeCompare(b.name));
+                smartGroups.push({ root: primary.root, children: mergedChildren });
+            }
+        }
+    });
+
+    // Sort by Date Desc
+    // We might want Groups to appear first? Or just by date of the "primary" root?
+    // Current sort works by date of root.
+    smartGroups.sort((a, b) => new Date(b.root.created_at).getTime() - new Date(a.root.created_at).getTime());
+    return smartGroups;
+};
+
+const SidebarBatchGroup = ({ group, expanded, onToggleExpand, childrenRender, onBatchGroupClick, renderHeaderActions }: { group: any, expanded: boolean, onToggleExpand: () => void, childrenRender: (batch: any) => React.ReactNode, onBatchGroupClick?: (batch: any) => void, renderHeaderActions?: (batch: any) => React.ReactNode }) => {
+    const { root, children } = group;
+    const hasChildren = children.length > 0;
+
+    const totalQty = root.quantity + children.reduce((acc: number, c: any) => acc + c.quantity, 0);
+    const displayDate = new Date(root.start_date || root.created_at).toLocaleDateString();
+
+    // Custom Name Logic
+    let displayName = root.name;
+
+    // Check for Virtual Group Name (Custom Grouping from Transplant)
+    if (root._virtualGroupName) {
+        displayName = root._virtualGroupName;
+    } else {
+        if (true) { // Default Smart Naming
+            const geneticName = root.genetic?.name || root.name || 'Desconocida';
+            const prefix = geneticName.substring(0, 6).toUpperCase();
+            displayName = `Lote ${prefix} - ${displayDate}`;
+        }
+    }
+
+    const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+        id: `group-${root.id}`,
+        data: { type: 'batch-group', group, fromSidebar: true }
+    });
+
+    return (
+        <div
+            ref={setNodeRef} {...listeners} {...attributes}
+            style={{
+                marginBottom: '0.25rem',
+                background: '#fff',
+                borderRadius: '0.5rem',
+                border: '1px solid #e2e8f0',
+                overflow: 'hidden',
+                transform: isDragging ? 'translate3d(0,0,0)' : undefined,
+                opacity: isDragging ? 0.3 : 1,
+                cursor: 'grab',
+                touchAction: 'manipulation'
+            }}
+        >
+            {/* Header */}
+            <div
+                onClick={() => {
+                    if (onBatchGroupClick) {
+                        onBatchGroupClick({ ...root, _totalQuantity: totalQty, _displayName: displayName });
+                    } else {
+                        onToggleExpand();
+                    }
+                }}
+                style={{
+                    padding: '0.35rem 0.5rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    background: expanded ? '#ebf8ff' : 'white',
+                    borderBottom: expanded ? '1px solid #bee3f8' : 'none'
+                }}
+            >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleExpand();
+                        }}
+                        style={{ color: '#3182ce', fontSize: '0.65rem', padding: '0.25rem', cursor: 'pointer' }}
+                    >
+                        {expanded ? '▼' : '▶'}
+                    </span>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <strong style={{ fontSize: '0.8rem', color: '#2d3748' }}>{displayName}</strong>
+                        <span style={{ fontSize: '0.75rem', color: '#718096' }}>Total: {totalQty} u.</span>
+                    </div>
+                </div>
+                {/* Header Actions for Groups or Single Batches */}
+                {renderHeaderActions && (
+                    <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', gap: '0.25rem' }}>
+                        {renderHeaderActions(root)}
+                    </div>
+                )}
+            </div>
+
+            {/* Content with internal scroll */}
+            {expanded && (
+                <div
+                    onPointerDown={(e) => e.stopPropagation()}
+                    style={{
+                        padding: '0.25rem',
+                        background: '#f7fafc',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.25rem',
+                        maxHeight: '350px', // Limit height for internal scrolling
+                        overflowY: 'auto',
+                        cursor: 'default'
+                    }}
+                >
+                    {childrenRender(root)}
+                    {children.map((child: any) => childrenRender(child))}
+                </div>
+            )}
+        </div>
+    );
+};
+
 
 const RoomDetail: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
 
+    // --- BULK SELECTION & DELETE ---
+    const [isSelectionMode, setIsSelectionMode] = useState(false);
+    const [selectedBatchIds, setSelectedBatchIds] = useState<Set<string>>(new Set());
+    const [isBulkDeleteConfirmOpen, setIsBulkDeleteConfirmOpen] = useState(false);
+
+    const handleToggleSelectionMode = () => {
+        setIsSelectionMode(!isSelectionMode);
+        setSelectedBatchIds(new Set()); // Clear on toggle
+    };
+
+    const handleBatchSelection = (batch: Batch) => {
+        const newSet = new Set(selectedBatchIds);
+        if (newSet.has(batch.id)) {
+            newSet.delete(batch.id);
+        } else {
+            newSet.add(batch.id);
+        }
+        setSelectedBatchIds(newSet);
+    };
+
+    const handleBulkDeleteFirstStep = () => {
+        if (selectedBatchIds.size === 0) return;
+        setIsBulkDeleteConfirmOpen(true);
+    };
+
+    const handleBulkDeleteConfirm = async () => {
+        setLoading(true);
+        try {
+            const success = await roomsService.deleteBatches(Array.from(selectedBatchIds), 'Eliminación Masiva desde Mapa');
+            if (success) {
+                setToastState({ isOpen: true, message: 'Lotes eliminados correctamente', type: 'success' });
+                setIsSelectionMode(false);
+                setSelectedBatchIds(new Set());
+                if (id) await loadData(id);
+            } else {
+                setToastState({ isOpen: true, message: 'Error al eliminar lotes', type: 'error' });
+            }
+        } catch (error) {
+            console.error(error);
+            setToastState({ isOpen: true, message: 'Error inesperado', type: 'error' });
+        } finally {
+            setLoading(false);
+            setIsBulkDeleteConfirmOpen(false);
+        }
+    };
+    // --- END BULK SELECTION ---
+
     const [room, setRoom] = useState<Room | null>(null);
     const [loading, setLoading] = useState(true);
 
+    const [isMetricsModalOpen, setIsMetricsModalOpen] = useState(false);
+    const [metricsData, setMetricsData] = useState<any[]>([]);
+    const [loadingMetrics, setLoadingMetrics] = useState(false);
+
+    const handleOpenMetrics = async () => {
+        if (!id) return;
+        setLoadingMetrics(true);
+        setIsMetricsModalOpen(true);
+        try {
+            const data = await roomsService.getCloneSuccessMetrics(id);
+            setMetricsData(data);
+        } catch (error) {
+            console.error("Error loading metrics", error);
+        } finally {
+            setLoadingMetrics(false);
+        }
+    };
+
     // Genetics Modal State
     const [isGeneticsModalOpen, setIsGeneticsModalOpen] = useState(false);
+
+    // Create Batch Modal State
+    const [isCreateBatchModalOpen, setIsCreateBatchModalOpen] = useState(false);
+    const [newBatch, setNewBatch] = useState({
+        geneticId: '',
+        quantity: '',
+        date: new Date().toISOString().split('T')[0]
+    });
+    const [genetics, setGenetics] = useState<any[]>([]);
+
+    useEffect(() => {
+        const fetchGenetics = async () => {
+            const data = await roomsService.getGenetics();
+            setGenetics(data);
+        };
+        fetchGenetics();
+    }, []);
+
+    // Group Detail Modal State
+    const [selectedGroupName, setSelectedGroupName] = useState<string | null>(null);
+    const [isGroupDetailModalOpen, setIsGroupDetailModalOpen] = useState(false);
 
     // Calendar State
     const [currentDate, setCurrentDate] = useState(new Date());
@@ -199,22 +909,450 @@ const RoomDetail: React.FC = () => {
     // Real Users State
     const [users, setUsers] = useState<any[]>([]);
 
+    // Clone Maps State
+    const [cloneMaps, setCloneMaps] = useState<CloneMap[]>([]);
+
+    // Distribution Modal State
+    const [isDistributionConfirmOpen, setIsDistributionConfirmOpen] = useState(false);
+    const [distributionData, setDistributionData] = useState<{
+        batches: Batch[];
+        position: string;
+        mapId: string;
+        map: CloneMap;
+    } | null>(null);
+
+    const [toastState, setToastState] = useState<{ isOpen: boolean; message: string; type: 'success' | 'error' | 'info' }>({
+        isOpen: false,
+        message: '',
+        type: 'info'
+    });
+
+    const [searchParams, setSearchParams] = useSearchParams();
+    const activeMapId = searchParams.get('mapId');
+    const setActiveMapId = (id: string | null) => {
+        setSearchParams(prev => {
+            const newParams = new URLSearchParams(prev);
+            if (id) {
+                newParams.set('mapId', id);
+            } else {
+                newParams.delete('mapId');
+            }
+            return newParams;
+        });
+    };
+
+    // Room Edit State
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [editRoomName, setEditRoomName] = useState('');
+    const [editRoomType, setEditRoomType] = useState('');
+    const [editRoomStartDate, setEditRoomStartDate] = useState('');
+
+    useEffect(() => {
+        if (isEditModalOpen && room) {
+            setEditRoomName(room.name);
+            setEditRoomType(room.type || 'vegetation');
+            setEditRoomStartDate(room.start_date ? new Date(room.start_date).toISOString().split('T')[0] : '');
+        }
+    }, [isEditModalOpen, room]);
+
+    const [isMapModalOpen, setIsMapModalOpen] = useState(false);
+    const [newMapName, setNewMapName] = useState('');
+    const [newMapRows, setNewMapRows] = useState<number | string>('');
+    const [newMapCols, setNewMapCols] = useState<number | string>('');
+
+    // Edit Map Modal State
+    const [isEditMapModalOpen, setIsEditMapModalOpen] = useState(false);
+    const [editingMapId, setEditingMapId] = useState<string | null>(null);
+    const [editMapName, setEditMapName] = useState('');
+    const [editMapRows, setEditMapRows] = useState<number | string>('');
+    const [editMapCols, setEditMapCols] = useState<number | string>('');
+
+
+    // Map Deletion Modal State
+    const [isDeleteMapModalOpen, setIsDeleteMapModalOpen] = useState(false);
+    const [mapIdToDelete, setMapIdToDelete] = useState<string | null>(null);
+
+    // History Modal State
+    const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+    const [historyLoading, setHistoryLoading] = useState(false);
+    const [roomHistory, setRoomHistory] = useState<any[]>([]);
+
+
+    // Map Clear Modal State
+    const [isClearMapConfirmOpen, setIsClearMapConfirmOpen] = useState(false);
+
+    // Create Map from Batch Confirmation State
+    const [isCreateMapConfirmOpen, setIsCreateMapConfirmOpen] = useState(false);
+    const [pendingMapBatch, setPendingMapBatch] = useState<Batch | null>(null);
+
+    // Create Map from Group Confirmation State
+    const [isCreateMapFromGroupConfirmOpen, setIsCreateMapFromGroupConfirmOpen] = useState(false);
+    const [pendingMapGroup, setPendingMapGroup] = useState<any | null>(null);
+
+    const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; batch: Batch | null }>({
+        isOpen: false,
+        batch: null
+    });
+
+    const [moveConfirm, setMoveConfirm] = useState<{ isOpen: boolean; position: string | null }>({
+        isOpen: false,
+        position: null
+    });
+
+
+    // Auto-Assign Modal State
+    const [assignModal, setAssignModal] = useState<{ isOpen: boolean; batch: Batch | null; quantity: number | string }>({
+        isOpen: false,
+        batch: null,
+        quantity: 1
+    });
+
+    // Plant Detail Modal State (Individual Clone on Map)
+    const [plantDetailModal, setPlantDetailModal] = useState<{ isOpen: boolean; batch: Batch | null }>({
+        isOpen: false,
+        batch: null
+    });
+
+    // Click-to-Fill State (Legacy - keeping for potentially manual, or removing if fully replaced)
+    // We will replace handleBatchClick to open modal instead.
+    const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
+
+    // Relocation State
+    const [movingBatch, setMovingBatch] = useState<Batch | null>(null);
+
+    // Genetics List for Sidebar (Available Genetics for dropdown)
+    // availableGenetics removed in favor of genetics
+
+    // Edit Batch Modal State
+    const [isEditBatchModalOpen, setIsEditBatchModalOpen] = useState(false);
+    const [editBatchForm, setEditBatchForm] = useState<{ id: string, name: string, quantity: number, notes: string }>({
+        id: '', name: '', quantity: 1, notes: ''
+    });
+
+    // --- SIDEBAR GROUP EXPANSION STATE ---
+    const [expandedSidebarGroups, setExpandedSidebarGroups] = useState<Set<string>>(new Set());
+    const [expandedDryingGroups, setExpandedDryingGroups] = useState<Set<string>>(new Set());
+
+    const toggleSidebarGroupExpansion = (groupId: string) => {
+        setExpandedSidebarGroups(prev => {
+            const next = new Set(prev);
+            if (next.has(groupId)) next.delete(groupId);
+            else next.add(groupId);
+            return next;
+        });
+    };
+
+    const toggleDryingGroupExpansion = (groupId: string) => {
+        setExpandedDryingGroups(prev => {
+            const next = new Set(prev);
+            if (next.has(groupId)) next.delete(groupId);
+            else next.add(groupId);
+            return next;
+        });
+    };
+
+    const handleOpenEditBatch = (batch: Batch) => {
+        setEditBatchForm({
+            id: batch.id,
+            name: batch.name,
+            quantity: batch.quantity,
+            notes: batch.notes || ''
+        });
+        setIsEditBatchModalOpen(true);
+        // Close other modals if open
+        setPlantDetailModal({ ...plantDetailModal, isOpen: false });
+    };
+
+    const [allRooms, setAllRooms] = useState<Room[]>([]);
+
+    // Transplant Modal State
+    const [isTransplantModalOpen, setIsTransplantModalOpen] = useState(false);
+    const [transplantRoom, setTransplantRoom] = useState<Room | null>(null);
+    const [isSingleDistributeConfirmOpen, setIsSingleDistributeConfirmOpen] = useState(false);
+    const [singleDistributionData, setSingleDistributionData] = useState<{ batchId: string, position: string, quantity: number, mapId: string } | null>(null);
+
+    const [transplantForm, setTransplantForm] = useState<{ batchId: string, quantity: number }>({ batchId: '', quantity: 1 });
+
+    const [isHarvestModalOpen, setIsHarvestModalOpen] = useState(false);
+
+    // Toast State
+    const [toastModal, setToastModal] = useState<{ isOpen: boolean; message: string; type: 'success' | 'error' | 'info' }>({
+        isOpen: false, message: '', type: 'info'
+    });
+    const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+        setToastModal({ isOpen: true, message, type });
+    };
+
+    useEffect(() => {
+        // Fetch all rooms for transplant destination selection
+        const fetchAllRooms = async () => {
+            const rooms = await roomsService.getRooms();
+            setAllRooms(rooms);
+        };
+        fetchAllRooms();
+    }, []);
+
+
+    // HARVEST CONFIRM HANDLER
+    // HARVEST CONFIRM HANDLER
+    const [harvestTargetMapId, setHarvestTargetMapId] = useState<string | null>(null); // Track which map is being harvested
+
+    // HARVEST CONFIRM HANDLER
+    const handleHarvestConfirm = async (selectedBatchIds: string[], targetRoomId?: string) => {
+        try {
+            // Use dedicated harvest service
+            await roomsService.harvestBatches(selectedBatchIds, targetRoomId);
+
+            showToast('Cosecha registrada correctamente', 'success');
+            if (id) await loadData(id);
+            setHarvestTargetMapId(null);
+            if (id) await loadData(id);
+
+        } catch (error) {
+            console.error(error);
+            showToast('Error al registrar cosecha', 'error');
+        }
+    };
+
+    // FINALIZE DRYING BATCH HANDLER
+    const [finalizeBatch, setFinalizeBatch] = useState<{ id: string, name: string, quantity: number } | null>(null);
+    const [finalWeight, setFinalWeight] = useState('');
+    const [finalNotes, setFinalNotes] = useState('');
+
+    const handleOpenFinalize = (batch: Batch) => {
+        setFinalizeBatch({ id: batch.id, name: batch.genetic?.name || batch.name, quantity: batch.quantity });
+        setFinalWeight('');
+        setFinalNotes('');
+    };
+
+    const handleConfirmFinalize = async () => {
+        if (!finalizeBatch) return;
+
+        const weight = parseFloat(finalWeight);
+        if (isNaN(weight) || weight < 0) {
+            alert("Por favor ingresa un peso válido.");
+            return;
+        }
+
+        try {
+            const success = await roomsService.finalizeBatch(finalizeBatch.id, weight, finalNotes);
+            if (success) {
+                showToast("Lote finalizado y enviado a stock", 'success');
+                setFinalizeBatch(null);
+                if (id) await loadData(id);
+            } else {
+                showToast("Error al finalizar el lote", 'error');
+            }
+        } catch (error) {
+            console.error(error);
+            showToast("Error al finalizar", 'error');
+        }
+    };
+
+    const handleTransplant = async (destinationRoomId: string, singles: string[], groups?: { name: string, batchIds: string[] }[]) => {
+        if (!room) return;
+
+        try {
+            // 1. Move Singles (Existing Logic)
+            if (singles.length > 0) {
+                await roomsService.moveBatches(singles, destinationRoomId, 'Transplante Individual');
+            }
+
+            // 2. Process Groups (Merge Logic)
+            if (groups && groups.length > 0) {
+                const groupPromises: Promise<void>[] = [];
+
+                for (const group of groups) {
+                    if (group.batchIds.length === 0) continue;
+
+                    // USER REQUIREMENT: Tracking IDs must NEVER change.
+                    // Previous logic merged batches into a new one, destroying IDs.
+                    // New logic: Move each batch individually. 
+                    // We treat the "Group Name" as a labeling/note preference, not a database merge.
+
+                    for (const batchId of group.batchIds) {
+                        const batch = room.batches?.find(b => b.id === batchId);
+
+                        if (batch) {
+                            // Enqueue operation
+                            groupPromises.push((async () => {
+                                // Move the batch
+                                await roomsService.moveBatch(
+                                    batchId,
+                                    room.id,
+                                    destinationRoomId,
+                                    `Transplante (Grupo: ${group.name})` // Add group context to history
+                                );
+
+                                // Update notes to persist the user's organization intent without destroying known ID.
+                                const currentNotes = batch.notes || '';
+                                // Avoid duplicate group notes if moved multiple times
+                                const newNoteLine = `[Grupo: ${group.name}]`;
+                                const newNotes = currentNotes.includes(newNoteLine) ? currentNotes : (currentNotes ? `${currentNotes}\n${newNoteLine}` : newNoteLine);
+
+                                await roomsService.updateBatch(batchId, {
+                                    stage: 'vegetation',
+                                    notes: newNotes
+                                });
+                            })());
+                        }
+                    }
+                }
+                // Execute all group batch operations in parallel
+                await Promise.all(groupPromises);
+            }
+
+            // Refresh
+            if (id) await loadData(id);
+        } catch (error) {
+            console.error("Error transplanting batches:", error);
+            alert("Hubo un error al mover los esquejes.");
+        }
+    };
+
+    const handleUpdateBatch = async () => {
+        if (!editBatchForm.id) return;
+        try {
+            await roomsService.updateBatch(editBatchForm.id, {
+                name: editBatchForm.name,
+                quantity: Number(editBatchForm.quantity),
+                notes: editBatchForm.notes
+            });
+
+            // Refresh
+            if (id) {
+                const updatedRoom = await roomsService.getRoomById(id);
+                if (updatedRoom) setRoom(updatedRoom);
+            }
+            setIsEditBatchModalOpen(false);
+        } catch (error) {
+            console.error("Error updating batch", error);
+            alert("Error al actualizar el lote");
+        }
+    };
+
+
+
+    // Room Update Handler
+    const handleUpdateRoom = async () => {
+        if (!room || !editRoomName || !editRoomType) return;
+        setLoading(true);
+        try {
+            await roomsService.updateRoom(room.id, {
+                name: editRoomName,
+                type: editRoomType as any,
+                start_date: editRoomStartDate ? new Date(editRoomStartDate).toISOString() : undefined
+            });
+            if (id) await loadData(id);
+            setIsEditModalOpen(false);
+        } catch (error) {
+            console.error("Error updating room", error);
+            alert("Error al actualizar la sala");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleOpenEditMap = (map: CloneMap) => {
+        setEditingMapId(map.id);
+        setEditMapName(map.name);
+        setEditMapRows(map.grid_rows);
+        setEditMapCols(map.grid_columns);
+        setIsEditMapModalOpen(true);
+    };
+
+    const handleCreateMap = async () => {
+        if (!newMapName || !newMapRows || !newMapCols) {
+            alert("Por favor completa todos los campos.");
+            return;
+        }
+
+        try {
+            setLoading(true);
+            const newMap = await roomsService.createCloneMap({
+                room_id: room?.id || '',
+                name: newMapName,
+                grid_rows: Number(newMapRows),
+                grid_columns: Number(newMapCols)
+            });
+
+            if (newMap) {
+                setCloneMaps(prev => [...prev, newMap]);
+                setIsMapModalOpen(false);
+                setNewMapName('');
+                setNewMapRows('');
+                setNewMapCols('');
+            }
+        } catch (error) {
+            console.error("Error creating map", error);
+            alert("Error al crear la mesa.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleEditMapClick = (e: React.MouseEvent, map: CloneMap) => {
+        e.stopPropagation();
+        setEditingMapId(map.id);
+        setEditMapName(map.name);
+        setEditMapRows(map.grid_rows);
+        setEditMapCols(map.grid_columns);
+        setIsEditMapModalOpen(true);
+    };
+
+    const handleUpdateMap = async () => {
+        if (!editingMapId || !editMapName) return;
+        const rows = Number(editMapRows);
+        const cols = Number(editMapCols);
+
+        if (!rows || rows < 1 || !cols || cols < 1) {
+            alert("Por favor ingresa filas y columnas válidas.");
+            return;
+        }
+
+        try {
+            const updatedMap = await roomsService.updateCloneMap(editingMapId, {
+                name: editMapName,
+                grid_rows: rows,
+                grid_columns: cols
+            });
+
+            if (updatedMap) {
+                setCloneMaps(prev => prev.map(m => m.id === editingMapId ? updatedMap : m));
+                setIsEditMapModalOpen(false);
+                setEditingMapId(null);
+            }
+        } catch (error) {
+            console.error("Error updating map:", error);
+            alert("Error al actualizar el mapa.");
+        }
+
+    };
+
     const loadData = React.useCallback(async (roomId: string) => {
         setLoading(true);
         try {
             const { usersService } = await import('../services/usersService');
 
-            const [roomData, tasksData, usersData, stickiesData] = await Promise.all([
+            const [roomData, tasksData, usersData, stickiesData, mapsData] = await Promise.all([
                 roomsService.getRoomById(roomId),
                 tasksService.getTasksByRoomId(roomId),
                 usersService.getUsers(),
-                stickiesService.getStickies(roomId)
+                stickiesService.getStickies(roomId),
+                roomsService.getCloneMaps(roomId)
             ]);
 
             setRoom(roomData);
             setTasks(tasksData);
             setUsers(usersData);
             setStickies(stickiesData);
+            setCloneMaps(mapsData);
+
+            // Load Genetics only if needed (Esquejera/Germinacion)
+            if (['clones', 'esquejes', 'esquejera', 'germinacion', 'germinación', 'germination', 'semillero'].includes((roomData?.type as string)?.toLowerCase())) {
+                const geneticsData = await roomsService.getGenetics();
+                setGenetics(geneticsData);
+            }
 
         } catch (error) {
             console.error("Error loading room data", error);
@@ -222,6 +1360,715 @@ const RoomDetail: React.FC = () => {
             setLoading(false);
         }
     }, []);
+
+    const confirmDeleteMap = async () => {
+        if (!mapIdToDelete) return;
+        try {
+            await roomsService.deleteCloneMap(mapIdToDelete);
+            if (id) {
+                const maps = await roomsService.getCloneMaps(id);
+                setCloneMaps(maps);
+            }
+            if (activeMapId === mapIdToDelete) setActiveMapId(null);
+        } catch (error) {
+            console.error("Error deleting map", error);
+        } finally {
+            setIsDeleteMapModalOpen(false);
+            setMapIdToDelete(null);
+        }
+    };
+
+    const handleDeleteMap = (mapId: string) => {
+        setMapIdToDelete(mapId);
+        setIsDeleteMapModalOpen(true);
+    };
+
+    const handleClearMap = async () => {
+        if (!activeMapId) return;
+        try {
+            setLoading(true);
+            await roomsService.clearMap(activeMapId);
+            if (id) await loadData(id);
+        } catch (error) {
+            console.error("Error clearing map", error);
+        } finally {
+            setLoading(false);
+            setIsClearMapConfirmOpen(false);
+        }
+    };
+
+    const handleOpenHistory = async () => {
+        if (!room) return;
+        setHistoryLoading(true);
+        setIsHistoryModalOpen(true);
+        try {
+            const history = await roomsService.getRoomMovements(room.id);
+            setRoomHistory(history);
+        } catch (error) {
+            console.error("Error loading history", error);
+        } finally {
+            setHistoryLoading(false);
+        }
+    };
+
+    // Click-to-Fill Handler & Plant Detail Trigger
+    const handleEditBatchClick = (e: React.MouseEvent, batch: Batch) => {
+        e.stopPropagation();
+        handleOpenEditBatch(batch);
+    };
+
+    const handleDeleteBatchClick = (e: React.MouseEvent, batch: Batch) => {
+        e.stopPropagation();
+        setDeleteConfirm({ isOpen: true, batch });
+    };
+
+    const handleBatchClick = async (batch: Batch | null, position?: string) => {
+        // 1. Relocation Logic (If actively moving a batch)
+        if (movingBatch) {
+            if (batch) {
+                showToast("La celda destino está ocupada. Selecciona una celda vacía.", 'error');
+                return;
+            }
+            if (!position || !room || !activeMapId) return;
+
+            // Open Confirmation Modal instead of native alert
+            setMoveConfirm({ isOpen: true, position });
+            return;
+        }
+
+        // 2. Normal Interactions
+        if (!batch) return;
+
+        // Case A: Clicked STOCK batch -> Open Detail Modal (Unified behavior)
+        if (!batch.clone_map_id) {
+            setPlantDetailModal({ isOpen: true, batch });
+        } else {
+            // Case B: Clicked MAP batch -> Open Detail Modal
+            setPlantDetailModal({ isOpen: true, batch });
+        }
+    };
+
+    const handleOpenTransplant = (e: React.MouseEvent, room: Room, batch: Batch | null) => {
+        e.stopPropagation();
+        setTransplantRoom(room);
+        if (batch) {
+            setTransplantForm({ ...transplantForm, batchId: batch.id, quantity: batch.quantity });
+        } else {
+            setTransplantForm({ batchId: '', quantity: 1 });
+        }
+        setIsTransplantModalOpen(true);
+    };
+
+    const handleConfirmMove = async () => {
+        if (!moveConfirm.position || !room || !activeMapId || !movingBatch) return;
+
+        try {
+            // Correct signature: batchId, fromRoomId, toRoomId, notes, quantity, gridPosition, cloneMapId
+            await roomsService.moveBatch(
+                movingBatch.id,
+                room.id,
+                room.id,
+                'Reubicación manual',
+                undefined,
+                moveConfirm.position || undefined,
+                activeMapId || undefined
+            );
+
+            setMovingBatch(null);
+            if (id) {
+                const updatedRoom = await roomsService.getRoomById(id);
+                if (updatedRoom) setRoom(updatedRoom);
+            }
+            showToast("Lote reubicado correctamente", 'success');
+        } catch (error) {
+            console.error("Move error", error);
+            showToast("Error moviendo lote", 'error');
+        } finally {
+            setMoveConfirm({ isOpen: false, position: null });
+            // Ensure moving state is cleared on error too if desired, 
+            // but keeping it might allow retry. The user requested "cancel" explicitly.
+            setMovingBatch(null);
+        }
+    };
+
+    const handleConfirmDelete = async () => {
+        const { batch } = deleteConfirm;
+        if (!batch) return;
+
+        try {
+            await roomsService.deleteBatch(batch.id);
+            setDeleteConfirm({ isOpen: false, batch: null });
+            if (id) {
+                const updatedRoom = await roomsService.getRoomById(id);
+                if (updatedRoom) setRoom(updatedRoom);
+            }
+        } catch (error) {
+            console.error("Error deleting single plant", error);
+            alert("Error al eliminar la planta");
+        }
+    };
+
+    const handleGroupClick = (groupName: string) => {
+        setSelectedGroupName(groupName);
+        setIsGroupDetailModalOpen(true);
+    };
+
+    const handleDeleteBatchFromGroup = async (batch: Batch, quantityDiscard: number) => {
+        // Validation
+        if (quantityDiscard <= 0) return;
+
+        const isFullDelete = quantityDiscard >= batch.quantity;
+
+        if (window.confirm(`¿Estás seguro de descartar ${quantityDiscard} unidades de ${batch.tracking_code || 'este lote'}?`)) {
+            try {
+                if (isFullDelete) {
+                    await roomsService.deleteBatch(batch.id);
+                } else {
+                    // Update Quantity (Partial Discard)
+                    await roomsService.updateBatch(batch.id, {
+                        ...batch,
+                        quantity: batch.quantity - quantityDiscard,
+                        // Append note about discard?
+                        notes: (batch.notes || '') + `\n[${new Date().toLocaleDateString()}] Descartadas ${quantityDiscard} unidades.`
+                    });
+                }
+
+                // Refresh
+                if (id) await loadData(id);
+
+            } catch (e) { console.error(e); alert("Error al descartar"); }
+        }
+    };
+
+    const handleAutoAssign = async () => {
+        const { batch, quantity } = assignModal;
+        const qty = Number(quantity);
+        if (!batch || !room || !activeMapId || qty <= 0) return;
+
+        // 1. Find Empty Spots
+        const map = cloneMaps.find(m => m.id === activeMapId);
+        if (!map) return;
+
+        const currentBatchesInMap = room.batches?.filter(b => b.clone_map_id === activeMapId) || [];
+        const occupiedPositions = new Set(currentBatchesInMap.map(b => b.grid_position));
+
+        const targetPositions: string[] = [];
+        let assignedCount = 0;
+
+        // Iterate grid to find empty spots
+        for (let r = 0; r < map.grid_rows; r++) {
+            for (let c = 0; c < map.grid_columns; c++) {
+                if (assignedCount >= qty) break;
+                const rowLabel = String.fromCharCode(65 + r);
+                const pos = `${rowLabel}${c + 1}`; // Fixed space trimming
+
+                if (!occupiedPositions.has(pos)) {
+                    targetPositions.push(pos);
+                    assignedCount++;
+                }
+            }
+        }
+
+        if (targetPositions.length < qty) {
+            alert(`No hay suficiente espacio libre en el mapa. Se necesitan ${qty} espacios, hay ${targetPositions.length}.`);
+            return;
+        }
+
+        setLoading(true);
+        try {
+            // Check if we are assigning a group (qty > 1 and batch has siblings in room)
+            // Or just multiple batches from a group
+            // We need to find 'qty' batches from the available stock that match the criteria
+
+            // Available batches in this room, not in map, same genetic, same creation date (roughly) or just same genetic?
+            // Sidebar grouping uses genetic_id and created_at.
+            // batch is the root of the group (or one of them).
+
+            let batchesToAssign: string[] = [];
+
+            if (qty === 1) {
+                batchesToAssign = [batch.id];
+            } else {
+                // Find siblings
+                const availableBatches = room.batches?.filter(b =>
+                    !b.clone_map_id &&
+                    b.quantity > 0 &&
+                    b.current_room_id === room.id &&
+                    (b.genetic_id === batch.genetic_id || b.name === batch.name) // Match genetic or name if genetic is missing
+                    // Ideally check date too, but might be too strict if user just wants "same genetic"
+                ) || [];
+
+                // Sort by name or id to be deterministic
+                availableBatches.sort((a, b) => a.tracking_code?.localeCompare(b.tracking_code || '') || a.id.localeCompare(b.id));
+
+                // Take first qty
+                // NOTE: We should check if we actually found enough
+                if (availableBatches.length < qty) {
+                    alert(`No se encontraron suficientes lotes disponibles. Solicitados: ${qty}, Disponibles: ${availableBatches.length}`);
+                    setLoading(false);
+                    return;
+                }
+
+                batchesToAssign = availableBatches.slice(0, qty).map(b => b.id);
+            }
+
+            // Assign each batch to a position
+            // We can do this in parallel or loop. `batchAssignToMap` handles one batch to multiple positions (splitting).
+            // But here we might have multiple batches (1 unit each) to 1 position each.
+            // Or 1 batch (qty X) to X positions.
+
+            // If the selected batch itself has quantity >= qty, we can just use that one batch and split it?
+            // The modal prompt implies "Bandeja 4" (6 units). These might be 6 separate batch records of 1 unit each.
+            // If they are separate records, we need to assign each one to one position.
+
+            // API `batchAssignToMap` takes (batchId, mapId, targetPositions[]). 
+            // If we pass multiple positions, it splits the batch.
+            // Only works if the batch has enough quantity.
+
+            // Strategy:
+            // 1. If we have multiple distinct batch IDs (batchesToAssign), we assume each has qty=1 (or we use 1 from it).
+            //    We pair batch[i] with targetPositions[i].
+            // 2. If we have 1 batch ID with enough quantity, we pass all targetPositions.
+
+            if (batchesToAssign.length === 1) {
+                await roomsService.batchAssignToMap(batchesToAssign[0], activeMapId, targetPositions, room.id);
+            } else {
+                // Multiple batches (e.g. 6 clones). Assign 1 to 1.
+                // We need a loop or a bulk API. unique_batches logic.
+                const promises = batchesToAssign.map((bid, index) => {
+                    return roomsService.batchAssignToMap(bid, activeMapId, [targetPositions[index]], room.id);
+                });
+                await Promise.all(promises);
+            }
+
+            if (id) {
+                const updatedRoom = await roomsService.getRoomById(id);
+                if (updatedRoom) setRoom(updatedRoom);
+            }
+            setAssignModal({ isOpen: false, batch: null, quantity: 1 });
+            showToast("Lotes asignados correctamente", 'success');
+
+        } catch (error) {
+            console.error("Auto assign error", error);
+            showToast("Error asignando lotes", 'error');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // DnD Sensors
+    const sensors = useSensors(
+        useSensor(MouseSensor, { activationConstraint: { distance: 10 } }),
+        useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } })
+    );
+
+    const handleConfirmDistribution = async () => {
+        if (!distributionData) return;
+
+        setLoading(true);
+        setIsDistributionConfirmOpen(false);
+
+        try {
+            const { batches, position, mapId, map } = distributionData;
+            // Calculate start row/col
+            const rowLetter = position.charAt(0);
+            const colStr = position.slice(1);
+            const startRow = rowLetter.charCodeAt(0) - 64;
+            const startCol = parseInt(colStr, 10);
+
+            const success = await roomsService.bulkDistributeBatchesToMap(
+                batches,
+                mapId,
+                startRow,
+                startCol,
+                map.grid_rows,
+                map.grid_columns
+            );
+
+            if (success) {
+                if (id) await loadData(id);
+            } else {
+                alert("No se pudo completar la distribución. Verifica el espacio disponible.");
+            }
+        } catch (error) {
+            console.error("Error distributing group", error);
+            alert("Error al distribuir el grupo.");
+        } finally {
+            setLoading(false);
+            setDistributionData(null);
+        }
+    };
+
+    const [activeItem, setActiveItem] = useState<any>(null);
+
+    const handleDragStart = (event: any) => {
+        setActiveItem(event.active.data.current);
+    };
+
+    const handleDragEnd = async (event: DragEndEvent) => {
+        setActiveItem(null);
+        const { active, over } = event;
+
+        console.log("DRAG END:", { active, over, activeData: active?.data?.current, overId: over?.id });
+
+        if (!over) {
+            // Dropped outside
+            return;
+        }
+
+        // If we are dropping on create-map-zone, we don't need an active map
+        if (over.id !== 'create-map-zone' && !activeMapId) return;
+
+        const batch = active.data.current?.batch as Batch;
+        const fromStock = active.data.current?.fromStock;
+        const targetId = over.id as string;
+
+        if (targetId.startsWith('cell-')) {
+            // Moved to a Grid Cell
+            const position = active.data.current?.position || targetId.replace('cell-', '');
+
+            // CHECK IF GENETIC DROP (New Batch Creation)
+            if (active.data.current?.type === 'genetic') {
+                const genetic = active.data.current?.genetic as Genetic;
+                try {
+                    await roomsService.createBatch({
+                        name: genetic.name,
+                        genetic_id: genetic.id,
+                        quantity: 1,
+                        stage: 'vegetation', // Default for clones
+                        start_date: new Date().toISOString(),
+                        current_room_id: room?.id,
+                        clone_map_id: activeMapId || undefined,
+                        grid_position: position,
+                        notes: 'Creado desde Genetica'
+                    });
+                    if (id) await loadData(id);
+                } catch (err) {
+                    console.error("Error creating batch from genetic drop", err);
+                }
+                setLoading(false);
+                return;
+            }
+
+            // CHECK IF BATCH GROUP DROP (Auto-Distribute Lote)
+            if (active.data.current?.type === 'batch-group') {
+                const group = active.data.current.group;
+                if (!group || !activeMapId) return;
+
+                const { root, children } = group;
+                const allBatches = [root, ...(children || [])].filter(b => b.quantity > 0);
+
+                if (allBatches.length === 0) return;
+
+                const map = cloneMaps.find(m => m.id === activeMapId);
+                if (!map) {
+                    console.error("Map not found in cloneMaps");
+                    return;
+                }
+
+                // Check Capacity
+                const totalPlants = allBatches.reduce((a, b) => a + b.quantity, 0);
+
+                // Calculate available slots from start position
+                console.log("Distribution Debug - Target ID:", targetId);
+                console.log("Distribution Debug - Resolved Position:", position);
+
+                const startRow = position.charAt(0).charCodeAt(0) - 64;
+                const startCol = parseInt(position.slice(1), 10);
+
+                console.log("Distribution Debug - StartRow:", startRow, "StartCol:", startCol);
+
+                const existingBatchesInMap = room?.batches?.filter(b => b.clone_map_id === activeMapId && b.quantity > 0) || [];
+                const occupiedSet = new Set(existingBatchesInMap.map(b => b.grid_position));
+
+                let freeSlots = 0;
+                let r = startRow;
+                let c = startCol;
+
+                while (r <= map.grid_rows) {
+                    const pos = `${String.fromCharCode(64 + r)}${c}`;
+                    if (!occupiedSet.has(pos)) {
+                        freeSlots++;
+                    }
+
+                    c++;
+                    if (c > map.grid_columns) {
+                        c = 1;
+                        r++;
+                    }
+                }
+
+                if (totalPlants > freeSlots) {
+                    // Show Toast/Alert for capacity exceeded
+                    // Using standard alert for now as requested "modal toast central" implies existing component or simple alert is better than nothing, 
+                    // and I'll use the existing ToastModal if available or simple alert.
+                    // Given the constraint "debe desplegar un modal toast central flotante", I will use a custom state for a simple central modal if ToastModal isn't easy to hook up instantly without looking at it.
+                    // But wait, there is a ToastModal imported. Let's try to use it if I can see how. 
+                    // Actually, for now, to ensure reliability, I will use window.alert but ideally I should check ToastModal usage.
+                    // Improving: I will use a simple alert for now to ensure functionality, then can refine to ToastModal.
+                    setToastState({
+                        isOpen: true,
+                        message: `Cantidad excedida: Tienes ${totalPlants} plantas pero solo ${freeSlots} espacios disponibles a partir de la celda seleccionada.`,
+                        type: 'error'
+                    });
+                    setLoading(false);
+                    return;
+                }
+
+                // logic to open custom modal instead of window.confirm
+                setDistributionData({
+                    batches: allBatches,
+                    position: position,
+                    mapId: activeMapId,
+                    map: map
+                });
+                setIsDistributionConfirmOpen(true);
+                setLoading(false);
+                return;
+
+            }
+
+            const batch = active.data.current?.batch as Batch;
+            const fromStock = active.data.current?.fromStock;
+
+            const notes = `Movido a mapa ${activeMapId} celda ${position} `;
+
+            // MAP MODE (VEGETATION / FLOWERING): DISTRIBUTE BATCH (INDIVIDUALIZATION)
+            const isMapMode = ['vegetacion', 'vegetación', 'vegetation', 'flowering', 'floración', 'flora'].includes((room?.type || '').toLowerCase());
+
+            if (isMapMode && fromStock && batch.quantity > 0 && activeMapId) {
+                // Open Custom Confirmation Modal instead of window.confirm
+                setSingleDistributionData({
+                    batchId: batch.id,
+                    position: position,
+                    quantity: batch.quantity,
+                    mapId: activeMapId
+                });
+                setIsSingleDistributeConfirmOpen(true);
+                setLoading(false);
+                return;
+            }
+
+            // Logic for Splitting (Standard Esquejera Behavior)
+            let splitQty = undefined;
+            if (fromStock && batch.quantity > 1) {
+                // Automatically split 1 unit when dragging from "Bulk" Stock
+                splitQty = 1;
+            }
+
+            // If simply moving within map (no split, just move)
+            if (!fromStock && batch.grid_position === position && batch.clone_map_id === activeMapId) {
+                setLoading(false);
+                return;
+            }
+
+            // API Call (Standard Move)
+            try {
+                await roomsService.moveBatch(batch.id, room?.id || null, room?.id || '', notes, splitQty, position, activeMapId || undefined);
+                // Refresh data to see the split result
+                if (id) await loadData(id);
+            } catch (err) {
+                console.error(err);
+                if (id) await loadData(id); // Revert on error
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        // CHECK IF DROPPED IN STOCK ZONE (Return to Stock)
+        if (targetId === 'stock-zone') {
+            const batch = active.data.current?.batch as Batch;
+            if (!batch || !batch.clone_map_id) return; // Already in stock or invalid
+
+            try {
+                // Determine if we need to split? 
+                // Usually dragging back means "Unassign All of this batch" or "Unassign 1 unit"?
+                // If it's a grid item (single), we move it back.
+
+                // Move to room (null map, null position)
+                await roomsService.moveBatch(batch.id, room?.id || null, room?.id || '', 'Devuelto a Stock', undefined, undefined, undefined);
+                if (id) await loadData(id);
+            } catch (err) {
+                console.error(err);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        // CHECK IF DROPPED IN TRASH ZONE (Delete)
+        if (targetId === 'trash-zone') {
+            const batch = active.data.current?.batch as Batch;
+            if (!batch) return;
+
+            if (!window.confirm("¿Eliminar este lote permanentemente?")) {
+                setLoading(false);
+                return;
+            }
+
+            try {
+                // Explicit reason for metrics
+                await roomsService.deleteBatch(batch.id, 'Baja - Eliminado del Mapa');
+                if (id) await loadData(id);
+            } catch (err) {
+                console.error(err);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+
+        if (targetId === 'create-map-zone') {
+            // CHECK IF BATCH GROUP
+            if (active.data.current?.type === 'batch-group') {
+                const group = active.data.current?.group;
+                if (!group) return;
+
+                const isMapCapable = ['clones', 'esquejes', 'esquejera', 'vegetacion', 'vegetación', 'vegetation', 'flowering', 'floración', 'flora'].includes((room?.type || '').toLowerCase());
+                if (!isMapCapable) return;
+
+                setPendingMapGroup(group);
+                setIsCreateMapFromGroupConfirmOpen(true);
+                return;
+            }
+
+            const batch = active.data.current?.batch as Batch;
+            const fromStock = active.data.current?.fromStock;
+
+            // Only allow from stock and if it has quantity
+            if (!fromStock || !batch || batch.quantity <= 0) {
+                return;
+            }
+
+            const isMapCapable = ['clones', 'esquejes', 'esquejera', 'vegetacion', 'vegetación', 'vegetation', 'flowering', 'floración', 'flora'].includes((room?.type || '').toLowerCase());
+
+            if (!isMapCapable) return;
+
+            // Trigger Custom Modal instead of window.confirm
+            setPendingMapBatch(batch);
+            setIsCreateMapConfirmOpen(true);
+            return;
+        }
+    };
+
+    const handleConfirmCreateMap = async () => {
+        if (!pendingMapBatch || !room) return;
+
+        setLoading(true);
+        try {
+            // 1. Calculate Grid Size (Square-ish)
+            const total = pendingMapBatch.quantity;
+            const cols = Math.ceil(Math.sqrt(total));
+            const rows = Math.ceil(total / cols);
+
+            // 2. Create Map
+            const newMapName = `${pendingMapBatch.name} - ${format(new Date(), 'dd/MM HH:mm')} `;
+
+            const { data: newMap, error: mapError } = await supabase
+                .from('clone_maps')
+                .insert([{
+                    room_id: room.id,
+                    name: newMapName,
+                    grid_rows: rows,
+                    grid_columns: cols
+                }])
+                .select()
+                .single();
+
+            if (mapError || !newMap) {
+                console.error("Error creating map:", mapError);
+                throw new Error("Error creating map");
+            }
+
+            // 3. Distribute Batch
+            const success = await roomsService.distributeBatchToMap(
+                pendingMapBatch.id,
+                newMap.id,
+                1, 1, // Start at A1
+                rows, cols
+            );
+
+            if (success) {
+                // Refresh
+                if (id) await loadData(id);
+            } else {
+                alert("El mapa se creó pero hubo un error distribuyendo las plantas.");
+            }
+
+        } catch (e) {
+            console.error(e);
+            alert("Error al crear la mesa automática.");
+        } finally {
+            setLoading(false);
+            setIsCreateMapConfirmOpen(false);
+            setPendingMapBatch(null);
+        }
+    };
+
+    const handleConfirmCreateMapFromGroup = async () => {
+        if (!pendingMapGroup || !room) return;
+
+        setLoading(true);
+        try {
+            // 1. Calculate Total and Grid Size
+            const { root, children } = pendingMapGroup;
+            // Ensure we use all batches in the group
+            const allBatches = [root, ...(children || [])];
+
+            const totalQty = allBatches.reduce((acc: number, b: any) => acc + (b.quantity || 0), 0);
+
+            // Default roughly square
+            const cols = Math.ceil(Math.sqrt(totalQty));
+            const rows = Math.ceil(totalQty / cols);
+
+            // 2. Create Map
+            // Use same naming as Sidebar Group
+            let newMapName = '';
+
+            if (root._virtualGroupName) {
+                newMapName = root._virtualGroupName;
+            } else {
+                const geneticName = root.genetic?.name || root.name || 'Desconocida';
+                const prefix = geneticName.substring(0, 6).toUpperCase();
+                const displayDate = new Date(root.start_date || root.created_at).toLocaleDateString();
+                newMapName = `Lote ${prefix} - ${displayDate}`;
+            }
+
+            const { data: newMap, error: mapError } = await supabase
+                .from('clone_maps')
+                .insert([{
+                    room_id: room.id,
+                    name: newMapName,
+                    grid_rows: rows,
+                    grid_columns: cols
+                }])
+                .select()
+                .single();
+
+            if (mapError || !newMap) throw mapError;
+
+            // 3. Assign Batches Sequentially (BULK OPTIMIZATION)
+            await roomsService.bulkDistributeBatchesToMap(
+                allBatches,
+                newMap.id,
+                1, // Start Row
+                1, // Start Col
+                rows,
+                cols
+            );
+
+            if (id) await loadData(id);
+
+        } catch (e) {
+            console.error(e);
+            alert("Error al crear el mapa desde el grupo.");
+        } finally {
+            setLoading(false);
+            setIsCreateMapFromGroupConfirmOpen(false);
+            setPendingMapGroup(null);
+        }
+    };
+
+
 
     // ... (keep existing Task Handlers) ...
 
@@ -265,36 +2112,8 @@ const RoomDetail: React.FC = () => {
     };
 
 
-    // Inside calendar rendering loop...
-    // const calendarDays = eachDayOfInterval(...)
-    // return calendarDays.map(...)
+    // Calendar rendering logic removed from here as it was misplaced.
 
-    // ... logic to simulate inside the map:
-    /*
-     const dateStr = format(dayItem, 'yyyy-MM-dd');
-     const dayStickies = stickies.filter(s => s.target_date === dateStr);
-     
-     // Render Sticky Icons
-     {dayStickies.map(s => (
-        <div key={s.id} 
-             title={s.content}
-             onClick={(e) => {e.stopPropagation(); handleDeleteSticky(s.id)}}
-             style={{ 
-               background: s.color === 'yellow' ? '#fefcbf' : s.color === 'pink' ? '#fed7d7' : s.color === 'blue' ? '#bee3f8' : '#c6f6d5',
-               fontSize: '0.7em', padding: '2px 4px', borderRadius: '3px', marginTop: '2px',
-               border: '1px solid rgba(0,0,0,0.1)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px'
-             }}
-        >
-             <FaStickyNote size={10} />
-             <span style={{whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '80px'}}>{s.content}</span>
-        </div>
-     ))}
-    */
-
-    // UI for Sticky Modal to be added at end of return
-
-
-    // Load all rooms removed
 
 
     // Batch Management Handlers
@@ -302,6 +2121,55 @@ const RoomDetail: React.FC = () => {
 
 
     // Calendar Handlers (Interactive)
+
+    const handleCreateBatch = async () => {
+        if (!newBatch.geneticId || !newBatch.quantity || !room) {
+            showToast("Por favor completa todos los campos.", 'error');
+            return;
+        }
+
+        const selectedGenetic = genetics.find(m => m.id === newBatch.geneticId);
+        // Prefix logic
+        const prefix = (selectedGenetic?.name || 'GEN').substring(0, 3).toUpperCase().replace(/[^A-Z]/g, '');
+
+        let batchName = `${prefix}-${format(new Date(), 'yyMMdd')}`;
+
+        // Determine Stage based on Room Type
+        let stage: 'seedling' | 'vegetation' | 'flowering' | 'drying' | 'curing' = 'vegetation';
+
+        const rType = (room?.type || '').toLowerCase();
+        if (['germinacion', 'germinación', 'germination', 'semillero'].includes(rType)) {
+            stage = 'seedling';
+            batchName = `SEM-${prefix}-${format(new Date(), 'yyMMdd')}`;
+        } else if (['clones', 'esquejes', 'esquejera'].includes(rType)) {
+            stage = 'vegetation';
+        }
+
+        const batchData = {
+            name: batchName,
+            quantity: parseInt(newBatch.quantity),
+            stage: stage,
+            current_room_id: room.id,
+            genetic_id: newBatch.geneticId,
+            start_date: newBatch.date,
+            parent_batch_id: undefined
+        };
+
+        const created = await roomsService.createBatch(batchData);
+
+        if (created) {
+            if (id) await loadData(id);
+            setIsCreateBatchModalOpen(false);
+            setNewBatch({
+                geneticId: '',
+                quantity: '',
+                date: new Date().toISOString().split('T')[0]
+            });
+            showToast("Lote creado correctamente.", 'success');
+        } else {
+            showToast("Error al crear el lote.", 'error');
+        }
+    };
 
     const handleAddTask = (day: Date) => {
         // Allow admin or partner (owner) to add tasks
@@ -417,6 +2285,12 @@ const RoomDetail: React.FC = () => {
         }
     }, [id, loadData]);
 
+    // Memoized selection for Transplant Modal to prevent infinite loops
+    // We must declare this at the top level, not conditionally
+    const memoizedTransplantBatchIds = useMemo(() => {
+        return transplantForm.batchId ? [transplantForm.batchId] : [];
+    }, [transplantForm.batchId]);
+
     // Calendar Rendering Logic
 
     // Tables calc removed
@@ -425,99 +2299,113 @@ const RoomDetail: React.FC = () => {
 
     return (
         <Container>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
-                <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><FaArrowLeft /></button>
-                <Title>{room?.name} <Badge stage={room?.type}>{room?.type === 'vegetation' ? 'Vegetación' : room?.type === 'flowering' ? 'Floración' : room?.type}</Badge></Title>
+            <GlobalPrintStyles />
+            <div className="no-print" style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><FaArrowLeft /></button>
+                    <Title>{room?.name} <Badge stage={room?.type}>{room?.type === 'vegetation' ? 'Vegetación' : room?.type === 'flowering' ? 'Floración' : room?.type === 'drying' ? 'Secando' : room?.type}</Badge></Title>
+                </div>
+                <button onClick={handleOpenHistory} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.5rem 1rem', cursor: 'pointer', color: '#4a5568', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600 }}>
+                    <FaHistory /> Historial
+                </button>
             </div>
 
             {/* Room Summary Header */}
             {room && (
-                <HeaderGrid>
+                <HeaderGrid className="no-print">
                     {/* Plants Count */}
                     <StatCard>
-                        <h3><FaSeedling /> Total Plantas</h3>
-                        <div className="value">
-                            {room.batches?.reduce((sum, b) => sum + b.quantity, 0) || 0}
+
+                        <h3><FaSeedling /> {
+                            room.type === 'germination' ? 'Total Semillas' :
+                                room.type === 'flowering' ? 'Total Plantas en Floración' :
+                                    room.type === 'drying' ? 'Total Plantas Secandose' :
+                                        ['clones', 'esquejes', 'esquejera'].includes((room.type || '').toLowerCase()) ? 'Total Esquejes' :
+                                            'Total Plantas'
+                        }</h3>
+                        <div className="value" style={{ color: '#2f855a' }}>
+                            {room.batches?.reduce((sum: any, b: any) => sum + b.quantity, 0) || 0}
                         </div>
-                        <div className="sub">En {room.batches?.length || 0} lotes activos</div>
-                    </StatCard>
-
-                    {/* Genetics */}
-                    <StatCard>
-                        <h3><FaDna /> Genéticas</h3>
-                        <div className="value" style={{ fontSize: '1rem' }}>
-                            {/* Get unique genetics with counts */}
-                            {(() => {
-                                const geneticCounts: Record<string, number> = {};
-
-                                room.batches?.forEach(b => {
-                                    const name = b.genetic?.name || b.strain || 'Desconocida';
-                                    geneticCounts[name] = (geneticCounts[name] || 0) + b.quantity;
+                        <div className="sub">
+                            En {(() => {
+                                if (!room.batches) return 0;
+                                const uniqueBatches = new Set();
+                                room.batches.forEach(b => {
+                                    if (b.quantity > 0) {
+                                        // Group by Genetic + Date (YYYY-MM-DD) to count logical batches
+                                        const date = b.created_at ? new Date(b.created_at).toISOString().split('T')[0] : 'unknown';
+                                        const key = `${b.genetic_id || b.name}-${date}`;
+                                        uniqueBatches.add(key);
+                                    }
                                 });
-
-                                const entries = Object.entries(geneticCounts);
-
-                                if (entries.length === 0) return <span style={{ color: '#cbd5e0' }}>Sin asignar</span>;
-
-                                return (
-                                    <GeneticsList>
-                                        {entries.slice(0, 5).map(([name, count]) => (
-                                            <GeneticTag key={name}>
-                                                <span style={{ fontWeight: 800, marginRight: '4px' }}>{count}</span>
-                                                {name}
-                                            </GeneticTag>
-                                        ))}
-                                        {entries.length > 5 && (
-                                            <button
-                                                onClick={() => setIsGeneticsModalOpen(true)}
-                                                style={{
-                                                    background: 'none', border: 'none', color: '#3182ce',
-                                                    fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer',
-                                                    textDecoration: 'underline'
-                                                }}
-                                            >
-                                                Ver todas ({entries.length})
-                                            </button>
-                                        )}
-                                    </GeneticsList>
-                                );
-                            })()}
+                                return uniqueBatches.size;
+                            })()} lotes activos
                         </div>
                     </StatCard>
+
+                    {/* Total Maps Stat */}
+                    {/* Total Maps Stat */}
+                    {room.type !== 'germination' && room.type !== 'drying' && (
+                        <StatCard>
+                            <h3><FaMapMarkedAlt /> {
+                                room.type === 'flowering' ? 'Total mesas de floracion' :
+                                    ['vegetation', 'vegetación', 'vegetacion'].includes((room.type || '').toLowerCase()) ? 'Total Mesas Vegetación' :
+                                        'Total de Esquejeras'
+                            }</h3>
+                            <div className="value" style={{ color: '#2b6cb0' }}>
+                                {cloneMaps.length}
+                            </div>
+                            <div className="sub">Mapas activos</div>
+                        </StatCard>
+                    )}
 
                     {/* Environment */}
                     <StatCard>
                         <h3><FaThermometerHalf /> Ambiente</h3>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                <FaThermometerHalf color="#e53e3e" />
-                                <span style={{ fontWeight: 'bold', color: '#2d3748' }}>{room.current_temperature || '--'}°C</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#e53e3e', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                    {room.current_temperature || '--'}°
+                                </div>
+                                <div style={{ fontSize: '0.75rem', color: '#718096', fontWeight: 600 }}>Temp</div>
                             </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                <FaTint color="#3182ce" />
-                                <span style={{ fontWeight: 'bold', color: '#2d3748' }}>{room.current_humidity || '--'}%</span>
+                            <div style={{ width: '1px', height: '30px', background: '#cbd5e0' }} />
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#3182ce', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                    {room.current_humidity || '--'}%
+                                </div>
+                                <div style={{ fontSize: '0.75rem', color: '#718096', fontWeight: 600 }}>Humedad</div>
                             </div>
                         </div>
-                        <div className="sub">Última act: Hoy</div>
                     </StatCard>
 
-                    {/* Date */}
+                    {/* Date - CHANGED to Start Date */}
                     <StatCard>
-                        <h3><FaClock /> Fecha Actual</h3>
-                        <div className="value" style={{ fontSize: '1.25rem' }}>
-                            {format(new Date(), "d 'de' MMMM", { locale: es })}
+                        <h3><FaCalendarAlt /> Fecha Inicio</h3>
+                        <div className="value" style={{ fontSize: '1.5rem', textTransform: 'capitalize' }}>
+                            {room.start_date
+                                ? format(new Date(room.start_date + 'T00:00:00'), "d MMM yyyy", { locale: es })
+                                : '--'}
                         </div>
-                        <div className="sub">{format(new Date(), "yyyy")}</div>
+                        <div className="sub">
+                            {room.start_date
+                                ? `Creado hace ${differenceInDays(new Date(), new Date(room.start_date))} días`
+                                : 'Sin fecha'}
+                        </div>
                     </StatCard>
                 </HeaderGrid>
             )}
 
-            <div style={{ marginBottom: '2rem' }}>
+
+            {/* 
+            <div style={{ marginBottom: '2rem' }} className="no-print">
                 <TuyaManager mode="sensors" roomId={room?.id} />
-            </div>
+            </div> 
+            */}
+
 
             {/* Stickies Wall Section */}
-            <div style={{ marginBottom: '2rem' }}>
+            <div style={{ marginBottom: '2rem' }} className="no-print">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                     <h2 style={{ fontSize: '1.5rem', color: '#2d3748', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <FaStickyNote color="#ecc94b" /> Pizarra de Notas
@@ -569,736 +2457,2249 @@ const RoomDetail: React.FC = () => {
                 )}
             </div>
 
-            <div style={{ background: 'white', borderRadius: '1rem', padding: '1.5rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-                {/* Calendar Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                    <button onClick={() => setCurrentDate(subMonths(currentDate, 1))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#718096', fontSize: '1rem', padding: '0.5rem' }}>&lt; Anterior</button>
-                    <h2 style={{ fontSize: '1.5rem', color: '#2d3748', textTransform: 'capitalize' }}>
-                        {format(currentDate, 'MMMM yyyy', { locale: es })}
-                    </h2>
-                    <button onClick={() => setCurrentDate(addMonths(currentDate, 1))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#718096', fontSize: '1rem', padding: '0.5rem' }}>Siguiente &gt;</button>
-                </div>
-
-                {/* Calendar Grid */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '1px', background: '#e2e8f0', border: '1px solid #e2e8f0', borderRadius: '0.5rem', overflow: 'hidden' }}>
-                    {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map(d => (
-                        <div key={d} style={{ background: '#f7fafc', padding: '0.75rem', textAlign: 'center', fontWeight: 'bold', color: '#718096', fontSize: '0.85rem' }}>{d}</div>
-                    ))}
-
-                    {(() => {
-                        const monthStart = startOfMonth(currentDate);
-                        const monthEnd = endOfMonth(monthStart);
-                        const startDate = startOfWeek(monthStart);
-                        const endDate = endOfWeek(monthEnd);
-                        const dateFormat = "d";
-
-
-                        const calendarDays = eachDayOfInterval({ start: startDate, end: endDate });
-
-                        // Helper to generate virtual tasks based on recurrence
-                        const generateVirtualTasks = (currentTasks: Task[], viewingDate: Date): Task[] => {
-                            const virtualTasks: Task[] = [];
-                            const monthEnd = endOfMonth(viewingDate);
-
-                            currentTasks.forEach(task => {
-                                if (!task.recurrence || !task.due_date) return;
-
-                                const rec = task.recurrence;
-                                let lastDate = new Date(task.due_date);
-                                // Ensure lastDate is valid
-                                if (isNaN(lastDate.getTime())) return;
-
-                                // Prevent infinite loops
-                                let safetyCounter = 0;
-
-                                while (lastDate < monthEnd && safetyCounter < 50) {
-                                    let nextDate: Date | null = null;
-                                    const interval = rec.interval || 1;
-
-                                    if (rec.type === 'custom' || rec.type === 'daily' || rec.type === 'weekly') {
-                                        if (rec.unit === 'day' || rec.type === 'daily') {
-                                            nextDate = addDays(lastDate, interval);
-                                        } else if (rec.unit === 'week' || rec.type === 'weekly') {
-                                            nextDate = addWeeks(lastDate, interval);
-                                        } else if (rec.unit === 'month') {
-                                            nextDate = addMonths(lastDate, interval);
+            {/* Esquejera View or Standard View */}
+            {
+                ['clones', 'esquejes', 'esquejera', 'vegetacion', 'vegetación', 'vegetation', 'flowering', 'floración', 'flora', 'germination', 'germinacion', 'germinación', 'semillero'].includes((room?.type as string)?.toLowerCase()) ? (
+                    <div style={{ padding: '2rem' }}>
+                        <div className="no-print" style={{ marginBottom: '2rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <div>
+                                <h2 style={{ fontSize: '1.8rem', color: '#2d3748', margin: 0 }}>{room?.name}</h2>
+                                <span style={{ color: '#718096' }}>{room?.type ? room.type.charAt(0).toUpperCase() + room.type.slice(1) : 'Sala'}</span>
+                            </div>
+                            <div style={{ display: 'flex', gap: '1rem' }}>
+                                {/* Hide "Nueva Tarea" for Clones/Esquejes/Germination rooms */}
+                                {!['clones', 'esquejes', 'esquejera', 'germination'].includes((room?.type as string)?.toLowerCase()) && (
+                                    <button
+                                        onClick={() => setIsTaskModalOpen(true)}
+                                        style={{
+                                            display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                            background: 'white', color: '#4a5568', border: '1px solid #e2e8f0',
+                                            padding: '0.5rem 1rem', borderRadius: '0.5rem', fontWeight: 600, cursor: 'pointer'
+                                        }}
+                                    >
+                                        <FaTasks /> Nueva Tarea
+                                    </button>
+                                )}
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (room) {
+                                            if (room.type === 'flowering') {
+                                                setIsHarvestModalOpen(true);
+                                            } else {
+                                                setTransplantForm({ batchId: '', quantity: 1 }); // Reset form
+                                                handleOpenTransplant(e, room, null); // Open without specific batch
+                                            }
                                         }
-                                    }
-
-                                    if (nextDate && nextDate <= monthEnd) {
-                                        // Create Virtual Task
-                                        // Check if a real task already exists on this date for this crop/room to avoid dupes?
-                                        // For now, simply trust the projection.
-                                        virtualTasks.push({
-                                            ...task,
-                                            id: `virtual-${task.id}-${nextDate.getTime()}`,
-                                            due_date: format(nextDate, 'yyyy-MM-dd'),
-                                            status: 'pending',
-                                            title: `${task.title} (Proyectada)`,
-                                            // Add a custom flag handled by UI
-                                            type: task.type // Keep type for color
-                                        });
-                                        lastDate = nextDate;
-                                    } else {
-                                        break;
-                                    }
-                                    safetyCounter++;
-                                }
-                            });
-                            return virtualTasks;
-                        };
-
-                        const allVirtualTasks = generateVirtualTasks(tasks, currentDate);
-                        const allTasksForView = [...tasks, ...allVirtualTasks];
-
-                        return calendarDays.map((dayItem, idx) => {
-                            const isCurrentMonth = isSameMonth(dayItem, monthStart);
-                            const dateStr = format(dayItem, 'yyyy-MM-dd');
-                            const dayTasks = allTasksForView.filter(t => t.due_date && t.due_date.split('T')[0] === dateStr);
-
-                            // Determine Background Gradient based on Task Distribution
-                            let dayBg = 'white';
-
-                            if (dayTasks.length > 0) {
-                                // Helper to get pastel color by task type
-                                const getTaskColor = (t: Task) => {
-                                    switch (t.type) {
-                                        case 'danger': return '#fed7d7'; // Red
-                                        case 'warning': return '#fefcbf'; // Yellow
-                                        case 'fertilizar':
-                                        case 'enmienda':
-                                        case 'te_compost': return '#c6f6d5'; // Green
-                                        case 'riego': return '#bee3f8'; // Blue
-                                        case 'poda_apical': return '#fed7d7'; // Light Red
-                                        case 'defoliacion': return '#fbd38d'; // Orange
-                                        case 'hst':
-                                        case 'lst':
-                                        case 'entrenamiento': return '#e9d8fd'; // Purple
-                                        case 'esquejes': return '#feebc8'; // Orange
-                                        default: return '#edf2f7'; // Gray (Info)
-                                    }
-                                };
-
-                                if (dayTasks.length === 1) {
-                                    dayBg = getTaskColor(dayTasks[0]);
-                                } else {
-                                    // Build linear gradient
-                                    const step = 100 / dayTasks.length;
-                                    const stops = dayTasks.map((t, i) => {
-                                        const color = getTaskColor(t);
-                                        return `${color} ${i * step}% ${(i + 1) * step}%`;
-                                    }).join(', ');
-                                    dayBg = `linear-gradient(135deg, ${stops})`;
-                                }
-                            }
-
-                            // Phase Calculation Logic
-                            let phaseBar = null;
-
-
-
-                            if (room?.start_date && isCurrentMonth) {
-                                // ... existing logic ...
-                                const [y, m, d] = room.start_date.split('T')[0].split('-').map(Number);
-                                const roomStart = new Date(y, m - 1, d);
-                                const dayTime = new Date(dayItem).setHours(0, 0, 0, 0);
-                                const startTime = roomStart.setHours(0, 0, 0, 0);
-
-                                if (dayTime >= startTime) {
-                                    const weekNum = Math.floor((dayTime - startTime) / (7 * 24 * 60 * 60 * 1000)) + 1;
-                                    let isFloweringPhase = false;
-                                    const activeBatch = room.batches?.find(b => b.genetic);
-                                    const geneticVegWeeks = activeBatch?.genetic?.vegetative_weeks;
-
-                                    if (geneticVegWeeks !== undefined && weekNum > geneticVegWeeks) {
-                                        isFloweringPhase = true;
-                                    } else if (room.type === 'flowering') {
-                                        isFloweringPhase = true;
-                                    }
-
-                                    const color = isFloweringPhase ? '#fbd38d' : '#9ae6b4';
-                                    const showLabel = dayItem.getDay() === 1 || dayItem.getDate() === 1 || dayTime === startTime;
-
-                                    phaseBar = (
-                                        <>
-                                            <div style={{
-                                                position: 'absolute', bottom: 0, left: 0, right: 0,
-                                                height: '6px', background: color, opacity: 0.7
-                                            }} title={`Semana ${weekNum} del ciclo ${isFloweringPhase ? '(Floración)' : '(Vegetativo)'}`}></div>
-                                            {showLabel && (
-                                                <div style={{
-                                                    position: 'absolute', bottom: '8px', right: '2px',
-                                                    fontSize: '0.65rem', fontWeight: 'bold', color: isFloweringPhase ? '#c05621' : '#276749',
-                                                    background: 'rgba(255,255,255,0.8)', padding: '0 2px', borderRadius: '2px'
-                                                }}>Sem {weekNum}</div>
-                                            )}
-                                        </>
-                                    );
-                                }
-                            }
-
-                            return (
-                                <div
-                                    key={dayItem.toString()}
-                                    className="calendar-day calendar-day-hover"
-                                    style={{
-                                        background: dayBg, // Applied dynamic background
-                                        minHeight: '100px',
-                                        padding: '0.5rem',
-                                        position: 'relative',
-                                        opacity: isCurrentMonth ? 1 : 0.4,
-                                        cursor: user && (user.role === 'admin' || user.role === 'partner') ? 'pointer' : 'default',
-                                        transition: 'all 0.2s',
-                                        border: isSameDay(dayItem, new Date()) ? '2px solid #3182ce' : '1px solid transparent'
                                     }}
-                                    onClick={() => handleDayDetails(dayItem)}
+                                    style={{
+                                        display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                        background: room?.type === 'flowering' ? '#d69e2e' : '#48bb78', // Gold for Harvest, Green for Transplant
+                                        color: 'white', border: 'none',
+                                        padding: '0.5rem 1rem', borderRadius: '0.5rem', fontWeight: 600, cursor: 'pointer'
+                                    }}
                                 >
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <span style={{ fontWeight: isSameDay(dayItem, new Date()) ? 'bold' : 'normal', color: isSameDay(dayItem, new Date()) ? '#2c5282' : '#2d3748' }}>
-                                            {format(dayItem, dateFormat)}
-                                        </span>
-                                        {/* Actions: Add Task / Sticky */}
-                                        {user && (user.role === 'admin' || user.role === 'partner') && (
-                                            <div style={{ display: 'flex', gap: '4px' }}>
+                                    {room?.type === 'flowering' ? <FaCut /> : <FaExchangeAlt />}
+                                    {room?.type === 'flowering' ? 'Cosechar' : 'Transplantar'}
+                                </button>
+                                <button
+                                    onClick={() => setIsEditModalOpen(true)}
+                                    style={{
+                                        display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                        background: 'white', color: '#4a5568', border: '1px solid #e2e8f0',
+                                        padding: '0.5rem 1rem', borderRadius: '0.5rem', fontWeight: 600, cursor: 'pointer'
+                                    }}
+                                >
+                                    <FaEdit /> Editar Sala
+                                </button>
+                                <button
+                                    onClick={() => navigate('/cultivos')}
+                                    style={{
+                                        display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                        background: '#e2e8f0', color: '#4a5568', border: 'none',
+                                        padding: '0.5rem 1rem', borderRadius: '0.5rem', fontWeight: 600, cursor: 'pointer'
+                                    }}
+                                >
+                                    <FaArrowLeft /> Volver
+                                </button>
+                            </div>
+                        </div>
 
-                                                <span
-                                                    style={{ color: '#4a5568', fontSize: '0.8rem', opacity: 0.8, cursor: 'pointer', padding: '2px' }}
-                                                    title="Agregar Tarea"
-                                                    onClick={(e) => { e.stopPropagation(); handleAddTask(dayItem); }}
-                                                >
-                                                    <FaPlus />
-                                                </span>
+                        {/* DndContext WRAPPER FOR BOTH VIEWS */}
+                        <DndContext sensors={sensors} collisionDetection={pointerWithin} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+                            <div style={{ display: 'flex', gap: '2rem', alignItems: 'flex-start' }}>
+
+                                {/* MAIN CONTENT AREA */}
+                                <div style={{ flex: 3 }}>
+                                    {!activeMapId ? (
+                                        /* MAPS LIST VIEW */
+                                        <div>
+                                            <h3 className="no-print" style={{ color: '#718096', fontSize: '0.9rem', marginBottom: '0.5rem' }}>Mesas Activas (Arrastra lotes aquí para crear nuevas)</h3>
+
+                                            <div style={{
+                                                display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem',
+                                                marginBottom: '2rem'
+                                            }}>
+                                                {cloneMaps.length === 0 ? (
+                                                    <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '3rem', background: '#f7fafc', borderRadius: '1rem', border: '2px dashed #e2e8f0' }}>
+                                                        <p style={{ color: '#a0aec0', marginBottom: '1rem' }}>
+                                                            {
+                                                                room?.type === 'germination' ? 'No hay semillas en germinación.' :
+                                                                    room?.type === 'flowering' ? 'No hay plantas en floracion actualmente' :
+                                                                        'No hay mesas de esquejes creadas.'
+                                                            }
+                                                        </p>
+                                                        <button
+                                                            onClick={() => setIsMapModalOpen(true)}
+                                                            style={{ background: '#3182ce', color: 'white', border: 'none', padding: '0.75rem 1.5rem', borderRadius: '0.5rem', fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
+                                                        >
+                                                            <FaPlus /> {
+                                                                room?.type === 'germination' ? 'Germinar Semillas' :
+                                                                    room?.type === 'flowering' ? 'Agregar plantas a floración' :
+                                                                        ['clones', 'esquejes', 'esquejera'].includes((room?.type || '').toLowerCase()) ? 'Crear Mesa de Esquejes' :
+                                                                            'Crear Primera Mesa'
+                                                            }
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <>
+                                                        {cloneMaps.map(map => {
+                                                            const mapBatches = room?.batches?.filter(b => b.clone_map_id === map.id && b.quantity > 0) || [];
+                                                            const totalPlants = mapBatches.reduce((acc, b) => acc + b.quantity, 0);
+                                                            const uniqueGenetics = new Set(mapBatches.map(b => b.genetic_id)).size;
+
+                                                            return (
+                                                                <DroppableMapCard key={map.id} map={map} onClick={() => setActiveMapId(map.id)}>
+                                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                                                            <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#2d3748' }}>{map.name}</h3>
+                                                                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                                                {/* Selection buttons removed from Map List View */}
+                                                                            </div>
+                                                                        </div>
+                                                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                                            {!isSelectionMode && (
+                                                                                <>
+                                                                                    <button
+                                                                                        onClick={(e) => { e.stopPropagation(); handleEditMapClick(e, map); }}
+                                                                                        style={{ background: 'transparent', border: 'none', color: '#718096', cursor: 'pointer' }}
+                                                                                    >
+                                                                                        <FaEdit />
+                                                                                    </button>
+                                                                                </>
+                                                                            )}
+                                                                            <button
+                                                                                onClick={(e) => { e.stopPropagation(); setMapIdToDelete(map.id); setIsDeleteMapModalOpen(true); }}
+                                                                                style={{ background: 'transparent', border: 'none', color: '#e53e3e', cursor: 'pointer' }}
+                                                                            >
+                                                                                <FaTrash />
+                                                                            </button>
+                                                                        </div>
+                                                                    </div>
+
+                                                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                                                        <div style={{ background: '#ebf8ff', padding: '0.5rem', borderRadius: '0.5rem', textAlign: 'center' }}>
+                                                                            <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#2b6cb0' }}>{totalPlants}</div>
+                                                                            <div style={{ fontSize: '0.75rem', color: '#4a5568' }}>Plantas</div>
+                                                                        </div>
+                                                                        <div style={{ background: '#f0fff4', padding: '0.5rem', borderRadius: '0.5rem', textAlign: 'center' }}>
+                                                                            <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#2f855a' }}>{uniqueGenetics}</div>
+                                                                            <div style={{ fontSize: '0.75rem', color: '#4a5568' }}>Variedades</div>
+                                                                        </div>
+                                                                    </div>
+                                                                </DroppableMapCard>
+                                                            );
+                                                        })}
+                                                        <div
+                                                            onClick={() => setIsMapModalOpen(true)}
+                                                            style={{
+                                                                border: '2px dashed #cbd5e0', borderRadius: '1rem',
+                                                                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                                                                cursor: 'pointer', minHeight: '160px', color: '#a0aec0', transition: 'all 0.2s'
+                                                            }}
+                                                            onMouseEnter={e => { e.currentTarget.style.borderColor = '#3182ce'; e.currentTarget.style.color = '#3182ce'; }}
+                                                            onMouseLeave={e => { e.currentTarget.style.borderColor = '#cbd5e0'; e.currentTarget.style.color = '#a0aec0'; }}
+                                                        >
+                                                            <FaPlus size={24} style={{ marginBottom: '0.5rem' }} />
+                                                            <span style={{ fontWeight: 600 }}>Nueva Mesa</span>
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </div>
+
+                                            {/* Create Map Drop Zone */}
+                                            <CreateMapDropZone>
+                                                <div style={{ textAlign: 'center', padding: '2rem', color: '#a0aec0' }}>
+                                                    <FaMapMarkedAlt style={{ fontSize: '2rem', marginBottom: '0.5rem', opacity: 0.5 }} />
+                                                    <p>Arrastra lotes aquí para crear una nueva mesa automáticamente</p>
+                                                </div>
+                                            </CreateMapDropZone>
+
+                                            {/* Modals are kept here within main flow or moved to root? They are safer here for now */}
+                                            {/* Create Map Modal */}
+                                            {isMapModalOpen && (
+                                                <div style={{
+                                                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                                                    background: 'rgba(0,0,0,0.5)', zIndex: 1000,
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                                }}>
+                                                    <div style={{ background: 'white', padding: '2rem', borderRadius: '1rem', width: '400px' }}>
+                                                        <h3 style={{ marginBottom: '1.5rem' }}>Crear Nueva Mesa</h3>
+                                                        <div style={{ marginBottom: '1rem' }}>
+                                                            <label style={{ display: 'block', marginBottom: '0.5rem' }}>Nombre</label>
+                                                            <input
+                                                                autoFocus
+                                                                value={newMapName}
+                                                                onChange={e => setNewMapName(e.target.value)}
+                                                                style={{ width: '100%', padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '0.5rem' }}
+                                                                placeholder="Ej: Esquejera A"
+                                                            />
+                                                        </div>
+                                                        <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
+                                                            <div>
+                                                                <label style={{ display: 'block', marginBottom: '0.5rem' }}>Filas</label>
+                                                                <input
+                                                                    type="number"
+                                                                    value={newMapRows}
+                                                                    onChange={e => setNewMapRows(e.target.value)}
+                                                                    style={{ width: '100%', padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '0.5rem' }}
+                                                                    placeholder="7"
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <label style={{ display: 'block', marginBottom: '0.5rem' }}>Columnas</label>
+                                                                <input
+                                                                    type="number"
+                                                                    value={newMapCols}
+                                                                    onChange={e => setNewMapCols(e.target.value)}
+                                                                    style={{ width: '100%', padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '0.5rem' }}
+                                                                    placeholder="7"
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
+                                                            <button onClick={() => setIsMapModalOpen(false)} style={{ background: 'white', border: '1px solid #e2e8f0', padding: '0.5rem 1rem', borderRadius: '0.5rem' }}>Cancelar</button>
+                                                            <button onClick={handleCreateMap} style={{ background: '#3182ce', color: 'white', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.5rem' }}>Crear</button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Edit Map Modal */}
+                                            {isEditMapModalOpen && (
+                                                <div style={{
+                                                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                                                    background: 'rgba(0,0,0,0.5)', zIndex: 1000,
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                                }}>
+                                                    <div style={{ background: 'white', padding: '2rem', borderRadius: '1rem', width: '400px' }}>
+                                                        <h3 style={{ marginBottom: '1.5rem' }}>Editar Mesa</h3>
+                                                        <div style={{ marginBottom: '1rem' }}>
+                                                            <label style={{ display: 'block', marginBottom: '0.5rem' }}>Nombre</label>
+                                                            <input
+                                                                autoFocus
+                                                                value={editMapName}
+                                                                onChange={e => setEditMapName(e.target.value)}
+                                                                style={{ width: '100%', padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '0.5rem' }}
+                                                            />
+                                                        </div>
+                                                        <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
+                                                            <div>
+                                                                <label style={{ display: 'block', marginBottom: '0.5rem' }}>Filas</label>
+                                                                <input
+                                                                    type="number"
+                                                                    value={editMapRows}
+                                                                    onChange={e => setEditMapRows(e.target.value)}
+                                                                    style={{ width: '100%', padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '0.5rem' }}
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <label style={{ display: 'block', marginBottom: '0.5rem' }}>Columnas</label>
+                                                                <input
+                                                                    type="number"
+                                                                    value={editMapCols}
+                                                                    onChange={e => setEditMapCols(e.target.value)}
+                                                                    style={{ width: '100%', padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '0.5rem' }}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
+                                                            <button onClick={() => setIsEditMapModalOpen(false)} style={{ background: 'white', border: '1px solid #e2e8f0', padding: '0.5rem 1rem', borderRadius: '0.5rem' }}>Cancelar</button>
+                                                            <button onClick={handleUpdateMap} style={{ background: '#3182ce', color: 'white', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.5rem' }}>Guardar Cambios</button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                        </div>
+                                    ) : (
+                                        /* ACTIVE MAP VIEW */
+                                        (() => {
+                                            const activeMap = cloneMaps.find(m => m.id === activeMapId);
+                                            if (!activeMap) return <div>Mapa no encontrado</div>;
+                                            return (
+                                                <div className="active-map-container">
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                                            <h3 style={{ margin: 0, fontSize: '1.5rem', color: '#2d3748' }}>{activeMap.name}</h3>
+                                                            <span style={{ background: '#ebf8ff', color: '#2b6cb0', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', fontSize: '0.8rem', fontWeight: 600 }}>
+                                                                {activeMap.grid_rows}x{activeMap.grid_columns}
+                                                            </span>
+
+                                                            {/* ACTIVE MAP SELECTION CONTROLS */}
+                                                            <div className="no-print-map-controls" style={{ display: 'flex', gap: '0.5rem', marginLeft: '1rem' }}>
+                                                                <button
+                                                                    onClick={() => handleToggleSelectionMode()}
+                                                                    style={{
+                                                                        background: 'white',
+                                                                        border: '1px solid #e2e8f0',
+                                                                        borderRadius: '0.375rem',
+                                                                        padding: '0.5rem 1rem',
+                                                                        fontSize: '0.85rem',
+                                                                        cursor: 'pointer',
+                                                                        color: isSelectionMode ? '#e53e3e' : '#4a5568',
+                                                                        fontWeight: 600,
+                                                                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                                                                        display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                                                        transition: 'all 0.2s',
+                                                                    }}
+                                                                >
+                                                                    {isSelectionMode ? <FaTimes /> : <FaCheck />}
+                                                                    {isSelectionMode ? 'Cancelar Selección' : 'Seleccionar Varios'}
+                                                                </button>
+
+                                                                <button
+                                                                    onClick={() => {
+                                                                        document.body.classList.add('printing-map');
+                                                                        window.print();
+                                                                        document.body.classList.remove('printing-map');
+                                                                    }}
+                                                                    style={{
+                                                                        background: 'white',
+                                                                        border: '1px solid #e2e8f0',
+                                                                        borderRadius: '0.375rem',
+                                                                        padding: '0.5rem 1rem',
+                                                                        fontSize: '0.85rem',
+                                                                        cursor: 'pointer',
+                                                                        color: '#4a5568',
+                                                                        fontWeight: 600,
+                                                                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                                                                        display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                                                    }}
+                                                                >
+                                                                    <FaPrint />
+                                                                    Imprimir
+                                                                </button>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="no-print-map-controls" style={{ display: 'flex', gap: '0.5rem', marginLeft: '1rem' }}>
+                                                            {isSelectionMode && selectedBatchIds.size > 0 && (
+                                                                <button
+                                                                    onClick={handleBulkDeleteFirstStep}
+                                                                    style={{
+                                                                        background: '#e53e3e',
+                                                                        color: 'white',
+                                                                        border: 'none',
+                                                                        borderRadius: '0.375rem',
+                                                                        padding: '0.5rem 1rem',
+                                                                        fontSize: '0.85rem',
+                                                                        fontWeight: 600,
+                                                                        cursor: 'pointer',
+                                                                        boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+                                                                        display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                                                        transition: 'background 0.2s'
+                                                                    }}
+                                                                >
+                                                                    <FaTrash />
+                                                                    Eliminar ({selectedBatchIds.size})
+                                                                </button>
+                                                            )}
+                                                            <button
+                                                                onClick={() => setActiveMapId(null)}
+                                                                style={{
+                                                                    background: 'white', border: '1px solid #e2e8f0', padding: '0.5rem 1rem',
+                                                                    borderRadius: '0.5rem', color: '#4a5568', fontWeight: 600, cursor: 'pointer',
+                                                                    display: 'flex', alignItems: 'center', gap: '0.5rem'
+                                                                }}
+                                                            >
+                                                                <FaArrowLeft /> Volver a Mesas
+                                                            </button>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="printable-map-grid">
+                                                        <EsquejeraGrid
+                                                            rows={activeMap.grid_rows || 10}
+                                                            cols={activeMap.grid_columns || 10}
+                                                            batches={room?.batches?.filter(b => b.clone_map_id === activeMap.id) || []}
+                                                            onBatchClick={(b) => { if (b) isSelectionMode ? handleBatchSelection(b) : handleBatchClick(b); }}
+                                                            selectionMode={isSelectionMode}
+                                                            selectedBatchIds={selectedBatchIds}
+                                                        />
+                                                    </div>
+
+                                                    {/* PRINTABLE DETAIL TABLE */}
+                                                    <div className="printable-map-details">
+                                                        <h4 style={{ margin: '2rem 0 1rem 0', borderBottom: '2px solid #000', paddingBottom: '0.5rem' }}>Detalle de Lotes</h4>
+                                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+                                                            <thead>
+                                                                <tr style={{ background: '#f0f0f0', borderBottom: '1px solid #000' }}>
+                                                                    <th style={{ padding: '0.5rem', textAlign: 'left', border: '1px solid #ccc' }}>Posición</th>
+                                                                    <th style={{ padding: '0.5rem', textAlign: 'left', border: '1px solid #ccc' }}>Genética / Nombre</th>
+                                                                    <th style={{ padding: '0.5rem', textAlign: 'left', border: '1px solid #ccc' }}>Código (ID)</th>
+                                                                    <th style={{ padding: '0.5rem', textAlign: 'left', border: '1px solid #ccc' }}>Fecha Ingreso</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {(room?.batches?.filter(b => b.clone_map_id === activeMap.id) || [])
+                                                                    .sort((a, b) => {
+                                                                        // Simple alphanumeric sort for positions like A1, A2, B1
+                                                                        return (a.grid_position || '').localeCompare(b.grid_position || '', undefined, { numeric: true, sensitivity: 'base' });
+                                                                    })
+                                                                    .map(batch => (
+                                                                        <tr key={batch.id} style={{ borderBottom: '1px solid #eee' }}>
+                                                                            <td style={{ padding: '0.4rem', border: '1px solid #ccc', fontWeight: 'bold', textAlign: 'center' }}>{batch.grid_position || '-'}</td>
+                                                                            <td style={{ padding: '0.4rem', border: '1px solid #ccc' }}>{batch.genetic?.name || batch.name}</td>
+                                                                            <td style={{ padding: '0.4rem', border: '1px solid #ccc', fontFamily: 'monospace' }}>{batch.tracking_code || '-'}</td>
+                                                                            <td style={{ padding: '0.4rem', border: '1px solid #ccc' }}>
+                                                                                {batch.created_at ? format(new Date(batch.created_at), 'dd/MM/yyyy', { locale: es }) : '-'}
+                                                                            </td>
+                                                                        </tr>
+                                                                    ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()
+                                    )}
+                                </div>
+
+                                {/* SIDEBAR (Shared) */}
+                                <div className="no-print" style={{
+                                    flex: 1,
+                                    minWidth: '250px',
+                                    background: '#f7fafc',
+                                    padding: '0.75rem',
+                                    borderRadius: '0.5rem',
+                                    border: '1px solid #e2e8f0',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    height: 'calc(100vh - 160px)',
+                                    position: 'sticky',
+                                    top: '1rem'
+                                }}>
+                                    <div style={{ flexShrink: 0 }}>
+                                        <h4 style={{ margin: '0 0 1rem 0', color: '#4a5568', fontSize: '1rem' }}>Lotes Disponibles</h4>
+                                        <ActionButton onClick={() => setIsCreateBatchModalOpen(true)} style={{ width: '100%', marginBottom: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                                            <FaPlus /> Nuevo Lote
+                                        </ActionButton>
+                                    </div>
+                                    <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+                                        {(() => {
+                                            const available = room?.batches?.filter(b => !b.clone_map_id && b.quantity > 0 && b.current_room_id === room.id) || [];
+                                            const grouped = groupBatchesByGeneticDate(available);
+                                            if (grouped.length === 0) return <div style={{ fontSize: '0.85rem', color: '#a0aec0', padding: '1rem', textAlign: 'center' }}>No hay lotes en espera.</div>;
+                                            return grouped.map(group => (
+                                                <SidebarBatchGroup
+                                                    key={group.root.id}
+                                                    group={group}
+                                                    expanded={expandedSidebarGroups.has(group.root.id)}
+                                                    onToggleExpand={() => toggleSidebarGroupExpansion(group.root.id)}
+                                                    onBatchGroupClick={handleBatchClick}
+                                                    renderHeaderActions={(b) => (
+                                                        <>
+                                                            <button onClick={(e) => { e.stopPropagation(); handleEditBatchClick(e, b); }} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '4px', color: '#3182ce', cursor: 'pointer', padding: '4px', display: 'flex' }}><FaPen size={10} /></button>
+                                                            <button onClick={(e) => { e.stopPropagation(); handleDeleteBatchClick(e, b); }} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '4px', color: '#e53e3e', cursor: 'pointer', padding: '4px', display: 'flex' }}><FaTrash size={10} /></button>
+                                                        </>
+                                                    )}
+                                                    childrenRender={(b) => (
+                                                        <div key={b.id} style={{
+                                                            display: 'flex',
+                                                            justifyContent: 'space-between',
+                                                            alignItems: 'center',
+                                                            padding: '0.25rem 0.5rem',
+                                                            margin: '0.25rem 0',
+                                                            border: '1px solid #e2e8f0',
+                                                            borderRadius: '0.5rem',
+                                                            transition: 'all 0.2s',
+                                                            background: selectedBatchId === b.id ? '#ebf8ff' : 'transparent'
+                                                        }}>
+                                                            <div style={{ flex: 1 }}>
+                                                                <DraggableStockBatch batch={b} onClick={() => handleBatchClick(b)} />
+                                                            </div>
+                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginLeft: '0.5rem' }}>
+                                                                <button onClick={(e) => { e.stopPropagation(); handleEditBatchClick(e, b); }} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '4px', color: '#3182ce', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Editar Lote"><FaPen size={10} /></button>
+                                                                <button onClick={(e) => { e.stopPropagation(); handleDeleteBatchClick(e, b); }} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '4px', color: '#e53e3e', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Eliminar Lote"><FaTrash size={10} /></button>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                />
+                                            ));
+                                        })()}
+                                    </div>
+                                </div>
+                            </div >
+
+                            <DragOverlay>
+                                {activeItem ? (
+                                    activeItem.type === 'batch' ? (
+                                        <div style={{ transform: 'none' }}>
+                                            <DraggableStockBatch batch={activeItem.batch} />
+                                        </div>
+                                    ) : activeItem.type === 'batch-group' ? (
+                                        <div style={{ background: 'white', padding: '0.5rem', borderRadius: '0.5rem', border: '1px solid #3182ce', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', width: '250px' }}>
+                                            <strong>{activeItem.group.root.name}</strong>
+                                            <div style={{ fontSize: '0.8rem' }}>Arrastrando grupo...</div>
+                                        </div>
+                                    ) : activeItem.type === 'genetic' ? (
+                                        <div style={{ transform: 'none' }}>
+                                            <DraggableGenetic genetic={activeItem.genetic} />
+                                        </div>
+                                    ) : null
+                                ) : null}
+                            </DragOverlay>
+                        </DndContext >
+                    </div >
+                ) : ['drying', 'secado'].includes((room?.type || '').toLowerCase()) ? (
+                    /* DRYING ROOM VIEW */
+                    <div className="no-print">
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            {groupBatchesByGeneticDate(room?.batches || []).map(group => {
+                                const { root, children } = group;
+                                const isExpanded = expandedDryingGroups.has(root.id);
+                                const totalQty = root.quantity + children.reduce((acc: number, c: any) => acc + c.quantity, 0);
+                                const groupName = root.genetic?.name || root.name; // Logic from SidebarBatchGroup
+
+                                // Specific display name for the group header
+                                let displayName = groupName;
+                                if (root._virtualGroupName) displayName = root._virtualGroupName;
+                                else if (true) { // Default Smart Naming
+                                    const geneticName = root.genetic?.name || root.name || 'Desconocida';
+                                    const prefix = geneticName.substring(0, 6).toUpperCase();
+                                    const dateStr = new Date(root.start_date || root.created_at).toLocaleDateString();
+                                    displayName = `Lote ${prefix} - ${dateStr}`;
+                                    // Override if name is simple
+                                    if (root.name && !root.name.includes('Lote')) displayName = `Lote ${root.name}`;
+                                }
+
+                                return (
+                                    <div key={root.id} style={{
+                                        background: 'white', border: '1px solid #e2e8f0', borderRadius: '0.5rem',
+                                        boxShadow: '0 2px 4px rgba(0,0,0,0.05)', overflow: 'hidden'
+                                    }}>
+                                        {/* Group Header */}
+                                        <div
+                                            onClick={() => toggleDryingGroupExpansion(root.id)}
+                                            style={{
+                                                padding: '1rem',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                justifyContent: 'space-between',
+                                                alignItems: 'center',
+                                                background: isExpanded ? '#ebf8ff' : 'white',
+                                                borderBottom: isExpanded ? '1px solid #bee3f8' : 'none'
+                                            }}
+                                        >
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                                <div style={{
+                                                    width: '24px', height: '24px', borderRadius: '50%',
+                                                    background: '#3182ce', color: 'white',
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                    fontSize: '0.8rem'
+                                                }}>
+                                                    {isExpanded ? '▼' : '▶'}
+                                                </div>
+                                                <div>
+                                                    <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#2d3748' }}>{displayName}</h3>
+                                                    <span style={{ fontSize: '0.9rem', color: '#718096' }}>{totalQty} plantas en total</span>
+                                                </div>
+                                            </div>
+                                            <Badge stage="drying">Secado</Badge>
+                                        </div>
+
+                                        {/* Expanded Content: Individual Batches */}
+                                        {isExpanded && (
+                                            <div style={{ padding: '1rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem', background: '#f7fafc' }}>
+                                                {[root, ...children].map(b => {
+                                                    const daysInDrying = differenceInDays(new Date(), new Date(b.created_at));
+                                                    return (
+                                                        <div key={b.id} style={{
+                                                            background: 'white', border: '1px solid #e2e8f0', borderRadius: '0.5rem',
+                                                            padding: '0.75rem', position: 'relative'
+                                                        }}>
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                                                                <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#4a5568' }}>{b.tracking_code || 'S/C'}</span>
+                                                                <span style={{ fontSize: '0.75rem', color: '#718096' }}>{format(new Date(b.created_at), 'd MMM', { locale: es })}</span>
+                                                            </div>
+                                                            <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.95rem', color: '#2d3748' }}>{b.name}</h4>
+
+                                                            <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.85rem', color: '#4a5568', marginBottom: '0.75rem' }}>
+                                                                <span><strong>{b.quantity}</strong> u.</span>
+                                                                <span><strong>{daysInDrying}</strong> días</span>
+                                                            </div>
+
+                                                            <button style={{
+                                                                width: '100%',
+                                                                background: '#ed8936', color: 'white', border: 'none',
+                                                                padding: '0.4rem', borderRadius: '0.3rem', cursor: 'pointer',
+                                                                fontWeight: 600, fontSize: '0.8rem'
+                                                            }} onClick={(e) => { e.stopPropagation(); handleOpenFinalize(b); }}>
+                                                                Finalizar / A Stock
+                                                            </button>
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
                                         )}
                                     </div>
+                                );
+                            })}
 
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '4px' }}>
-                                        {dayTasks.map(t => {
-                                            const isVirtual = t.id.startsWith('virtual-');
-                                            return (
-                                                <div
-                                                    key={t.id}
-                                                    onClick={(e) => {
-                                                        if (isVirtual) {
-                                                            e.stopPropagation();
-                                                            setIsProjectionAlertOpen(true);
-                                                            return;
-                                                        }
-                                                        handleTaskClick(e, t);
-                                                    }}
-                                                    style={{
-                                                        fontSize: '0.7rem', padding: '2px 4px', borderRadius: '3px',
-                                                        background: isVirtual ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.6)',
-                                                        color: '#2d3748',
-                                                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                                                        borderLeft: `3px solid ${t.status === 'done' ? '#48bb78' : isVirtual ? '#a0aec0' : '#718096'}`,
-                                                        cursor: isVirtual ? 'default' : 'pointer',
-                                                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                                                        opacity: isVirtual ? 0.7 : 1,
-                                                        fontStyle: isVirtual ? 'italic' : 'normal',
-                                                        border: isVirtual ? '1px dashed #cbd5e0' : 'none'
-                                                    }}
-                                                    title={isVirtual ? "Proyección futura (Virtual)" : t.title}
-                                                >
-                                                    {t.title.replace(' (Proyectada)', '')}
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-
-                                    {phaseBar}
+                            {(!room?.batches || room.batches.length === 0) && (
+                                <div style={{ textAlign: 'center', padding: '3rem', color: '#a0aec0', border: '2px dashed #cbd5e0', borderRadius: '1rem' }}>
+                                    <FaThermometerHalf style={{ fontSize: '3rem', marginBottom: '1rem', opacity: 0.5 }} />
+                                    <p>La sala de secado está vacía.</p>
+                                    <p style={{ fontSize: '0.9rem' }}>Realiza una cosecha desde Floración para enviar plantas aquí.</p>
                                 </div>
-                            );
-                        });
-                    })()}
-                </div>
-            </div>
+                            )}
+                        </div>
+                    </div>
+                ) : null
+            }
+
+
+
+            {/* Calendar Section (Hidden for Clones/Germination) */}
+            {
+                !['clones', 'esquejes', 'esquejera', 'drying', 'secado', 'germination'].includes((room?.type as string)?.toLowerCase()) && (
+                    <div className="no-print" style={{ background: 'white', borderRadius: '1rem', padding: '1.5rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                        {/* Calendar Header */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                            <button onClick={() => setCurrentDate(subMonths(currentDate, 1))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#718096', fontSize: '1rem', padding: '0.5rem' }}>&lt; Anterior</button>
+                            <h2 style={{ fontSize: '1.5rem', color: '#2d3748', textTransform: 'capitalize' }}>
+                                {format(currentDate, 'MMMM yyyy', { locale: es })}
+                            </h2>
+                            <button onClick={() => setCurrentDate(addMonths(currentDate, 1))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#718096', fontSize: '1rem', padding: '0.5rem' }}>Siguiente &gt;</button>
+                        </div>
+
+                        {/* Calendar Grid */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '1px', background: '#e2e8f0', border: '1px solid #e2e8f0', borderRadius: '0.5rem', overflow: 'hidden' }}>
+                            {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map(d => (
+                                <div key={d} style={{ background: '#f7fafc', padding: '0.75rem', textAlign: 'center', fontWeight: 'bold', color: '#718096', fontSize: '0.85rem' }}>{d}</div>
+                            ))}
+
+                            {(() => {
+                                const monthStart = startOfMonth(currentDate);
+                                const monthEnd = endOfMonth(monthStart);
+                                const startDate = startOfWeek(monthStart);
+                                const endDate = endOfWeek(monthEnd);
+                                const dateFormat = "d";
+
+
+                                const calendarDays = eachDayOfInterval({ start: startDate, end: endDate });
+
+                                // Helper to generate virtual tasks based on recurrence
+                                const generateVirtualTasks = (currentTasks: Task[], viewingDate: Date): Task[] => {
+                                    const virtualTasks: Task[] = [];
+                                    const monthEnd = endOfMonth(viewingDate);
+
+                                    currentTasks.forEach(task => {
+                                        if (!task.recurrence || !task.due_date) return;
+
+                                        const rec = task.recurrence;
+                                        let lastDate = new Date(task.due_date);
+                                        // Ensure lastDate is valid
+                                        if (isNaN(lastDate.getTime())) return;
+
+                                        // Prevent infinite loops
+                                        let safetyCounter = 0;
+
+                                        while (lastDate < monthEnd && safetyCounter < 50) {
+                                            let nextDate: Date | null = null;
+                                            const interval = rec.interval || 1;
+
+                                            if (rec.type === 'custom' || rec.type === 'daily' || rec.type === 'weekly') {
+                                                if (rec.unit === 'day' || rec.type === 'daily') {
+                                                    nextDate = addDays(lastDate, interval);
+                                                } else if (rec.unit === 'week' || rec.type === 'weekly') {
+                                                    nextDate = addWeeks(lastDate, interval);
+                                                } else if (rec.unit === 'month') {
+                                                    nextDate = addMonths(lastDate, interval);
+                                                }
+                                            }
+
+                                            if (nextDate && nextDate <= monthEnd) {
+                                                // Create Virtual Task
+                                                // Check if a real task already exists on this date for this crop/room to avoid dupes?
+                                                // For now, simply trust the projection.
+                                                virtualTasks.push({
+                                                    ...task,
+                                                    id: `virtual - ${task.id} -${nextDate.getTime()} `,
+                                                    due_date: format(nextDate, 'yyyy-MM-dd'),
+                                                    status: 'pending',
+                                                    title: `${task.title} (Proyectada)`,
+                                                    // Add a custom flag handled by UI
+                                                    type: task.type // Keep type for color
+                                                });
+                                                lastDate = nextDate;
+                                            } else {
+                                                break;
+                                            }
+                                            safetyCounter++;
+                                        }
+                                    });
+                                    return virtualTasks;
+                                };
+
+                                const allVirtualTasks = generateVirtualTasks(tasks, currentDate);
+                                const allTasksForView = [...tasks, ...allVirtualTasks];
+
+                                return calendarDays.map((dayItem, idx) => {
+                                    const isCurrentMonth = isSameMonth(dayItem, monthStart);
+                                    const dateStr = format(dayItem, 'yyyy-MM-dd');
+                                    const dayTasks = allTasksForView.filter(t => t.due_date && t.due_date.split('T')[0] === dateStr);
+
+                                    // Determine Background Gradient based on Task Distribution
+                                    let dayBg = 'white';
+
+                                    if (dayTasks.length > 0) {
+                                        // Helper to get pastel color by task type
+                                        const getTaskColor = (t: Task) => {
+                                            switch (t.type) {
+                                                case 'danger': return '#fed7d7'; // Red
+                                                case 'warning': return '#fefcbf'; // Yellow
+                                                case 'fertilizar':
+                                                case 'enmienda':
+                                                case 'te_compost': return '#c6f6d5'; // Green
+                                                case 'riego': return '#bee3f8'; // Blue
+                                                case 'poda_apical': return '#fed7d7'; // Light Red
+                                                case 'defoliacion': return '#fbd38d'; // Orange
+                                                case 'hst':
+                                                case 'lst':
+                                                case 'entrenamiento': return '#e9d8fd'; // Purple
+                                                case 'esquejes': return '#feebc8'; // Orange
+                                                default: return '#edf2f7'; // Gray (Info)
+                                            }
+                                        };
+
+                                        if (dayTasks.length === 1) {
+                                            dayBg = getTaskColor(dayTasks[0]);
+                                        } else {
+                                            // Build linear gradient
+                                            const step = 100 / dayTasks.length;
+                                            const stops = dayTasks.map((t, i) => {
+                                                const color = getTaskColor(t);
+                                                return `${color} ${i * step}% ${(i + 1) * step}% `;
+                                            }).join(', ');
+                                            dayBg = `linear - gradient(135deg, ${stops})`;
+                                        }
+                                    }
+
+                                    // Phase Calculation Logic
+                                    let phaseBar = null;
+
+
+
+                                    if (room?.start_date && isCurrentMonth) {
+                                        // ... existing logic ...
+                                        const [y, m, d] = room.start_date.split('T')[0].split('-').map(Number);
+                                        const roomStart = new Date(y, m - 1, d);
+                                        const dayTime = new Date(dayItem).setHours(0, 0, 0, 0);
+                                        const startTime = roomStart.setHours(0, 0, 0, 0);
+
+                                        if (dayTime >= startTime) {
+                                            const weekNum = Math.floor((dayTime - startTime) / (7 * 24 * 60 * 60 * 1000)) + 1;
+                                            let isFloweringPhase = false;
+                                            const activeBatch = room.batches?.find(b => b.genetic);
+                                            const geneticVegWeeks = activeBatch?.genetic?.vegetative_weeks;
+
+                                            if (geneticVegWeeks !== undefined && weekNum > geneticVegWeeks) {
+                                                isFloweringPhase = true;
+                                            } else if (room.type === 'flowering') {
+                                                isFloweringPhase = true;
+                                            }
+
+                                            const color = isFloweringPhase ? '#fbd38d' : '#9ae6b4';
+                                            const showLabel = dayItem.getDay() === 1 || dayItem.getDate() === 1 || dayTime === startTime;
+
+                                            phaseBar = (
+                                                <>
+                                                    <div style={{
+                                                        position: 'absolute', bottom: 0, left: 0, right: 0,
+                                                        height: '6px', background: color, opacity: 0.7
+                                                    }} title={`Semana ${weekNum} del ciclo ${isFloweringPhase ? '(Floración)' : '(Vegetativo)'} `}></div>
+                                                    {showLabel && (
+                                                        <div style={{
+                                                            position: 'absolute', bottom: '8px', right: '2px',
+                                                            fontSize: '0.65rem', fontWeight: 'bold', color: isFloweringPhase ? '#c05621' : '#276749',
+                                                            background: 'rgba(255,255,255,0.8)', padding: '0 2px', borderRadius: '2px'
+                                                        }}>Sem {weekNum}</div>
+                                                    )}
+                                                </>
+                                            );
+                                        }
+                                    }
+
+                                    return (
+                                        <div
+                                            key={dayItem.toString()}
+                                            className="calendar-day calendar-day-hover"
+                                            style={{
+                                                background: dayBg, // Applied dynamic background
+                                                minHeight: '100px',
+                                                padding: '0.5rem',
+                                                position: 'relative',
+                                                opacity: isCurrentMonth ? 1 : 0.4,
+                                                cursor: user && (user.role === 'admin' || user.role === 'partner') ? 'pointer' : 'default',
+                                                transition: 'all 0.2s',
+                                                border: isSameDay(dayItem, new Date()) ? '2px solid #3182ce' : '1px solid transparent'
+                                            }}
+                                            onClick={() => handleDayDetails(dayItem)}
+                                        >
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <span style={{ fontWeight: isSameDay(dayItem, new Date()) ? 'bold' : 'normal', color: isSameDay(dayItem, new Date()) ? '#2c5282' : '#2d3748' }}>
+                                                    {format(dayItem, dateFormat)}
+                                                </span>
+                                                {/* Actions: Add Task / Sticky */}
+                                                {user && (user.role === 'admin' || user.role === 'partner') && (
+                                                    <div style={{ display: 'flex', gap: '4px' }}>
+
+                                                        <span
+                                                            style={{ color: '#4a5568', fontSize: '0.8rem', opacity: 0.8, cursor: 'pointer', padding: '2px' }}
+                                                            title="Agregar Tarea"
+                                                            onClick={(e) => { e.stopPropagation(); handleAddTask(dayItem); }}
+                                                        >
+                                                            <FaPlus />
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '4px' }}>
+                                                {dayTasks.map(t => {
+                                                    const isVirtual = t.id.startsWith('virtual-');
+                                                    return (
+                                                        <div
+                                                            key={t.id}
+                                                            onClick={(e) => {
+                                                                if (isVirtual) {
+                                                                    e.stopPropagation();
+                                                                    setIsProjectionAlertOpen(true);
+                                                                    return;
+                                                                }
+                                                                handleTaskClick(e, t);
+                                                            }}
+                                                            style={{
+                                                                fontSize: '0.7rem', padding: '2px 4px', borderRadius: '3px',
+                                                                background: isVirtual ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.6)',
+                                                                color: '#2d3748',
+                                                                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                                                                borderLeft: `3px solid ${t.status === 'done' ? '#48bb78' : isVirtual ? '#a0aec0' : '#718096'} `,
+                                                                cursor: isVirtual ? 'default' : 'pointer',
+                                                                boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                                                                opacity: isVirtual ? 0.7 : 1,
+                                                                fontStyle: isVirtual ? 'italic' : 'normal',
+                                                                border: isVirtual ? '1px dashed #cbd5e0' : 'none'
+                                                            }}
+                                                            title={isVirtual ? "Proyección futura (Virtual)" : t.title}
+                                                        >
+                                                            {t.title.replace(' (Proyectada)', '')}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+
+                                            {phaseBar}
+                                        </div>
+                                    );
+                                });
+                            })()}
+                        </div>
+                    </div>
+                )
+            }
 
 
 
 
             {/* Task Modal - Interactive */}
-            {isTaskModalOpen && (
-                <ModalOverlay onClick={(e) => { if (e.target === e.currentTarget) setIsTaskModalOpen(false) }}>
-                    <ModalContent>
-                        <h3>
-                            {selectedTask ? 'Detalle de Tarea' : 'Nueva Tarea'}
-                        </h3>
+            {
+                isTaskModalOpen && (
+                    <PortalModalOverlay>
+                        <ModalContent>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <h3>
+                                    {selectedTask ? 'Detalle de Tarea' : 'Nueva Tarea'}
+                                </h3>
+                                <button onClick={() => setIsTaskModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.25rem', color: '#a0aec0' }}>
+                                    ✕
+                                </button>
+                            </div>
 
-                        {user && (user.role === 'admin' || user.role === 'partner') ? (
-                            <>
-                                {/* Title is now auto-determined by Type */}
-                                <FormGroup>
-                                    <label>Tipo de Tarea</label>
-                                    <select
-                                        value={taskForm.type}
-                                        onChange={e => {
-                                            const newType = e.target.value as any;
-                                            let newTitle = 'Tarea';
-                                            switch (newType) {
-                                                case 'info': newTitle = 'Información'; break;
-                                                case 'riego': newTitle = 'Riego'; break;
-                                                case 'fertilizar': newTitle = 'Fertilizar'; break;
-                                                case 'defoliacion': newTitle = 'Defoliación'; break;
-                                                case 'poda_apical': newTitle = 'Poda Apical'; break;
-                                                case 'hst': newTitle = 'HST'; break;
-                                                case 'lst': newTitle = 'LST'; break;
-                                                case 'entrenamiento': newTitle = 'Entrenamiento'; break;
-                                                case 'esquejes': newTitle = 'Esquejes'; break;
-                                                case 'warning': newTitle = 'Alerta'; break;
-                                                default: newTitle = 'Tarea';
-                                            }
-                                            setTaskForm({ ...taskForm, type: newType, title: newTitle });
-                                        }}
-                                    >
-                                        <option value="info">Info</option>
-                                        <option value="riego">Riego</option>
-                                        <option value="fertilizar">Fertilizar</option>
-                                        <option value="defoliacion">Defoliación</option>
-                                        <option value="poda_apical">Poda Apical</option>
-                                        <option value="hst">HST</option>
-                                        <option value="lst">LST</option>
-                                        <option value="entrenamiento">Entrenamiento</option>
-                                        <option value="esquejes">Esquejes</option>
-                                        <option value="warning">Alerta</option>
-                                    </select>
-                                </FormGroup>
-                                <FormGroup>
-                                    <label>Fecha</label>
-                                    <input type="date" value={taskForm.due_date} onChange={e => setTaskForm({ ...taskForm, due_date: e.target.value })} />
-                                </FormGroup>
-                                <FormGroup>
-                                    <label>Asignar a</label>
-                                    <select value={taskForm.assigned_to} onChange={e => setTaskForm({ ...taskForm, assigned_to: e.target.value })}>
-                                        <option value="">-- Sin Asignar --</option>
-                                        {users.map(u => (
-                                            <option key={u.id} value={u.id}>{u.full_name || u.email || 'Usuario'}</option>
-                                        ))}
-                                    </select>
-                                </FormGroup>
-                                <FormGroup>
-                                    <label>Indicaciones / Instrucciones (Opcional)</label>
-                                    <textarea value={taskForm.description} onChange={e => setTaskForm({ ...taskForm, description: e.target.value })} placeholder="Escribe aquí los detalles precisos (ej: '5ml/L de CalMag')..." />
-                                </FormGroup>
+                            {user && (user.role === 'admin' || user.role === 'partner') ? (
+                                <>
+                                    {/* Removed misplaced modal */}
+                                    <FormGroup>
+                                        <label>Tipo de Tarea</label>
+                                        <select
+                                            value={taskForm.type}
+                                            onChange={e => {
+                                                const newType = e.target.value as any;
+                                                let newTitle = 'Tarea';
+                                                switch (newType) {
+                                                    case 'info': newTitle = 'Información'; break;
+                                                    case 'riego': newTitle = 'Riego'; break;
+                                                    case 'fertilizar': newTitle = 'Fertilizar'; break;
+                                                    case 'defoliacion': newTitle = 'Defoliación'; break;
+                                                    case 'poda_apical': newTitle = 'Poda Apical'; break;
+                                                    case 'hst': newTitle = 'HST'; break;
+                                                    case 'lst': newTitle = 'LST'; break;
+                                                    case 'entrenamiento': newTitle = 'Entrenamiento'; break;
+                                                    case 'esquejes': newTitle = 'Esquejes'; break;
+                                                    case 'warning': newTitle = 'Alerta'; break;
+                                                    default: newTitle = 'Tarea';
+                                                }
+                                                setTaskForm({ ...taskForm, type: newType, title: newTitle });
+                                            }}
+                                        >
+                                            <option value="info">Info</option>
+                                            <option value="riego">Riego</option>
+                                            <option value="fertilizar">Fertilizar</option>
+                                            <option value="defoliacion">Defoliación</option>
+                                            <option value="poda_apical">Poda Apical</option>
+                                            <option value="hst">HST</option>
+                                            <option value="lst">LST</option>
+                                            <option value="entrenamiento">Entrenamiento</option>
+                                            <option value="esquejes">Esquejes</option>
+                                            <option value="warning">Alerta</option>
+                                        </select>
+                                    </FormGroup>
+                                    <FormGroup>
+                                        <label>Fecha</label>
+                                        <input type="date" value={taskForm.due_date} onChange={e => setTaskForm({ ...taskForm, due_date: e.target.value })} />
+                                    </FormGroup>
+                                    <FormGroup>
+                                        <label>Asignar a</label>
+                                        <select value={taskForm.assigned_to} onChange={e => setTaskForm({ ...taskForm, assigned_to: e.target.value })}>
+                                            <option value="">-- Sin Asignar --</option>
+                                            {users.map(u => (
+                                                <option key={u.id} value={u.id}>{u.full_name || u.email || 'Usuario'}</option>
+                                            ))}
+                                        </select>
+                                    </FormGroup>
+                                    <FormGroup>
+                                        <label>Indicaciones / Instrucciones (Opcional)</label>
+                                        <textarea value={taskForm.description} onChange={e => setTaskForm({ ...taskForm, description: e.target.value })} placeholder="Escribe aquí los detalles precisos (ej: '5ml/L de CalMag')..." />
+                                    </FormGroup>
 
-                                {/* Recurrence Section */}
-                                <div style={{ marginTop: '1.5rem', borderTop: '1px solid #e2e8f0', paddingTop: '1rem' }}>
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600, color: '#2d3748', cursor: 'pointer' }}>
-                                        <input
-                                            type="checkbox"
-                                            checked={recurrenceEnabled}
-                                            onChange={e => setRecurrenceEnabled(e.target.checked)}
-                                            style={{ transform: 'scale(1.2)' }}
-                                        />
-                                        Repetir Tarea (Periodicidad)
-                                    </label>
+                                    {/* Recurrence Section */}
+                                    <div style={{ marginTop: '1.5rem', borderTop: '1px solid #e2e8f0', paddingTop: '1rem' }}>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600, color: '#2d3748', cursor: 'pointer' }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={recurrenceEnabled}
+                                                onChange={e => setRecurrenceEnabled(e.target.checked)}
+                                                style={{ transform: 'scale(1.2)' }}
+                                            />
+                                            Repetir Tarea (Periodicidad)
+                                        </label>
 
-                                    {recurrenceEnabled && (
-                                        <div style={{ marginTop: '1rem', padding: '1rem', background: '#f7fafc', borderRadius: '0.5rem', border: '1px solid #edf2f7' }}>
-                                            <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
-                                                <div style={{ flex: 1 }}>
-                                                    <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.25rem', color: '#718096' }}>Repetir cada:</label>
-                                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                                        <input
-                                                            type="number"
-                                                            min="1"
-                                                            value={recurrenceConfig.interval}
-                                                            onChange={e => setRecurrenceConfig(prev => ({ ...prev, interval: parseInt(e.target.value) || 1 }))}
-                                                            style={{ width: '60px', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e0' }}
-                                                        />
-                                                        <select
-                                                            value={recurrenceConfig.unit}
-                                                            onChange={e => setRecurrenceConfig(prev => ({ ...prev, unit: e.target.value as any, type: 'custom' }))}
-                                                            style={{ flex: 1, padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e0' }}
-                                                        >
-                                                            <option value="day">Días</option>
-                                                            <option value="week">Semanas</option>
-                                                            <option value="month">Meses</option>
-                                                        </select>
+                                        {recurrenceEnabled && (
+                                            <div style={{ marginTop: '1rem', padding: '1rem', background: '#f7fafc', borderRadius: '0.5rem', border: '1px solid #edf2f7' }}>
+                                                <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
+                                                    <div style={{ flex: 1 }}>
+                                                        <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.25rem', color: '#718096' }}>Repetir cada:</label>
+                                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                            <input
+                                                                type="number"
+                                                                min="1"
+                                                                value={recurrenceConfig.interval}
+                                                                onChange={e => setRecurrenceConfig(prev => ({ ...prev, interval: parseInt(e.target.value) || 1 }))}
+                                                                style={{ width: '60px', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e0' }}
+                                                            />
+                                                            <select
+                                                                value={recurrenceConfig.unit}
+                                                                onChange={e => setRecurrenceConfig(prev => ({ ...prev, unit: e.target.value as any, type: 'custom' }))}
+                                                                style={{ flex: 1, padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e0' }}
+                                                            >
+                                                                <option value="day">Días</option>
+                                                                <option value="week">Semanas</option>
+                                                                <option value="month">Meses</option>
+                                                            </select>
+                                                        </div>
                                                     </div>
                                                 </div>
+
+                                                {recurrenceConfig.unit === 'week' && (
+                                                    <div style={{ marginBottom: '1rem' }}>
+                                                        <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.5rem', color: '#718096' }}>Se repite el:</label>
+                                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                            {['D', 'L', 'M', 'M', 'J', 'V', 'S'].map((day, idx) => {
+                                                                const isSelected = recurrenceConfig.daysOfWeek?.includes(idx);
+                                                                return (
+                                                                    <button
+                                                                        key={idx}
+                                                                        onClick={() => {
+                                                                            setRecurrenceConfig(prev => {
+                                                                                const days = prev.daysOfWeek || [];
+                                                                                if (days.includes(idx)) return { ...prev, daysOfWeek: days.filter(d => d !== idx) };
+                                                                                return { ...prev, daysOfWeek: [...days, idx] };
+                                                                            });
+                                                                        }}
+                                                                        style={{
+                                                                            width: '32px', height: '32px', borderRadius: '50%', border: 'none',
+                                                                            background: isSelected ? '#3182ce' : '#e2e8f0',
+                                                                            color: isSelected ? 'white' : '#4a5568',
+                                                                            fontWeight: 'bold', cursor: 'pointer', fontSize: '0.8rem'
+                                                                        }}
+                                                                    >
+                                                                        {day}
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
+                                        )}
+                                    </div>
 
-                                            {recurrenceConfig.unit === 'week' && (
-                                                <div style={{ marginBottom: '1rem' }}>
-                                                    <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.5rem', color: '#718096' }}>Se repite el:</label>
-                                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                                        {['D', 'L', 'M', 'M', 'J', 'V', 'S'].map((day, idx) => {
-                                                            const isSelected = recurrenceConfig.daysOfWeek?.includes(idx);
-                                                            return (
-                                                                <button
-                                                                    key={idx}
-                                                                    onClick={() => {
-                                                                        setRecurrenceConfig(prev => {
-                                                                            const days = prev.daysOfWeek || [];
-                                                                            if (days.includes(idx)) return { ...prev, daysOfWeek: days.filter(d => d !== idx) };
-                                                                            return { ...prev, daysOfWeek: [...days, idx] };
-                                                                        });
-                                                                    }}
-                                                                    style={{
-                                                                        width: '32px', height: '32px', borderRadius: '50%', border: 'none',
-                                                                        background: isSelected ? '#3182ce' : '#e2e8f0',
-                                                                        color: isSelected ? 'white' : '#4a5568',
-                                                                        fontWeight: 'bold', cursor: 'pointer', fontSize: '0.8rem'
-                                                                    }}
-                                                                >
-                                                                    {day}
-                                                                </button>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
+                                    <div style={{ marginBottom: '1rem' }}>
+                                        <label style={{ display: 'block', fontWeight: 600, color: '#4a5568', fontSize: '0.9rem', marginBottom: '0.5rem' }}>Gestor de archivos</label>
+                                        <button
+                                            onClick={() => alert("Funcionalidad de subida de fotos en desarrollo. Se integrará con Supabase Storage.")}
+                                            style={{ background: '#edf2f7', border: '1px dashed #cbd5e0', padding: '1rem', width: '100%', borderRadius: '0.5rem', cursor: 'pointer', color: '#718096' }}
+                                        >
+                                            <FaPlus /> Subir Foto
+                                        </button>
+                                    </div>
 
-                                <div style={{ marginBottom: '1rem' }}>
-                                    <label style={{ display: 'block', fontWeight: 600, color: '#4a5568', fontSize: '0.9rem', marginBottom: '0.5rem' }}>Gestor de archivos</label>
-                                    <button
-                                        onClick={() => alert("Funcionalidad de subida de fotos en desarrollo. Se integrará con Supabase Storage.")}
-                                        style={{ background: '#edf2f7', border: '1px dashed #cbd5e0', padding: '1rem', width: '100%', borderRadius: '0.5rem', cursor: 'pointer', color: '#718096' }}
+                                    <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+                                        {selectedTask && (
+                                            <CancelButton onClick={handleDeleteTask} style={{ color: '#e53e3e', borderColor: '#e53e3e' }}>
+                                                Eliminar
+                                            </CancelButton>
+                                        )}
+                                        <ActionButton onClick={handleSaveTask} $variant="success">
+                                            Guardar
+                                        </ActionButton>
+                                    </div>
+                                </>
+                            ) : (
+                                // Read Only View for Employees (Execution Mode)
+                                <div>
+                                    <div style={{ marginBottom: '1rem' }}>
+                                        <strong>{selectedTask?.title}</strong> <br />
+                                        <Badge taskType={selectedTask?.type}>{selectedTask?.type?.replace(/_/g, ' ')}</Badge>
+                                    </div>
+                                    <p style={{ color: '#4a5568', marginBottom: '1rem' }}>{selectedTask?.description || 'Sin descripción'}</p>
+                                    <p style={{ fontSize: '0.9rem', color: '#718096' }}>Asignado a: {users.find(u => u.id === selectedTask?.assigned_to)?.full_name || 'Nadie'}</p>
+
+                                    {/* Observations Field for Execution */}
+                                    <FormGroup>
+                                        <label>Observaciones</label>
+                                        <textarea
+                                            placeholder="Registra observaciones puntuales al completar..."
+                                            value={taskForm.description} // Re-using state for simplicity, ideally separate 'observations' state
+                                            onChange={e => setTaskForm({ ...taskForm, description: e.target.value })}
+                                        />
+                                    </FormGroup>
+
+                                    <div style={{ marginBottom: '1rem' }}>
+                                        <button
+                                            onClick={() => alert("Subir foto de evidencia (En desarrollo)")}
+                                            style={{ background: '#edf2f7', border: '1px dashed #cbd5e0', padding: '0.5rem', width: '100%', borderRadius: '0.5rem', cursor: 'pointer', color: '#718096', fontSize: '0.9rem' }}
+                                        >
+                                            <FaPlus /> Subir Foto Evidencia
+                                        </button>
+                                    </div>
+
+                                    <ActionButton
+                                        onClick={async () => {
+                                            if (selectedTask) {
+                                                // Save observations first if any are typed (we are using description field state as a proxy for now, but should separate)
+                                                // Actually, let's just complete it.
+                                                const newStatus = selectedTask.status === 'done' ? 'pending' : 'done';
+                                                // Ideally we save the observations to the 'observations' column, not description.
+                                                // For now, let's just toggle status.
+                                                await tasksService.updateTask(selectedTask.id, {
+                                                    observations: taskForm.description, // Saving the typed text as observations
+                                                    status: newStatus
+                                                } as any);
+
+                                                // Refresh
+                                                if (id) {
+                                                    const updatedTasks = await tasksService.getTasksByRoomId(id);
+                                                    setTasks(updatedTasks);
+                                                }
+                                                setIsTaskModalOpen(false);
+                                            }
+                                        }}
+                                        $variant={selectedTask?.status === 'done' ? 'primary' : 'success'}
+                                        style={{ width: '100%', marginTop: '0.5rem' }}
                                     >
-                                        <FaPlus /> Subir Foto
-                                    </button>
-                                </div>
-
-                                <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-                                    {selectedTask && (
-                                        <CancelButton onClick={handleDeleteTask} style={{ color: '#e53e3e', borderColor: '#e53e3e' }}>
-                                            Eliminar
-                                        </CancelButton>
-                                    )}
-                                    <ActionButton onClick={handleSaveTask} $variant="success">
-                                        Guardar
+                                        {selectedTask?.status === 'done' ? 'Marcar como Pendiente' : 'Completa y Guardar'}
                                     </ActionButton>
                                 </div>
-                            </>
-                        ) : (
-                            // Read Only View for Employees (Execution Mode)
-                            <div>
-                                <div style={{ marginBottom: '1rem' }}>
-                                    <strong>{selectedTask?.title}</strong> <br />
-                                    <Badge taskType={selectedTask?.type}>{selectedTask?.type?.replace(/_/g, ' ')}</Badge>
-                                </div>
-                                <p style={{ color: '#4a5568', marginBottom: '1rem' }}>{selectedTask?.description || 'Sin descripción'}</p>
-                                <p style={{ fontSize: '0.9rem', color: '#718096' }}>Asignado a: {users.find(u => u.id === selectedTask?.assigned_to)?.full_name || 'Nadie'}</p>
-
-                                {/* Observations Field for Execution */}
-                                <FormGroup>
-                                    <label>Observaciones</label>
-                                    <textarea
-                                        placeholder="Registra observaciones puntuales al completar..."
-                                        value={taskForm.description} // Re-using state for simplicity, ideally separate 'observations' state
-                                        onChange={e => setTaskForm({ ...taskForm, description: e.target.value })}
-                                    />
-                                </FormGroup>
-
-                                <div style={{ marginBottom: '1rem' }}>
-                                    <button
-                                        onClick={() => alert("Subir foto de evidencia (En desarrollo)")}
-                                        style={{ background: '#edf2f7', border: '1px dashed #cbd5e0', padding: '0.5rem', width: '100%', borderRadius: '0.5rem', cursor: 'pointer', color: '#718096', fontSize: '0.9rem' }}
-                                    >
-                                        <FaPlus /> Subir Foto Evidencia
-                                    </button>
-                                </div>
-
-                                <ActionButton
-                                    onClick={async () => {
-                                        if (selectedTask) {
-                                            // Save observations first if any are typed (we are using description field state as a proxy for now, but should separate)
-                                            // Actually, let's just complete it.
-                                            const newStatus = selectedTask.status === 'done' ? 'pending' : 'done';
-                                            // Ideally we save the observations to the 'observations' column, not description.
-                                            // For now, let's just toggle status.
-                                            await tasksService.updateTask(selectedTask.id, {
-                                                observations: taskForm.description, // Saving the typed text as observations
-                                                status: newStatus
-                                            } as any);
-
-                                            // Refresh
-                                            if (id) {
-                                                const updatedTasks = await tasksService.getTasksByRoomId(id);
-                                                setTasks(updatedTasks);
-                                            }
-                                            setIsTaskModalOpen(false);
-                                        }
-                                    }}
-                                    $variant={selectedTask?.status === 'done' ? 'primary' : 'success'}
-                                    style={{ width: '100%', marginTop: '0.5rem' }}
-                                >
-                                    {selectedTask?.status === 'done' ? 'Marcar como Pendiente' : 'Completa y Guardar'}
-                                </ActionButton>
-                            </div>
-                        )}
-                    </ModalContent>
-                </ModalOverlay>
-            )}
+                            )}
+                        </ModalContent>
+                    </PortalModalOverlay>
+                )
+            }
 
             {/* Day Summary Modal */}
-            {isDaySummaryOpen && selectedDayForSummary && (
-                <ModalOverlay onClick={(e) => { if (e.target === e.currentTarget) setIsDaySummaryOpen(false) }}>
-                    <ModalContent style={{ maxWidth: '600px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                            <h3 style={{ margin: 0 }}>Resumen del {format(selectedDayForSummary, 'd MMMM yyyy', { locale: es })}</h3>
-                            <button onClick={() => setIsDaySummaryOpen(false)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '1.2rem' }}>×</button>
-                        </div>
-
-                        <div style={{ marginBottom: '1.5rem' }}>
-                            <h4 style={{ fontSize: '1rem', color: '#4a5568', marginBottom: '0.5rem' }}>Tareas Asignadas</h4>
-                            {tasks.filter(t => t.due_date && t.due_date.split('T')[0] === format(selectedDayForSummary, 'yyyy-MM-dd')).length > 0 ? (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                    {tasks.filter(t => t.due_date && t.due_date.split('T')[0] === format(selectedDayForSummary, 'yyyy-MM-dd')).map(t => (
-                                        <div key={t.id} style={{
-                                            border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.75rem',
-                                            background: t.status === 'done' ? '#f0fff4' : 'white',
-                                            display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-                                        }}>
-                                            <div>
-                                                <div style={{ fontWeight: 'bold', color: '#2d3748' }}>{t.title}</div>
-                                                <div style={{ fontSize: '0.85rem', color: '#718096' }}>
-                                                    <Badge taskType={t.type} style={{ marginRight: '0.5rem', fontSize: '0.65rem' }}>{t.type?.replace(/_/g, ' ')}</Badge>
-                                                    Asignado a: {users.find(u => u.id === t.assigned_to)?.full_name || 'Nadie'}
-                                                </div>
-                                            </div>
-                                            <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                                <button
-                                                    title={t.status === 'done' ? "Marcar como pendiente" : "Marcar como completada"}
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleToggleTaskStatus(t);
-                                                    }}
-                                                    style={{
-                                                        background: t.status === 'done' ? '#48bb78' : 'white',
-                                                        border: `1px solid ${t.status === 'done' ? '#48bb78' : '#cbd5e0'}`,
-                                                        color: t.status === 'done' ? 'white' : '#cbd5e0',
-                                                        borderRadius: '0.375rem',
-                                                        padding: '0.4rem',
-                                                        cursor: 'pointer',
-                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                        transition: 'all 0.2s',
-                                                        minWidth: '32px'
-                                                    }}
-                                                >
-                                                    <FaCheck />
-                                                </button>
-                                                <button
-                                                    onClick={() => {
-                                                        setIsDaySummaryOpen(false);
-                                                        handleTaskClick({ stopPropagation: () => { } } as any, t);
-                                                    }}
-                                                    style={{
-                                                        fontSize: '0.75rem',
-                                                        color: 'white',
-                                                        background: '#3182ce',
-                                                        border: 'none',
-                                                        borderRadius: '0.375rem',
-                                                        padding: '0.4rem 0.8rem',
-                                                        cursor: 'pointer',
-                                                        fontWeight: '600',
-                                                        boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
-                                                        transition: 'all 0.2s'
-                                                    }}
-                                                >
-                                                    Ver / Editar
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <p style={{ color: '#a0aec0', fontStyle: 'italic' }}>No hay tareas para este día.</p>
-                            )}
-                        </div>
-
-                        <div>
-                            <h4 style={{ fontSize: '1rem', color: '#4a5568', marginBottom: '0.5rem' }}>Registro Diario</h4>
-                            <div style={{
-                                border: '2px dashed #e2e8f0', borderRadius: '0.5rem', padding: '2rem',
-                                textAlign: 'center', color: '#a0aec0'
-                            }}>
-                                <FaCalendarAlt style={{ fontSize: '2rem', marginBottom: '0.5rem', opacity: 0.5 }} />
-                                <p>No se cargaron fotos ni reportes diarios.</p>
+            {
+                isDaySummaryOpen && selectedDayForSummary && (
+                    <PortalModalOverlay>
+                        <ModalContent style={{ maxWidth: '600px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                                <h3 style={{ margin: 0 }}>Resumen del {format(selectedDayForSummary, 'd MMMM yyyy', { locale: es })}</h3>
+                                <button onClick={() => setIsDaySummaryOpen(false)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '1.2rem' }}>×</button>
                             </div>
-                        </div>
-                    </ModalContent>
-                </ModalOverlay>
-            )}
 
-            {/* Sticky Note Modal */}
-            {isStickyModalOpen && (
-                <ModalOverlay onClick={(e) => { if (e.target === e.currentTarget) setIsStickyModalOpen(false) }}>
-                    <ModalContent style={{ background: 'white', borderTop: '8px solid #ecc94b' }}>
-                        <h3 style={{ color: '#2d3748', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <FaStickyNote color="#ecc94b" /> Nueva Nota
-                        </h3>
-
-                        <FormGroup>
-                            <label>Mensaje</label>
-                            <textarea
-                                autoFocus
-                                value={stickyContent}
-                                onChange={e => setStickyContent(e.target.value)}
-                                placeholder="Escribe tu nota aquí..."
-                                style={{
-                                    background: '#fff',
-                                    border: '1px solid #e2e8f0',
-                                    minHeight: '120px',
-                                    fontSize: '1rem',
-                                    borderRadius: '0.5rem',
-                                    padding: '1rem'
-                                }}
-                            />
-                        </FormGroup>
-
-                        <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
-                            {(['yellow', 'blue', 'pink', 'green'] as const).map(c => (
-                                <button
-                                    key={c}
-                                    onClick={() => setStickyColor(c)}
-                                    style={{
-                                        width: '30px', height: '30px', borderRadius: '50%',
-                                        background: c === 'yellow' ? '#fefcbf' : c === 'blue' ? '#bee3f8' : c === 'pink' ? '#fed7d7' : '#c6f6d5',
-                                        border: stickyColor === c ? '2px solid #4a5568' : '1px solid rgba(0,0,0,0.1)',
-                                        cursor: 'pointer'
-                                    }}
-                                />
-                            ))}
-                        </div>
-
-                        <div style={{ display: 'flex', gap: '1rem' }}>
-                            <CancelButton onClick={() => setIsStickyModalOpen(false)}>Cancelar</CancelButton>
-                            <ActionButton onClick={handleSaveSticky} $variant="success" style={{ background: '#d69e2e', color: 'white' }}>
-                                Pegar Nota
-                            </ActionButton>
-                        </div>
-                    </ModalContent>
-                </ModalOverlay>
-            )}
-
-            {/* Sticky Delete Confirmation Modal */}
-            {stickyToDelete && (
-                <ModalOverlay onClick={(e) => { if (e.target === e.currentTarget) setStickyToDelete(null) }}>
-                    <ModalContent style={{ maxWidth: '400px', textAlign: 'center' }}>
-                        <div style={{ color: '#e53e3e', fontSize: '3rem', marginBottom: '1rem' }}>
-                            <FaExclamationTriangle />
-                        </div>
-                        <h3 style={{ fontSize: '1.25rem', color: '#2d3748', marginBottom: '0.5rem' }}>¿Eliminar esta nota?</h3>
-                        <p style={{ color: '#718096', marginBottom: '1.5rem' }}>
-                            Esta acción no se puede deshacer.
-                        </p>
-                        <div style={{ display: 'flex', gap: '1rem' }}>
-                            <CancelButton onClick={() => setStickyToDelete(null)}>
-                                Cancelar
-                            </CancelButton>
-                            <ActionButton onClick={confirmDeleteSticky} $variant="danger">
-                                Eliminar
-                            </ActionButton>
-                        </div>
-                    </ModalContent>
-                </ModalOverlay>
-            )}
-
-            {/* Projection Alert Modal */}
-            {isProjectionAlertOpen && (
-                <ModalOverlay onClick={(e) => { if (e.target === e.currentTarget) setIsProjectionAlertOpen(false) }}>
-                    <ModalContent style={{ maxWidth: '400px', textAlign: 'center' }}>
-                        <div style={{ color: '#3182ce', fontSize: '3rem', marginBottom: '1rem' }}>
-                            <FaClock />
-                        </div>
-                        <h3 style={{ fontSize: '1.25rem', color: '#2d3748', marginBottom: '0.5rem' }}>Tarea Proyectada</h3>
-                        <p style={{ color: '#718096', marginBottom: '1.5rem', lineHeight: '1.5' }}>
-                            Esta es una proyección futura. Para activarla, primero debes completar la tarea anterior.
-                        </p>
-                        <ActionButton onClick={() => setIsProjectionAlertOpen(false)} $variant="primary">
-                            Entendido
-                        </ActionButton>
-                    </ModalContent>
-                </ModalOverlay>
-            )}
-
-            {/* Delete Confirmation Modal (Tasks) */}
-            {isDeleteConfirmOpen && (
-                <ModalOverlay onClick={(e) => { if (e.target === e.currentTarget) setIsDeleteConfirmOpen(false) }}>
-                    <ModalContent style={{ maxWidth: '400px', textAlign: 'center' }}>
-                        <div style={{ color: '#e53e3e', fontSize: '3rem', marginBottom: '1rem' }}>
-                            <FaExclamationTriangle />
-                        </div>
-                        <h3 style={{ fontSize: '1.25rem', color: '#2d3748', marginBottom: '0.5rem' }}>¿Eliminar esta tarea?</h3>
-                        <p style={{ color: '#718096', marginBottom: '1.5rem' }}>
-                            Esta acción no se puede deshacer. La tarea se eliminará permanentemente.
-                        </p>
-                        <div style={{ display: 'flex', gap: '1rem' }}>
-                            <CancelButton onClick={() => setIsDeleteConfirmOpen(false)}>
-                                Cancelar
-                            </CancelButton>
-                            <ActionButton onClick={confirmDeleteTask} $variant="danger">
-                                Sí, Eliminar
-                            </ActionButton>
-                        </div>
-                    </ModalContent>
-                </ModalOverlay>
-            )}
-
-            {/* Genetics Modal */}
-            {isGeneticsModalOpen && room && (
-                <ModalOverlay onClick={(e) => { if (e.target === e.currentTarget) setIsGeneticsModalOpen(false) }}>
-                    <ModalContent style={{ maxWidth: '600px' }}>
-                        <h3 style={{ fontSize: '1.25rem', color: '#2d3748', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <FaDna style={{ color: '#2b6cb0' }} /> Todas las Genéticas en Sala
-                        </h3>
-
-                        <div style={{ maxHeight: '60vh', overflowY: 'auto' }}>
-                            {(() => {
-                                const geneticCounts: Record<string, number> = {};
-                                room.batches?.forEach(b => {
-                                    const name = b.genetic?.name || b.strain || 'Desconocida';
-                                    geneticCounts[name] = (geneticCounts[name] || 0) + b.quantity;
-                                });
-                                const entries = Object.entries(geneticCounts);
-
-                                return (
-                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
-                                        {entries.map(([name, count]) => (
-                                            <div key={name} style={{
-                                                background: '#ebf8ff',
-                                                border: '1px solid #bee3f8',
-                                                borderRadius: '0.5rem',
-                                                padding: '1rem',
-                                                display: 'flex',
-                                                justifyContent: 'space-between',
-                                                alignItems: 'center'
+                            <div style={{ marginBottom: '1.5rem' }}>
+                                <h4 style={{ fontSize: '1rem', color: '#4a5568', marginBottom: '0.5rem' }}>Tareas Asignadas</h4>
+                                {tasks.filter(t => t.due_date && t.due_date.split('T')[0] === format(selectedDayForSummary, 'yyyy-MM-dd')).length > 0 ? (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                        {tasks.filter(t => t.due_date && t.due_date.split('T')[0] === format(selectedDayForSummary, 'yyyy-MM-dd')).map(t => (
+                                            <div key={t.id} style={{
+                                                border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.75rem',
+                                                background: t.status === 'done' ? '#f0fff4' : 'white',
+                                                display: 'flex', justifyContent: 'space-between', alignItems: 'center'
                                             }}>
-                                                <span style={{ fontWeight: 600, color: '#2b6cb0' }}>{name}</span>
-                                                <span style={{
-                                                    background: 'white',
-                                                    color: '#2b6cb0',
-                                                    fontWeight: 800,
-                                                    padding: '0.2rem 0.6rem',
-                                                    borderRadius: '999px',
-                                                    fontSize: '0.9rem',
-                                                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-                                                }}>
-                                                    {count}
-                                                </span>
+                                                <div>
+                                                    <div style={{ fontWeight: 'bold', color: '#2d3748' }}>{t.title}</div>
+                                                    <div style={{ fontSize: '0.85rem', color: '#718096' }}>
+                                                        <Badge taskType={t.type} style={{ marginRight: '0.5rem', fontSize: '0.65rem' }}>{t.type?.replace(/_/g, ' ')}</Badge>
+                                                        Asignado a: {users.find(u => u.id === t.assigned_to)?.full_name || 'Nadie'}
+                                                    </div>
+                                                </div>
+                                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                    <button
+                                                        title={t.status === 'done' ? "Marcar como pendiente" : "Marcar como completada"}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleToggleTaskStatus(t);
+                                                        }}
+                                                        style={{
+                                                            background: t.status === 'done' ? '#48bb78' : 'white',
+                                                            border: `1px solid ${t.status === 'done' ? '#48bb78' : '#cbd5e0'} `,
+                                                            color: t.status === 'done' ? 'white' : '#cbd5e0',
+                                                            borderRadius: '0.375rem',
+                                                            padding: '0.4rem',
+                                                            cursor: 'pointer',
+                                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                            transition: 'all 0.2s',
+                                                            minWidth: '32px'
+                                                        }}
+                                                    >
+                                                        <FaCheck />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            setIsDaySummaryOpen(false);
+                                                            handleTaskClick({ stopPropagation: () => { } } as any, t);
+                                                        }}
+                                                        style={{
+                                                            fontSize: '0.75rem',
+                                                            color: 'white',
+                                                            background: '#3182ce',
+                                                            border: 'none',
+                                                            borderRadius: '0.375rem',
+                                                            padding: '0.4rem 0.8rem',
+                                                            cursor: 'pointer',
+                                                            fontWeight: '600',
+                                                            boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+                                                            transition: 'all 0.2s'
+                                                        }}
+                                                    >
+                                                        Ver / Editar
+                                                    </button>
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
+                                ) : (
+                                    <p style={{ color: '#a0aec0', fontStyle: 'italic' }}>No hay tareas para este día.</p>
+                                )}
+                            </div>
+
+                            <div>
+                                <h4 style={{ fontSize: '1rem', color: '#4a5568', marginBottom: '0.5rem' }}>Registro Diario</h4>
+                                <div style={{
+                                    border: '2px dashed #e2e8f0', borderRadius: '0.5rem', padding: '2rem',
+                                    textAlign: 'center', color: '#a0aec0'
+                                }}>
+                                    <FaCalendarAlt style={{ fontSize: '2rem', marginBottom: '0.5rem', opacity: 0.5 }} />
+                                    <p>No se cargaron fotos ni reportes diarios.</p>
+                                </div>
+                            </div>
+                        </ModalContent>
+                    </PortalModalOverlay>
+                )
+            }
+
+            {/* Sticky Note Modal */}
+            {
+                isStickyModalOpen && (
+                    <PortalModalOverlay>
+                        <ModalContent style={{ background: 'white', borderTop: '8px solid #ecc94b' }}>
+                            <h3 style={{ color: '#2d3748', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <FaStickyNote color="#ecc94b" /> Nueva Nota
+                            </h3>
+
+                            <FormGroup>
+                                <label>Mensaje</label>
+                                <textarea
+                                    autoFocus
+                                    value={stickyContent}
+                                    onChange={e => setStickyContent(e.target.value)}
+                                    placeholder="Escribe tu nota aquí..."
+                                    style={{
+                                        background: '#fff',
+                                        border: '1px solid #e2e8f0',
+                                        minHeight: '120px',
+                                        fontSize: '1rem',
+                                        borderRadius: '0.5rem',
+                                        padding: '1rem'
+                                    }}
+                                />
+                            </FormGroup>
+
+                            <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
+                                {(['yellow', 'blue', 'pink', 'green'] as const).map(c => (
+                                    <button
+                                        key={c}
+                                        onClick={() => setStickyColor(c)}
+                                        style={{
+                                            width: '30px', height: '30px', borderRadius: '50%',
+                                            background: c === 'yellow' ? '#fefcbf' : c === 'blue' ? '#bee3f8' : c === 'pink' ? '#fed7d7' : '#c6f6d5',
+                                            border: stickyColor === c ? '2px solid #4a5568' : '1px solid rgba(0,0,0,0.1)',
+                                            cursor: 'pointer'
+                                        }}
+                                    />
+                                ))}
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '1rem' }}>
+                                <CancelButton onClick={() => setIsStickyModalOpen(false)}>Cancelar</CancelButton>
+                                <ActionButton onClick={handleSaveSticky} $variant="success" style={{ background: '#d69e2e', color: 'white' }}>
+                                    Pegar Nota
+                                </ActionButton>
+                            </div>
+                        </ModalContent>
+                    </PortalModalOverlay>
+                )
+            }
+
+            {/* Sticky Delete Confirmation Modal */}
+            {
+                stickyToDelete && (
+                    <PortalModalOverlay>
+                        <ModalContent style={{ maxWidth: '400px', textAlign: 'center' }}>
+                            <div style={{ color: '#e53e3e', fontSize: '3rem', marginBottom: '1rem' }}>
+                                <FaExclamationTriangle />
+                            </div>
+                            <h3 style={{ fontSize: '1.25rem', color: '#2d3748', marginBottom: '0.5rem' }}>¿Eliminar esta nota?</h3>
+                            <p style={{ color: '#718096', marginBottom: '1.5rem' }}>
+                                Esta acción no se puede deshacer.
+                            </p>
+                            <div style={{ display: 'flex', gap: '1rem' }}>
+                                <CancelButton onClick={() => setStickyToDelete(null)}>
+                                    Cancelar
+                                </CancelButton>
+                                <ActionButton onClick={confirmDeleteSticky} $variant="danger">
+                                    Eliminar
+                                </ActionButton>
+                            </div>
+                        </ModalContent>
+                    </PortalModalOverlay>
+                )
+            }
+
+            {/* Projection Alert Modal */}
+            {
+                isProjectionAlertOpen && (
+                    <PortalModalOverlay>
+                        <ModalContent style={{ maxWidth: '400px', textAlign: 'center' }}>
+                            <div style={{ color: '#3182ce', fontSize: '3rem', marginBottom: '1rem' }}>
+                                <FaClock />
+                            </div>
+                            <h3 style={{ fontSize: '1.25rem', color: '#2d3748', marginBottom: '0.5rem' }}>Tarea Proyectada</h3>
+                            <p style={{ color: '#718096', marginBottom: '1.5rem', lineHeight: '1.5' }}>
+                                Esta es una proyección futura. Para activarla, primero debes completar la tarea anterior.
+                            </p>
+                            <ActionButton onClick={() => setIsProjectionAlertOpen(false)} $variant="primary">
+                                Entendido
+                            </ActionButton>
+                        </ModalContent>
+                    </PortalModalOverlay>
+                )
+            }
+
+            {/* Delete Confirmation Modal (Tasks) */}
+            {
+                isDeleteConfirmOpen && (
+                    <PortalModalOverlay>
+                        <ModalContent style={{ maxWidth: '400px', textAlign: 'center' }}>
+                            <div style={{ color: '#e53e3e', fontSize: '3rem', marginBottom: '1rem' }}>
+                                <FaExclamationTriangle />
+                            </div>
+                            <h3 style={{ fontSize: '1.25rem', color: '#2d3748', marginBottom: '0.5rem' }}>¿Eliminar esta tarea?</h3>
+                            <p style={{ color: '#718096', marginBottom: '1.5rem' }}>
+                                Esta acción no se puede deshacer. La tarea se eliminará permanentemente.
+                            </p>
+                            <div style={{ display: 'flex', gap: '1rem' }}>
+                                <CancelButton onClick={() => setIsDeleteConfirmOpen(false)}>
+                                    Cancelar
+                                </CancelButton>
+                                <ActionButton onClick={confirmDeleteTask} $variant="danger">
+                                    Sí, Eliminar
+                                </ActionButton>
+                            </div>
+                        </ModalContent>
+                    </PortalModalOverlay>
+                )
+            }
+
+            {/* Genetics Modal */}
+            {
+                isGeneticsModalOpen && room && (
+                    <PortalModalOverlay>
+                        <ModalContent style={{ maxWidth: '600px' }}>
+                            <h3 style={{ fontSize: '1.25rem', color: '#2d3748', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <FaDna style={{ color: '#2b6cb0' }} /> Todas las Genéticas en Sala
+                            </h3>
+
+                            <div style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+                                {(() => {
+                                    const geneticCounts: Record<string, number> = {};
+                                    room.batches?.forEach(b => {
+                                        const name = b.genetic?.name || b.strain || 'Desconocida';
+                                        geneticCounts[name] = (geneticCounts[name] || 0) + b.quantity;
+                                    });
+                                    const entries = Object.entries(geneticCounts);
+
+                                    return (
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
+                                            {entries.map(([name, count]) => (
+                                                <div key={name} style={{
+                                                    background: '#ebf8ff',
+                                                    border: '1px solid #bee3f8',
+                                                    borderRadius: '0.5rem',
+                                                    padding: '1rem',
+                                                    display: 'flex',
+                                                    justifyContent: 'space-between',
+                                                    alignItems: 'center'
+                                                }}>
+                                                    <span style={{ fontWeight: 600, color: '#2b6cb0' }}>{name}</span>
+                                                    <span style={{
+                                                        background: 'white',
+                                                        color: '#2b6cb0',
+                                                        fontWeight: 800,
+                                                        padding: '0.2rem 0.6rem',
+                                                        borderRadius: '999px',
+                                                        fontSize: '0.9rem',
+                                                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                                                    }}>
+                                                        {count}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+
+                            <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'flex-end' }}>
+                                <ActionButton onClick={() => setIsGeneticsModalOpen(false)} style={{ maxWidth: '150px' }}>
+                                    Cerrar
+                                </ActionButton>
+                            </div>
+                        </ModalContent>
+                    </PortalModalOverlay>
+                )
+            }
+
+            {/* New Map Modal */}
+            {
+                isMapModalOpen && (
+                    <PortalModalOverlay>
+                        <ModalContent>
+                            <h3>Nuevo Mapa de Esquejes</h3>
+                            <FormGroup>
+                                <label>Nombre (ej: Bandeja 1)</label>
+                                <input autoFocus value={newMapName} onChange={e => setNewMapName(e.target.value)} placeholder="Nombre del mapa..." />
+                            </FormGroup>
+                            <div style={{ display: 'flex', gap: '1rem' }}>
+                                <FormGroup style={{ flex: 1 }}>
+                                    <label>Filas</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="26"
+                                        value={newMapRows}
+                                        onChange={e => setNewMapRows(e.target.value === '' ? '' : Number(e.target.value))}
+                                    />
+                                </FormGroup>
+                                <FormGroup style={{ flex: 1 }}>
+                                    <label>Columnas</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="50"
+                                        value={newMapCols}
+                                        onChange={e => setNewMapCols(e.target.value === '' ? '' : Number(e.target.value))}
+                                    />
+                                </FormGroup>
+                            </div>
+                            <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+                                <CancelButton onClick={() => setIsMapModalOpen(false)}>Cancelar</CancelButton>
+                                <ActionButton onClick={handleCreateMap}>Crear Mapa</ActionButton>
+                            </div>
+                        </ModalContent>
+                    </PortalModalOverlay>
+                )
+            }
+
+            {/* Edit Map Modal */}
+            {
+                isEditMapModalOpen && (
+                    <PortalModalOverlay>
+                        <ModalContent>
+                            <h3>Editar Mapa</h3>
+                            <FormGroup>
+                                <label>Nombre</label>
+                                <input autoFocus value={editMapName} onChange={e => setEditMapName(e.target.value)} placeholder="Nombre del mapa..." />
+                            </FormGroup>
+                            <div style={{ display: 'flex', gap: '1rem' }}>
+                                <FormGroup style={{ flex: 1 }}>
+                                    <label>Filas</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="26"
+                                        value={editMapRows}
+                                        onChange={e => setEditMapRows(e.target.value === '' ? '' : Number(e.target.value))}
+                                    />
+                                </FormGroup>
+                                <FormGroup style={{ flex: 1 }}>
+                                    <label>Columnas</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="50"
+                                        value={editMapCols}
+                                        onChange={e => setEditMapCols(e.target.value === '' ? '' : Number(e.target.value))}
+                                    />
+                                </FormGroup>
+                            </div>
+                            <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+                                <CancelButton onClick={() => setIsEditMapModalOpen(false)}>Cancelar</CancelButton>
+                                <ActionButton onClick={handleUpdateMap}>Guardar Cambios</ActionButton>
+                            </div>
+                        </ModalContent>
+                    </PortalModalOverlay>
+                )
+            }
+
+            {
+                isTransplantModalOpen && room && (
+                    <TransplantModal
+                        isOpen={isTransplantModalOpen}
+                        onClose={() => setIsTransplantModalOpen(false)}
+                        currentRoom={room}
+                        rooms={allRooms}
+                        cloneMaps={cloneMaps}
+                        onConfirm={handleTransplant}
+                        initialMapId={activeMapId || undefined}
+                    />
+                )
+            }
+
+            <ConfirmationModal
+                isOpen={isDeleteMapModalOpen}
+                title="Eliminar Mapa"
+                message="¿Estás seguro de que deseas eliminar este mapa? Los lotes asociados perderán su posición (no se eliminarán los lotes, solo el mapa)."
+                onConfirm={confirmDeleteMap}
+                onCancel={() => setIsDeleteMapModalOpen(false)}
+                confirmText="Eliminar"
+                cancelText="Cancelar"
+                isDestructive={true}
+            />
+
+            <ConfirmationModal
+                isOpen={isClearMapConfirmOpen}
+                title="Limpiar Mapa"
+                message="¿Estás seguro de que deseas ELIMINAR TODOS los esquejes de este mapa? Esta acción no se puede deshacer."
+                onConfirm={handleClearMap}
+                onCancel={() => setIsClearMapConfirmOpen(false)}
+                confirmText="ELIMINAR TODO"
+                cancelText="Cancelar"
+                isDestructive={true}
+            />
+
+
+            {
+                assignModal.isOpen && assignModal.batch && (
+                    <PortalModalOverlay>
+                        <ModalContent>
+                            <h3>Asignar Lote al Mapa</h3>
+                            <p style={{ marginBottom: '1rem', color: '#718096' }}>
+                                Lote: <strong>{(assignModal.batch as any)._displayName || assignModal.batch.name}</strong><br />
+                                Disponibles: {(assignModal.batch as any)._totalQuantity || assignModal.batch.quantity}
+                            </p>
+
+                            <FormGroup>
+                                <label>¿Cuántas unidades deseas enviar al mapa?</label>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    max={(assignModal.batch as any)._totalQuantity || assignModal.batch.quantity}
+                                    autoFocus
+                                    value={assignModal.quantity}
+                                    onChange={e => setAssignModal({ ...assignModal, quantity: e.target.value })}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') handleAutoAssign();
+                                    }}
+                                />
+                                <small style={{ display: 'block', marginTop: '0.5rem', color: '#718096' }}>
+                                    Se llenarán automáticamente los primeros espacios vacíos disponibles.
+                                </small>
+                            </FormGroup>
+
+                            <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
+                                <CancelButton onClick={() => setAssignModal({ ...assignModal, isOpen: false })}>Cancelar</CancelButton>
+                                <ActionButton onClick={handleAutoAssign} disabled={Number(assignModal.quantity) < 1 || Number(assignModal.quantity) > ((assignModal.batch as any)._totalQuantity || assignModal.batch.quantity)}>
+                                    Asignar Automáticamente
+                                </ActionButton>
+                            </div>
+                        </ModalContent>
+                    </PortalModalOverlay>
+                )
+            }
+
+
+
+            {/* Plant Detail Modal (Unified for Map and Stock) */}
+            {
+                plantDetailModal.isOpen && plantDetailModal.batch && (
+                    <PortalModalOverlay>
+                        <ModalContent style={{ maxWidth: '500px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '1rem' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <FaSeedling size={24} color="#48bb78" />
+                                    <div>
+                                        <h3 style={{ margin: 0, color: '#2d3748' }}>{plantDetailModal.batch.tracking_code || 'Lote de Stock'}</h3>
+                                        <span style={{ fontSize: '0.9rem', color: '#718096' }}>
+                                            {plantDetailModal.batch.clone_map_id
+                                                ? `Ubicación: ${plantDetailModal.batch.grid_position || 'N/A'} `
+                                                : `En Stock(Disponibles: ${(plantDetailModal.batch as any)._totalQuantity || plantDetailModal.batch.quantity})`
+                                            }
+                                        </span>
+                                    </div>
+                                </div>
+                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <button onClick={() => setPlantDetailModal({ ...plantDetailModal, isOpen: false })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#a0aec0' }}>
+                                        ✕
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div style={{ background: '#f7fafc', padding: '1rem', borderRadius: '0.5rem', marginBottom: '1.5rem' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '0.75rem', color: '#718096', marginBottom: '0.25rem' }}>Nombre / Genética</label>
+                                        <strong style={{ color: '#2d3748' }}>{plantDetailModal.batch.genetic?.name || plantDetailModal.batch.name || 'Desconocida'}</strong>
+                                    </div>
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '0.75rem', color: '#718096', marginBottom: '0.25rem' }}>Fase</label>
+                                        <span style={{
+                                            display: 'inline-block', padding: '0.1rem 0.5rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 700,
+                                            background: plantDetailModal.batch.stage === 'vegetation' ? '#c6f6d5' : '#bee3f8',
+                                            color: plantDetailModal.batch.stage === 'vegetation' ? '#22543d' : '#2a4365'
+                                        }}>
+                                            {plantDetailModal.batch.stage === 'vegetation' ? 'Vegetativo' : 'Floración'}
+                                        </span>
+                                    </div>
+                                    {plantDetailModal.batch.notes && (
+                                        <div style={{ gridColumn: '1 / -1' }}>
+                                            <label style={{ display: 'block', fontSize: '0.75rem', color: '#718096', marginBottom: '0.25rem' }}>Notas</label>
+                                            <p style={{ margin: 0, fontSize: '0.9rem', color: '#4a5568' }}>{plantDetailModal.batch.notes}</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <h4 style={{ fontSize: '0.9rem', color: '#4a5568', marginBottom: '0.5rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.25rem' }}>
+                                Acciones
+                            </h4>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                {/* Map Batch specific actions */}
+                                {plantDetailModal.batch.clone_map_id ? (
+                                    <button
+                                        onClick={() => {
+                                            setMovingBatch(plantDetailModal.batch);
+                                            setPlantDetailModal({ ...plantDetailModal, isOpen: false });
+                                        }}
+                                        style={{
+                                            width: '100%', padding: '0.75rem', borderRadius: '0.375rem', border: '1px solid #e2e8f0', background: 'white',
+                                            color: '#3182ce', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 600
+                                        }}
+                                    >
+                                        <FaExpandArrowsAlt /> Reubicar en otro lugar
+                                    </button>
+                                ) : (
+                                    /* Stock Batch specific actions */
+                                    <button
+                                        onClick={() => {
+                                            if (!plantDetailModal.batch) return;
+                                            setAssignModal({ isOpen: true, batch: plantDetailModal.batch, quantity: (plantDetailModal.batch as any)._totalQuantity || plantDetailModal.batch.quantity || 1 });
+                                            setPlantDetailModal({ ...plantDetailModal, isOpen: false });
+                                        }}
+                                        style={{
+                                            width: '100%', padding: '0.75rem', borderRadius: '0.375rem', border: '1px solid #e2e8f0', background: 'white',
+                                            color: '#38a169', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 600
+                                        }}
+                                    >
+                                        <FaArrowLeft /> Asignar al Mapa
+                                    </button>
+                                )}
+
+                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <button
+                                        onClick={() => {
+                                            if (plantDetailModal.batch) handleOpenEditBatch(plantDetailModal.batch);
+                                        }}
+                                        style={{
+                                            flex: 1, padding: '0.75rem', borderRadius: '0.375rem', border: '1px solid #e2e8f0', background: 'white',
+                                            color: '#d69e2e', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 600
+                                        }}
+                                    >
+                                        Editar
+                                    </button>
+
+                                    <button
+                                        onClick={() => {
+                                            setDeleteConfirm({ isOpen: true, batch: plantDetailModal.batch });
+                                            setPlantDetailModal({ ...plantDetailModal, isOpen: false });
+                                        }}
+                                        style={{
+                                            flex: 1, padding: '0.75rem', borderRadius: '0.375rem', border: '1px solid #fed7d7', background: '#fff5f5',
+                                            color: '#c53030', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 600
+                                        }}
+                                    >
+                                        <FaTrash /> Eliminar
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div style={{ marginTop: '1.5rem', textAlign: 'right' }}>
+                                <ActionButton onClick={() => setPlantDetailModal({ ...plantDetailModal, isOpen: false })}>
+                                    Cerrar
+                                </ActionButton>
+                            </div>
+                        </ModalContent>
+                    </PortalModalOverlay>
+                )
+            }
+
+
+
+            {/* Move Confirmation Modal */}
+            {
+                moveConfirm.isOpen && movingBatch && (
+                    <PortalModalOverlay>
+                        <ModalContent style={{ maxWidth: '400px', textAlign: 'center' }}>
+                            <div style={{ color: '#3182ce', fontSize: '3rem', marginBottom: '1rem' }}>
+                                <FaExpandArrowsAlt />
+                            </div>
+                            <h3 style={{ fontSize: '1.25rem', color: '#2d3748', marginBottom: '0.5rem' }}>Confirmar Movimiento</h3>
+                            <p style={{ color: '#718096', marginBottom: '1.5rem' }}>
+                                ¿Mover <strong>{movingBatch.tracking_code || movingBatch.name}</strong> a la posición <strong>{moveConfirm.position}</strong>?
+                            </p>
+                            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+                                <CancelButton onClick={() => setMoveConfirm({ isOpen: false, position: null })}>
+                                    Cancelar
+                                </CancelButton>
+                                <ActionButton onClick={handleConfirmMove}>
+                                    Confirmar Mover
+                                </ActionButton>
+                            </div>
+                        </ModalContent>
+                    </PortalModalOverlay>
+                )
+            }
+
+
+            {/* Custom Delete Confirmation Modal */}
+            {
+                deleteConfirm.isOpen && deleteConfirm.batch && (
+                    <PortalModalOverlay>
+                        <ModalContent style={{ maxWidth: '400px', textAlign: 'center' }}>
+                            <div style={{ color: '#e53e3e', fontSize: '3rem', marginBottom: '1rem' }}>
+                                <FaTrash />
+                            </div>
+                            <h3 style={{ fontSize: '1.25rem', color: '#2d3748', marginBottom: '0.5rem' }}>¿Eliminar definitivamente?</h3>
+                            <p style={{ color: '#718096', marginBottom: '1.5rem' }}>
+                                Estás a punto de eliminar <strong>{deleteConfirm.batch.tracking_code || deleteConfirm.batch.name}</strong>. Esta acción no se puede deshacer.
+                            </p>
+                            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+                                <CancelButton onClick={() => setDeleteConfirm({ isOpen: false, batch: null })}>
+                                    Cancelar
+                                </CancelButton>
+                                <ActionButton onClick={handleConfirmDelete} $variant="danger" style={{ background: '#e53e3e', borderColor: '#e53e3e' }}>
+                                    Eliminar
+                                </ActionButton>
+                            </div>
+                        </ModalContent>
+                    </PortalModalOverlay>
+                )
+            }
+
+            {/* Edit Batch Modal */}
+            {
+                isEditBatchModalOpen && (
+                    <PortalModalOverlay>
+                        <ModalContent>
+                            <h3>Editar Lote</h3>
+                            <FormGroup>
+                                <label>Nombre / Identificador</label>
+                                <input
+                                    value={editBatchForm.name}
+                                    onChange={e => setEditBatchForm({ ...editBatchForm, name: e.target.value })}
+                                />
+                            </FormGroup>
+                            <FormGroup>
+                                <label>Cantidad</label>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    value={editBatchForm.quantity}
+                                    onChange={e => setEditBatchForm({ ...editBatchForm, quantity: Number(e.target.value) })}
+                                />
+                            </FormGroup>
+                            <FormGroup>
+                                <label>Notas</label>
+                                <textarea
+                                    value={editBatchForm.notes}
+                                    onChange={e => setEditBatchForm({ ...editBatchForm, notes: e.target.value })}
+                                />
+                            </FormGroup>
+                            <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+                                <CancelButton onClick={() => setIsEditBatchModalOpen(false)}>Cancelar</CancelButton>
+                                <ActionButton onClick={handleUpdateBatch}>Guardar Cambios</ActionButton>
+                            </div>
+                        </ModalContent>
+                    </PortalModalOverlay>
+                )
+            }
+
+            {/* History Modal */}
+            {
+                isHistoryModalOpen && (
+                    <PortalModalOverlay>
+                        <ModalContent style={{ maxWidth: '700px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                                <h2 style={{ fontSize: '1.5rem', margin: 0, color: '#2d3748', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <FaHistory color="#4299e1" /> Historial de Movimientos
+                                </h2>
+                                <button onClick={() => setIsHistoryModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.5rem', color: '#a0aec0' }}>
+                                    ✕
+                                </button>
+                            </div>
+
+                            <div style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+                                {historyLoading ? (
+                                    <p style={{ textAlign: 'center', padding: '2rem', color: '#718096' }}>Cargando historial...</p>
+                                ) : roomHistory.length === 0 ? (
+                                    <p style={{ textAlign: 'center', padding: '2rem', color: '#718096', background: '#f7fafc', borderRadius: '0.5rem' }}>
+                                        No hay movimientos registrados recientemente.
+                                    </p>
+                                ) : (
+                                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                        <thead>
+                                            <tr style={{ borderBottom: '2px solid #e2e8f0', textAlign: 'left' }}>
+                                                <th style={{ padding: '0.75rem', color: '#4a5568', fontSize: '0.85rem' }}>Fecha</th>
+                                                <th style={{ padding: '0.75rem', color: '#4a5568', fontSize: '0.85rem' }}>Código</th>
+                                                <th style={{ padding: '0.75rem', color: '#4a5568', fontSize: '0.85rem' }}>Acción/Notas</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {roomHistory.map((move: any) => (
+                                                <tr key={move.id} style={{ borderBottom: '1px solid #edf2f7' }}>
+                                                    <td style={{ padding: '0.75rem', color: '#2d3748', fontSize: '0.9rem' }}>
+                                                        {new Date(move.created_at).toLocaleString()}
+                                                    </td>
+                                                    <td style={{ padding: '0.75rem', fontWeight: 600, color: '#2d3748', fontSize: '0.9rem' }}>
+                                                        {move.batch?.tracking_code || move.batch?.name || 'Desconocido'}
+                                                    </td>
+                                                    <td style={{ padding: '0.75rem', color: '#4a5568', fontSize: '0.9rem' }}>
+                                                        {move.notes || '-'}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                )}
+                            </div>
+                        </ModalContent>
+                    </PortalModalOverlay>
+                )
+            }
+
+            <ConfirmationModal
+                isOpen={isCreateMapConfirmOpen}
+                title="¿Crear nueva Mesa?"
+                message={`¿Estás seguro de crear una nueva mesa para "${pendingMapBatch?.name}"(${pendingMapBatch?.quantity} unidades) ?\n\nSe distribuirán las plantas automáticamente en una grilla.`}
+                onConfirm={handleConfirmCreateMap}
+                onCancel={() => {
+                    setIsCreateMapConfirmOpen(false);
+                    setPendingMapBatch(null);
+                }}
+                confirmText="Crear Mesa"
+                cancelText="Cancelar"
+            />
+
+            {/* Modals */}
+            {
+                isHarvestModalOpen && room && (
+                    <HarvestModal
+                        isOpen={isHarvestModalOpen}
+                        onClose={() => {
+                            setIsHarvestModalOpen(false);
+                            setHarvestTargetMapId(null);
+                        }}
+                        batches={harvestTargetMapId
+                            ? (room.batches?.filter(b => b.clone_map_id === harvestTargetMapId) || [])
+                            : (room.batches || [])}
+                        rooms={allRooms}
+                        onConfirm={handleHarvestConfirm}
+                        overrideGroupName={harvestTargetMapId ? (room.clone_maps?.find(m => m.id === harvestTargetMapId)?.name) : undefined}
+                    />
+                )
+            }
+            {/* Create Map From Group Confirmation Modal */}
+            {
+                isCreateMapFromGroupConfirmOpen && pendingMapGroup && (
+                    <PortalModalOverlay>
+                        <ModalContent onClick={e => e.stopPropagation()}>
+                            <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '1rem' }}>Crear Mapa desde Grupo</h2>
+                            {(() => {
+                                // PRIORITIZE VIRTUAL GROUP NAME
+                                if (pendingMapGroup.root._virtualGroupName) {
+                                    return (
+                                        <p style={{ marginBottom: '1rem', color: '#4a5568' }}>
+                                            Vas a crear un nuevo mapa para el lote <strong>{pendingMapGroup.root._virtualGroupName}</strong> y sus variantes.
+                                        </p>
+                                    );
+                                }
+
+                                const geneticName = pendingMapGroup.root.genetic?.name || pendingMapGroup.root.name || 'Desconocida';
+                                const prefix = geneticName.substring(0, 6).toUpperCase();
+                                const displayDate = new Date(pendingMapGroup.root.start_date || pendingMapGroup.root.created_at).toLocaleDateString();
+                                const displayName = `Lote ${prefix} - ${displayDate}`;
+
+                                return (
+                                    <p style={{ marginBottom: '1rem', color: '#4a5568' }}>
+                                        Vas a crear un nuevo mapa para el lote <strong>{displayName}</strong> y sus variantes.
+                                    </p>
                                 );
                             })()}
-                        </div>
 
-                        <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'flex-end' }}>
-                            <ActionButton onClick={() => setIsGeneticsModalOpen(false)} style={{ maxWidth: '150px' }}>
-                                Cerrar
-                            </ActionButton>
-                        </div>
-                    </ModalContent>
-                </ModalOverlay>
-            )}
+                            <p style={{ marginBottom: '1rem', color: '#4a5568' }}>
+                                Total de plantas: <strong>{pendingMapGroup.root.quantity + pendingMapGroup.children.reduce((acc: number, c: any) => acc + c.quantity, 0)}</strong>
+                            </p>
+                            <p style={{ marginBottom: '1.5rem', fontSize: '0.9rem', color: '#718096' }}>
+                                Se creará una mesa automática y se distribuirán todas las plantas individualmente.
+                            </p>
 
-        </Container>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
+                                <button
+                                    onClick={() => setIsCreateMapFromGroupConfirmOpen(false)}
+                                    style={{
+                                        padding: '0.5rem 1rem',
+                                        borderRadius: '0.375rem',
+                                        border: '1px solid #cbd5e0',
+                                        background: 'white',
+                                        color: '#4a5568',
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={handleConfirmCreateMapFromGroup}
+                                    style={{
+                                        padding: '0.5rem 1rem',
+                                        borderRadius: '0.375rem',
+                                        background: '#48bb78',
+                                        color: 'white',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        fontWeight: 600
+                                    }}
+                                >
+                                    Crear Mapa
+                                </button>
+                            </div>
+                        </ModalContent>
+                    </PortalModalOverlay>
+                )
+            }
+
+            <ToastModal
+                isOpen={toastModal.isOpen}
+                message={toastModal.message}
+                type={toastModal.type}
+                onClose={() => setToastModal({ ...toastModal, isOpen: false })}
+            />
+            <GroupDetailModal
+                isOpen={isGroupDetailModalOpen}
+                onClose={() => setIsGroupDetailModalOpen(false)}
+                groupName={selectedGroupName || ''}
+                batches={room?.batches?.filter(b => (b.name || b.genetic?.name || 'Lote sin nombre') === selectedGroupName) || []}
+                onDeleteBatch={handleDeleteBatchFromGroup}
+            />
+            {
+                isMetricsModalOpen && (
+                    <PortalModalOverlay>
+                        <ModalContent style={{ maxWidth: '800px', width: '90%' }} onClick={e => e.stopPropagation()}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                                <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#2d3748' }}>Métricas de Enraizamiento</h2>
+                                <button onClick={() => setIsMetricsModalOpen(false)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#a0aec0' }}>&times;</button>
+                            </div>
+
+                            {loadingMetrics ? (
+                                <div style={{ padding: '2rem', textAlign: 'center' }}>
+                                    <LoadingSpinner />
+                                    <p style={{ marginTop: '1rem', color: '#718096' }}>Calculando métricas...</p>
+                                </div>
+                            ) : (
+                                <div style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                        <thead>
+                                            <tr style={{ background: '#f7fafc', borderBottom: '2px solid #e2e8f0' }}>
+                                                <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.85rem', color: '#4a5568' }}>Genética</th>
+                                                <th style={{ padding: '0.75rem', textAlign: 'center', fontSize: '0.85rem', color: '#4a5568' }}>Activos</th>
+                                                <th style={{ padding: '0.75rem', textAlign: 'center', fontSize: '0.85rem', color: '#38a169' }}>Transplantados</th>
+                                                <th style={{ padding: '0.75rem', textAlign: 'center', fontSize: '0.85rem', color: '#e53e3e' }}>Bajas/Fallas</th>
+                                                <th style={{ padding: '0.75rem', textAlign: 'center', fontSize: '0.85rem', color: '#2d3748' }}>Total Proc.</th>
+                                                <th style={{ padding: '0.75rem', textAlign: 'center', fontSize: '0.85rem', color: '#3182ce' }}>% Éxito</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {metricsData.map((stat, i) => (
+                                                <tr key={i} style={{ borderBottom: '1px solid #edf2f7' }}>
+                                                    <td style={{ padding: '0.75rem', fontWeight: 600 }}>{stat.name}</td>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'center' }}>{stat.active}</td>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'center', color: '#38a169', fontWeight: 500 }}>{stat.success}</td>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'center', color: '#e53e3e', fontWeight: 500 }}>{stat.failed}</td>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'center' }}>{stat.total}</td>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                                                            <div style={{
+                                                                width: '60px', height: '6px', background: '#e2e8f0', borderRadius: '3px', overflow: 'hidden'
+                                                            }}>
+                                                                <div style={{
+                                                                    width: `${stat.successRate}% `,
+                                                                    height: '100%',
+                                                                    background: parseFloat(stat.successRate) > 80 ? '#48bb78' : parseFloat(stat.successRate) > 50 ? '#ecc94b' : '#f56565'
+                                                                }} />
+                                                            </div>
+                                                            <span style={{ fontWeight: 'bold', minWidth: '40px' }}>{stat.successRate}%</span>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                            {metricsData.length === 0 && (
+                                                <tr>
+                                                    <td colSpan={6} style={{ padding: '2rem', textAlign: 'center', color: '#a0aec0' }}>
+                                                        No hay suficientes datos para mostrar métricas.
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                    <div style={{ marginTop: '1rem', padding: '1rem', background: '#ebf8ff', borderRadius: '0.5rem', fontSize: '0.85rem', color: '#2c5282' }}>
+                                        <strong>Nota:</strong> El % de Éxito se calcula sobre los esquejes que han finalizado su ciclo en esta sala (Transplantados vs Bajas). Los esquejes activos no afectan el porcentaje.
+                                    </div>
+                                </div>
+                            )}
+                        </ModalContent>
+                    </PortalModalOverlay>
+                )
+            }
+            {/* EDIT ROOM MODAL */}
+            {
+                isEditModalOpen && (
+                    <div style={{
+                        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                        background: 'rgba(0,0,0,0.5)', zIndex: 2000,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>
+                        <div style={{ background: 'white', padding: '2rem', borderRadius: '1rem', width: '90%', maxWidth: '500px' }}>
+                            <h2 style={{ marginBottom: '1.5rem', color: '#2d3748' }}>Editar Sala</h2>
+
+                            <div style={{ marginBottom: '1rem' }}>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Nombre</label>
+                                <input
+                                    type="text"
+                                    value={editRoomName}
+                                    onChange={e => setEditRoomName(e.target.value)}
+                                    style={{ width: '100%', padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '0.5rem' }}
+                                />
+                            </div>
+
+                            <div style={{ marginBottom: '1rem' }}>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Tipo</label>
+                                <select
+                                    value={editRoomType}
+                                    onChange={e => setEditRoomType(e.target.value)}
+                                    style={{ width: '100%', padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '0.5rem' }}
+                                >
+                                    <option value="vegetation">Vegetación</option>
+                                    <option value="flowering">Floración</option>
+                                    <option value="drying">Secado</option>
+                                </select>
+                            </div>
+
+                            <div style={{ marginBottom: '1.5rem' }}>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Fecha de Inicio</label>
+                                <input
+                                    type="date"
+                                    value={editRoomStartDate}
+                                    onChange={e => setEditRoomStartDate(e.target.value)}
+                                    style={{ width: '100%', padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '0.5rem' }}
+                                />
+                            </div>
+
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
+                                <button
+                                    onClick={() => setIsEditModalOpen(false)}
+                                    style={{ background: 'white', border: '1px solid #e2e8f0', padding: '0.5rem 1rem', borderRadius: '0.5rem', cursor: 'pointer' }}
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={handleUpdateRoom}
+                                    style={{ background: '#3182ce', color: 'white', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 600 }}
+                                >
+                                    Guardar Cambios
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+
+            {/* FINALIZE MODAL */}
+            {
+                finalizeBatch && (
+                    <div style={{
+                        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                        background: 'rgba(0,0,0,0.5)', zIndex: 2000,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>
+                        <div style={{ background: 'white', padding: '2rem', borderRadius: '1rem', width: '90%', maxWidth: '400px' }}>
+                            <h2 style={{ marginBottom: '1rem', color: '#2d3748' }}>Finalizar Secado</h2>
+                            <p style={{ marginBottom: '1rem', color: '#4a5568' }}>
+                                Estás enviando <strong>{finalizeBatch.name}</strong> ({finalizeBatch.quantity} plantas) a Stock.
+                            </p>
+
+                            <div style={{ marginBottom: '1rem' }}>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Peso Seco Final (g)</label>
+                                <input
+                                    type="number"
+                                    autoFocus
+                                    value={finalWeight}
+                                    onChange={e => setFinalWeight(e.target.value)}
+                                    style={{ width: '100%', padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '0.5rem' }}
+                                    placeholder="0.00"
+                                />
+                            </div>
+
+                            <div style={{ marginBottom: '1.5rem' }}>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Notas</label>
+                                <textarea
+                                    value={finalNotes}
+                                    onChange={e => setFinalNotes(e.target.value)}
+                                    style={{ width: '100%', padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '0.5rem' }}
+                                    rows={3}
+                                    placeholder="Calidad, observaciones..."
+                                />
+                            </div>
+
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
+                                <button
+                                    onClick={() => setFinalizeBatch(null)}
+                                    style={{ background: 'white', border: '1px solid #e2e8f0', padding: '0.5rem 1rem', borderRadius: '0.5rem', cursor: 'pointer' }}
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={handleConfirmFinalize}
+                                    style={{ background: '#38a169', color: 'white', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 600 }}
+                                >
+                                    Confirmar y Enviar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+            <ConfirmationModal
+                isOpen={isDistributionConfirmOpen}
+                title="Distribuir Lote Automáticamente"
+                message={distributionData ? `¿Deseas distribuir ${distributionData.batches.length} lotes (${distributionData.batches.reduce((a, b) => a + b.quantity, 0)} plantas) en el mapa comenzando desde la celda ${distributionData.position}?` : ''}
+                onConfirm={handleConfirmDistribution}
+                onCancel={() => {
+                    setIsDistributionConfirmOpen(false);
+                    setDistributionData(null);
+                }}
+                confirmText="Distribuir"
+                cancelText="Cancelar"
+            />
+
+            {/* Single Distribution Confirmation Modal */}
+            <ConfirmationModal
+                isOpen={isSingleDistributeConfirmOpen}
+                title="Distribuir Plantas"
+                message={singleDistributionData ? `¿Distribuir ${singleDistributionData.quantity} plantas individualmente en el mapa a partir de ${singleDistributionData.position}?` : ''}
+                onConfirm={async () => {
+                    if (!singleDistributionData) return;
+                    setLoading(true);
+                    setIsSingleDistributeConfirmOpen(false); // Close modal immediately
+
+                    const { batchId, position, mapId } = singleDistributionData;
+                    // Calculate start row/col from position (e.g. "A1")
+                    const rowLetter = position.charAt(0);
+                    const colStr = position.slice(1);
+                    const startRow = rowLetter.charCodeAt(0) - 64; // A=1
+                    const startCol = parseInt(colStr, 10);
+
+                    const map = cloneMaps.find(m => m.id === mapId);
+
+                    if (map) {
+                        try {
+                            const success = await roomsService.distributeBatchToMap(
+                                batchId,
+                                mapId,
+                                startRow,
+                                startCol,
+                                map.grid_rows,
+                                map.grid_columns
+                            );
+                            if (success) {
+                                if (id) await loadData(id);
+                                showToast("Plantas distribuidas correctamente", 'success');
+                            } else {
+                                showToast("No se pudo distribuir el lote completo. Verifica el espacio.", 'error');
+                            }
+                        } catch (e) {
+                            console.error(e);
+                            showToast("Error al distribuir el lote.", 'error');
+                        }
+                    }
+                    setLoading(false);
+                    setSingleDistributionData(null);
+                }}
+                onCancel={() => {
+                    setIsSingleDistributeConfirmOpen(false);
+                    setSingleDistributionData(null);
+                }}
+                confirmText="Distribuir"
+                cancelText="Cancelar"
+            />
+            {
+                room && (
+                    <TransplantModal
+                        isOpen={isTransplantModalOpen}
+                        onClose={() => setIsTransplantModalOpen(false)}
+                        currentRoom={room}
+                        rooms={allRooms}
+                        cloneMaps={(console.log('RoomDetail Passing CloneMaps:', room.clone_maps), room.clone_maps || [])}
+                        onConfirm={handleTransplant}
+                        initialMapId={activeMapId || undefined}
+                        initialSelectedBatchIds={memoizedTransplantBatchIds}
+                    />
+                )
+            }
+            <ToastModal
+                isOpen={toastState.isOpen}
+                message={toastState.message}
+                type={toastState.type}
+                onClose={() => setToastState(prev => ({ ...prev, isOpen: false }))}
+            />
+            {/* Bulk Delete Config Modal */}
+            <ConfirmationModal
+                isOpen={isBulkDeleteConfirmOpen}
+                onCancel={() => setIsBulkDeleteConfirmOpen(false)}
+                onConfirm={handleBulkDeleteConfirm}
+                title="Confirmar Eliminación Masiva"
+                message={`¿Estás seguro de que deseas eliminar ${selectedBatchIds.size} lotes seleccionados? Esta acción no se puede deshacer.`}
+                confirmText="Eliminar Lotes"
+                cancelText="Cancelar"
+                isDestructive={true}
+            />
+            {/* CREATE BATCH MODAL */}
+            {
+                isCreateBatchModalOpen && (
+                    <div style={{
+                        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                        background: 'rgba(0,0,0,0.5)', zIndex: 1000,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>
+                        <div style={{ background: 'white', padding: '2rem', borderRadius: '1rem', width: '400px' }}>
+                            <h3 style={{ marginBottom: '1.5rem' }}>
+                                {['germinacion', 'germinación', 'germination', 'semillero'].includes((room?.type || '').toLowerCase()) ? 'Nuevo Lote de Semillas' : 'Nuevo Lote'}
+                            </h3>
+                            <div style={{ marginBottom: '1rem' }}>
+                                <label style={{ display: 'block', marginBottom: '0.5rem' }}>Genética</label>
+                                <select
+                                    value={newBatch.geneticId}
+                                    onChange={e => setNewBatch({ ...newBatch, geneticId: e.target.value })}
+                                    style={{ width: '100%', padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '0.5rem' }}
+                                >
+                                    <option value="">Seleccionar Genética</option>
+                                    {genetics.map(m => (
+                                        <option key={m.id} value={m.id}>{m.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div style={{ marginBottom: '1rem' }}>
+                                <label style={{ display: 'block', marginBottom: '0.5rem' }}>Cantidad</label>
+                                <input
+                                    type="number"
+                                    value={newBatch.quantity}
+                                    onChange={e => setNewBatch({ ...newBatch, quantity: e.target.value })}
+                                    style={{ width: '100%', padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '0.5rem' }}
+                                    placeholder="0"
+                                />
+                            </div>
+                            <div style={{ marginBottom: '1.5rem' }}>
+                                <label style={{ display: 'block', marginBottom: '0.5rem' }}>Fecha de Inicio</label>
+                                <input
+                                    type="date"
+                                    value={newBatch.date}
+                                    onChange={e => setNewBatch({ ...newBatch, date: e.target.value })}
+                                    style={{ width: '100%', padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '0.5rem' }}
+                                />
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
+                                <button onClick={() => setIsCreateBatchModalOpen(false)} style={{ background: 'white', border: '1px solid #e2e8f0', padding: '0.5rem 1rem', borderRadius: '0.5rem' }}>Cancelar</button>
+                                <button onClick={handleCreateBatch} style={{ background: '#3182ce', color: 'white', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.5rem' }}>Crear</button>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+        </Container >
     );
 };
+
 
 export default RoomDetail;

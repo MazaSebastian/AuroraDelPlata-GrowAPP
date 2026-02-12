@@ -131,9 +131,25 @@ export const TuyaManager: React.FC<TuyaManagerProps> = ({ mode = 'full', roomId,
         setLoading(true);
         setError(null);
         try {
-            const data = await tuyaService.getDevices();
+            // Race against a 10s timeout
+            const timeoutPromise = new Promise<TuyaDevice[]>((_, reject) => {
+                setTimeout(() => reject(new Error('Tiempo de espera agotado. Verifique su conexión o la API.')), 10000);
+            });
+
+            const data = await Promise.race([
+                tuyaService.getDevices(),
+                timeoutPromise
+            ]);
+
             setDevices(data);
-            setLoading(false);
+
+            // We can stop loading here to show devices immediately, 
+            // even if status refresh is still pending/ongoing in background.
+            // But to be consistent with previous logic, we keep loading false.
+            // However, we should ensure finally block handles it.
+
+            // Refresh status in background (non-blocking for UI spinner if we set loading false now? 
+            // The original code set loading false immediately after getting devices list)
 
             // Refresh status
             const freshDataPromises = data.map(async (device) => {
@@ -146,15 +162,21 @@ export const TuyaManager: React.FC<TuyaManagerProps> = ({ mode = 'full', roomId,
                 }
             });
 
-            const freshDevices = await Promise.all(freshDataPromises);
-            setDevices(freshDevices);
+            // We await this to show fresh status, or we could let it update later.
+            // Let's await it but if it fails/timeouts, we still show devices.
+            Promise.all(freshDataPromises).then(freshDevices => {
+                setDevices(freshDevices);
+            }).catch(e => console.error("Error updating statuses", e));
 
         } catch (err: any) {
-            console.error(err);
-            setError("Error al cargar dispositivos.");
+            console.error("Error loading Tuya devices:", err);
+            setError(err.message || "Error al cargar dispositivos.");
+        } finally {
             setLoading(false);
         }
     };
+
+
 
     const loadSettings = async () => {
         const { data } = await import('../services/supabaseClient').then(m => m.supabase!.from('tuya_device_settings').select('*'));
@@ -229,7 +251,8 @@ export const TuyaManager: React.FC<TuyaManagerProps> = ({ mode = 'full', roomId,
     };
 
 
-    if (loading && devices.length === 0) return <LoadingSpinner text="Cargando dispositivos..." />;
+    // REMOVED: Blocking spinner. User prefers non-blocking load.
+    // if (loading && devices.length === 0) return <LoadingSpinner text="Cargando dispositivos..." />;
 
     return (
         <Container style={compact ? { padding: '0.5rem', boxShadow: 'none', background: 'transparent' } : undefined}>
