@@ -275,17 +275,18 @@ export const LivingSoilGrid: React.FC<LivingSoilGridProps> = ({ rows, cols, batc
 
     // --- Selection Logic ---
 
-    const getBatchIdAt = (r: number, c: number) => {
+    const getBatchIdAt = useCallback((r: number, c: number) => {
         const pos = `${getRowLabel(r)}${c + 1}`;
         const batch = batches.find(b => b.grid_position === pos);
         return batch ? batch.id : null;
-    };
+    }, [batches]);
 
     const handleMouseDown = (r: number, c: number, e: React.MouseEvent) => {
         if (!isSelectionMode) return;
         // Prevent text selection
         e.preventDefault();
 
+        // Capture modifier key state if needed for "click" logic vs drag
         setIsDraggingSelect(true);
         setDragStart({ r, c });
         setDragEnd({ r, c });
@@ -296,61 +297,6 @@ export const LivingSoilGrid: React.FC<LivingSoilGridProps> = ({ rows, cols, batc
         setDragEnd({ r, c });
     };
 
-    const handleMouseUp = () => {
-        if (!isDraggingSelect || !dragStart || !dragEnd || !isSelectionMode) {
-            setIsDraggingSelect(false);
-            setDragStart(null);
-            setDragEnd(null);
-            return;
-        }
-
-        // Calculate Final Selection
-        const minR = Math.min(dragStart.r, dragEnd.r);
-        const maxR = Math.max(dragStart.r, dragEnd.r);
-        const minC = Math.min(dragStart.c, dragEnd.c);
-        const maxC = Math.max(dragStart.c, dragEnd.c);
-
-        const newSelectionIds = new Set<string>();
-
-        // Add existing if modifier key was pressed (we need to track this, but event is gone. 
-        // We can check the window.event or check it on MouseDown and store "mode".
-        // Let's assume standard behavior: 
-        // If Shift/Ctrl was held on MOUSE DOWN, we act accordingly.
-        // Actually, we can check a ref or state. Let's start with: Always Additive? 
-        // No, standard is: Click+Drag = New Selection. Shift+Click+Drag = Add.
-        // We need 'selectionMode' state ('replace' | 'add').
-
-        // Simplified for now: We check if `selectedBatchIds` has items. 
-        // If we want to support correct modifier behavior we need to capture it on MouseDown.
-        // But for MouseUp, we don't have the event e passed here easily unless we attach listener with e.
-        // Let's rely on standard "Add to selection" behavior if the user was holding shift during the *click*.
-        // Implementing 'selectionModeRef' would be best but let's try to pass 'e' or just default to 'Replace' unless we store it.
-
-        // Let's iterate grid range
-        for (let r = minR; r <= maxR; r++) {
-            for (let c = minC; c <= maxC; c++) {
-                const bId = getBatchIdAt(r, c);
-                if (bId) newSelectionIds.add(bId);
-            }
-        }
-
-        // We can't access e.shiftKey here easily without the event. 
-        // Let's assume 'Replace' for now to fix the "lag" issue first and ensure clean selection.
-        // To support Shift, we'd need to store `isAdditive` in state on MouseDown.
-
-        // merging with previous selection? 
-        // For now: Just fire the new selection. Parent handles it? 
-        // Parent expects the *final* set.
-        // So we should combine here if needed.
-
-        // FIX: The user asked for better visualization.
-        onSelectionChange?.(newSelectionIds);
-
-        setIsDraggingSelect(false);
-        setDragStart(null);
-        setDragEnd(null);
-    };
-
     // Global Mouse Up
     useEffect(() => {
         const onGlobalMouseUp = (e: MouseEvent) => {
@@ -358,7 +304,6 @@ export const LivingSoilGrid: React.FC<LivingSoilGridProps> = ({ rows, cols, batc
                 // We can check modifiers here!
                 const isAdditive = e.shiftKey || e.metaKey || e.ctrlKey;
 
-                // Duplicate logic from handleMouseUp but with modifier awareness
                 if (!dragStart || !dragEnd) return;
 
                 const minR = Math.min(dragStart.r, dragEnd.r);
@@ -390,7 +335,8 @@ export const LivingSoilGrid: React.FC<LivingSoilGridProps> = ({ rows, cols, batc
 
         window.addEventListener('mouseup', onGlobalMouseUp);
         return () => window.removeEventListener('mouseup', onGlobalMouseUp);
-    }, [isDraggingSelect, dragStart, dragEnd, selectedBatchIds, batches]); // Dep array important for closure capture
+    }, [isDraggingSelect, dragStart, dragEnd, selectedBatchIds, batches, getBatchIdAt, onSelectionChange]); // Dep array updated
+
 
 
     // Calculate Selection Box Style

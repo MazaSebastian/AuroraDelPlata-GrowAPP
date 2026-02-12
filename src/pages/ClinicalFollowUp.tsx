@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { patientsService } from '../services/patientsService';
-import { FaHeartbeat, FaPills, FaChartLine, FaUserSecret, FaPlus, FaCheck } from 'react-icons/fa';
+import { FaHeartbeat, FaPills, FaChartLine, FaUserSecret, FaPlus } from 'react-icons/fa';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 
 // --- Styled Components (Dashboard First) ---
@@ -100,7 +100,7 @@ const MetricBox = styled.div`
 
 const ClinicalFollowUp: React.FC = () => {
     const { id } = useParams<{ id: string }>();
-    const navigate = useNavigate();
+    // const navigate = useNavigate();
 
     const [loading, setLoading] = useState(true);
     const [admission, setAdmission] = useState<any | null>(null);

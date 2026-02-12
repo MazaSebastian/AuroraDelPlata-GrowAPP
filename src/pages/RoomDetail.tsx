@@ -941,7 +941,7 @@ const RoomDetail: React.FC = () => {
     // Edit Map Modal State
     const [isEditMapModalOpen, setIsEditMapModalOpen] = useState(false);
     const [editingMapId, setEditingMapId] = useState<string | null>(null);
-    const [targetMapId, setTargetMapId] = useState<string | null>(null);
+    // const [targetMapId, setTargetMapId] = useState<string | null>(null);
     const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState(false);
     const [bulkEditForm, setBulkEditForm] = useState({ stage: '', notes: '' });
 
