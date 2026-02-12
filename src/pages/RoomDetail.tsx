@@ -785,6 +785,9 @@ const RoomDetail: React.FC = () => {
 
 
 
+    // Genetics Modal State
+    const [isGeneticsModalOpen, setIsGeneticsModalOpen] = useState(false);
+
     // Transplant Modal (Use constants to satisfy unused implementation for now)
     const loadingMetrics = false;
     // const transplantRoom = room; // Unused warning fix
@@ -841,7 +844,7 @@ const RoomDetail: React.FC = () => {
     }, []);
 
     // Group Detail Modal State
-    const [selectedGroupName, setSelectedGroupName] = useState<string | null>(null);
+    // selectedGroupName moved to line 796 to fix lint warning
     const [isGroupDetailModalOpen, setIsGroupDetailModalOpen] = useState(false);
 
     // Calendar State
