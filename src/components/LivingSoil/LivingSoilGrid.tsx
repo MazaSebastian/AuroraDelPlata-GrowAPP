@@ -587,8 +587,15 @@ export const LivingSoilGrid: React.FC<LivingSoilGridProps> = ({ rows, cols, batc
 
         // Calculate initial logical cell
         const headerSize = 40;
-        const c = Math.floor((x - headerSize) / cellSize);
-        const r = Math.floor((y - headerSize) / cellSize);
+        const padding = 16;
+        const border = 1;
+
+        const gap = cellSize < 40 ? 1 : 4;
+        const offset = headerSize + padding + border + gap;
+        const stride = cellSize + gap;
+
+        const c = Math.floor((x - offset) / stride);
+        const r = Math.floor((y - offset) / stride);
 
         // Pass to hook logic if within grid bounds (even if on header, maybe clamp?)
         if (c >= 0 && c < cols && r >= 0 && r < rows) {
@@ -624,8 +631,15 @@ export const LivingSoilGrid: React.FC<LivingSoilGridProps> = ({ rows, cols, batc
 
             // Update Logical Selection
             const headerSize = 40;
-            const c = Math.floor((x - headerSize) / cellSize);
-            const r = Math.floor((y - headerSize) / cellSize);
+            const padding = 16;
+            const border = 1;
+
+            const gap = cellSize < 40 ? 1 : 4;
+            const offset = headerSize + padding + border + gap;
+            const stride = cellSize + gap;
+
+            const c = Math.floor((x - offset) / stride);
+            const r = Math.floor((y - offset) / stride);
 
             // Clamp to grid
             const clamppedC = Math.max(0, Math.min(c, cols - 1));
@@ -749,8 +763,15 @@ export const LivingSoilGrid: React.FC<LivingSoilGridProps> = ({ rows, cols, batc
                     setCurrentMousePx({ x: currentX, y: currentY });
 
                     const headerSize = 40;
-                    const c = Math.floor((x - headerSize) / cellSize);
-                    const r = Math.floor((y - headerSize) / cellSize);
+                    const padding = 16;
+                    const border = 1;
+
+                    const gap = cellSize < 40 ? 1 : 4;
+                    const offset = headerSize + padding + border + gap;
+                    const stride = cellSize + gap;
+
+                    const c = Math.floor((x - offset) / stride);
+                    const r = Math.floor((y - offset) / stride);
 
                     // Clamp
                     const clamppedC = Math.max(0, Math.min(c, cols - 1));

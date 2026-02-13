@@ -6,7 +6,19 @@ const getClient = () => {
     return supabase;
 };
 
+// Helper for Excel-style row labels (A, ..., Z, AA, AB, ...)
+const getRowLabel = (n: number) => {
+    let s = "";
+    while (n > 0) {
+        let remainder = (n - 1) % 26;
+        s = String.fromCharCode(65 + remainder) + s;
+        n = Math.floor((n - 1) / 26);
+    }
+    return s;
+};
+
 export const roomsService = {
+
     // --- ROOMS ---
     async getRooms(spotId?: string): Promise<Room[]> {
         let query = getClient()
@@ -591,7 +603,7 @@ export const roomsService = {
             if (currentRow > mapRows) break; // Should not happen if UI restricts, but safety check.
 
             // Format position A1, A2... B1...
-            const rowChar = String.fromCharCode(65 + (currentRow - 1)); // 1 -> A
+            const rowChar = getRowLabel(currentRow);
             const colNum = currentCol;
             positions.push(`${rowChar}${colNum}`);
 
@@ -818,7 +830,7 @@ export const roomsService = {
 
         const getNextFreePosition = () => {
             while (currentRow <= mapRows) {
-                const rowChar = String.fromCharCode(65 + (currentRow - 1));
+                const rowChar = getRowLabel(currentRow);
                 const colNum = currentCol;
                 const pos = `${rowChar}${colNum}`;
 

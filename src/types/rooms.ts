@@ -45,8 +45,8 @@ export interface Batch {
     stage: BatchStage;
     start_date: string;
     current_room_id?: string;
-    clone_map_id?: string; // Link to CloneMap
-    grid_position?: string; // E.g., "A1", "B5" for Esquejera Grid
+    clone_map_id?: string | null; // Link to CloneMap
+    grid_position?: string | null; // E.g., "A1", "B5" for Esquejera Grid
     table_number?: number;
     notes?: string;
     created_at: string;

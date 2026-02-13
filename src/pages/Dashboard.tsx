@@ -25,6 +25,7 @@ import {
 } from 'react-icons/fa';
 import { WeatherWidget } from '../components/WeatherWidget';
 import { useAuth } from '../context/AuthContext';
+import { useData } from '../context/DataContext';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 
 
@@ -467,13 +468,14 @@ const AlertActions = styled.div`
 `;
 
 
+
+
+// ... (existing imports)
+
 const Dashboard: React.FC = () => {
   const { user } = useAuth();
+  const { tasks, crops, rooms, stickies, isLoading, refreshData, updateStickies, updateTasks } = useData();
   const [alerts, setAlerts] = useState<any[]>([]);
-  const [crops, setCrops] = useState<Crop[]>([]);
-  const [stickies, setStickies] = useState<any[]>([]);
-  const [rooms, setRooms] = useState<Room[]>([]);
-  const [loading, setLoading] = useState(true);
 
   // Sticky Modal State
   const [isStickyModalOpen, setIsStickyModalOpen] = useState(false);
@@ -489,43 +491,28 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const loadData = React.useCallback(async () => {
-    try {
-      const [tasks, loadedCrops, loadedStickies, loadedRooms] = await Promise.all([
-        tasksService.getPendingTasks(),
-        cropsService.getCrops(),
-        stickiesService.getStickies(),
-        roomsService.getRooms()
-      ]);
-
-      // Map DB tasks to UI alert format
-      const mappedAlerts = tasks.map(t => ({
-        id: t.id,
-        type: t.type,
-        title: t.title,
-        message: t.description || '',
-        icon: getIconForType(t.type)
-      }));
-      setAlerts(mappedAlerts);
-      setCrops(loadedCrops);
-      setStickies(loadedStickies);
-      setRooms(loadedRooms);
-    } catch (error) {
-      console.error('Error loading dashboard data:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, []); // items are dependencies? No, services are imported.
-
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    // Map DB tasks to UI alert format whenever tasks change
+    const mappedAlerts = tasks.map(t => ({
+      id: t.id,
+      type: t.type,
+      title: t.title,
+      message: t.description || '',
+      icon: getIconForType(t.type)
+    }));
+    setAlerts(mappedAlerts);
+  }, [tasks]);
+
+  // Optional: Refresh data silently on mount to ensure freshness
+  useEffect(() => {
+    refreshData();
+  }, [refreshData]);
 
   const handleCreateSticky = async () => {
     if (!newStickyContent.trim()) return;
     const note = await stickiesService.createSticky(newStickyContent, newStickyColor);
     if (note) {
-      setStickies(prev => [note, ...prev]);
+      updateStickies();
       setIsStickyModalOpen(false);
       setNewStickyContent('');
       setNewStickyColor('yellow');
@@ -537,16 +524,19 @@ const Dashboard: React.FC = () => {
     if (!window.confirm('¿Borrar esta nota?')) return;
     const success = await stickiesService.deleteSticky(id);
     if (success) {
-      setStickies(prev => prev.filter(s => s.id !== id));
+      updateStickies();
     }
   };
 
-
-
   const removeAlert = async (id: string, action: 'done' | 'dismissed') => {
+    // Optimistic update
     setAlerts(prev => prev.filter(a => a.id !== id));
     const success = await tasksService.updateStatus(id, action);
-    if (!success) loadData();
+    if (success) {
+      updateTasks();
+    } else {
+      refreshData(); // Revert on failure
+    }
   };
 
   const handleAction = (id: any, action: 'done' | 'dismissed') => {
@@ -558,7 +548,7 @@ const Dashboard: React.FC = () => {
   // Helper to calculate days since start (Stage mockup)
 
 
-  if (loading) {
+  if (isLoading) {
     return <LoadingSpinner text="Cargando panel..." fullScreen />;
   }
 

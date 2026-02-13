@@ -72,6 +72,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { PromptModal } from '../components/PromptModal';
 import { ConfirmModal } from '../components/ConfirmModal';
+import { ToastModal } from '../components/ToastModal';
 
 
 
@@ -756,6 +757,17 @@ const CropDetail: React.FC = () => {
   const [isErrorModalOpen, setIsErrorModalOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
+  // Toast State
+  const [toastOpen, setToastOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('info');
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToastMessage(message);
+    setToastType(type);
+    setToastOpen(true);
+  };
+
   // Modify/Delete State
   const [isDeleteProtectionOpen, setIsDeleteProtectionOpen] = useState(false);
   const [selectedDayTasks, setSelectedDayTasks] = useState<Task[]>([]);
@@ -991,14 +1003,14 @@ const CropDetail: React.FC = () => {
 
     if (!roomForm.name || !id || (!roomForm.operationalDays && roomForm.type !== 'living_soil')) {
       console.error("Missing name, ID, or operational days");
-      alert("Por favor completa el nombre de la sala y los días de funcionamiento.");
+      showToast("Por favor completa el nombre de la sala y los días de funcionamiento.", 'error');
       return;
     }
 
     // Validate Duplicate Name
     const isDuplicate = rooms.some(r => r.name.toLowerCase().trim() === roomForm.name.toLowerCase().trim());
     if (isDuplicate) {
-      alert("Ya existe una sala con este nombre. Por favor, elige otro nombre.");
+      showToast("Ya existe una sala con este nombre. Por favor, elige otro nombre.", 'error');
       return;
     }
 
@@ -1029,7 +1041,7 @@ const CropDetail: React.FC = () => {
       });
     } else {
       console.error("Failed to create room");
-      alert("Error al crear la sala.");
+      showToast("Error al crear la sala.", 'error');
     }
   };
 
@@ -1980,7 +1992,7 @@ const CropDetail: React.FC = () => {
 
                             {/* Left: Stage Action (or empty spacer if none) */}
                             <div style={{ flex: 1 }}>
-                              {room.type === 'vegetation' && (
+                              {/* {room.type === 'vegetation' && (
                                 <button
                                   onClick={(e) => handleForceStage(e, room, 'flowering')}
                                   style={{
@@ -2003,7 +2015,7 @@ const CropDetail: React.FC = () => {
                                 >
                                   <span>🌸</span> Pasar a Floración
                                 </button>
-                              )}
+                              )} */}
 
                               {room.type === 'flowering' && (
                                 <button
@@ -2939,6 +2951,13 @@ const CropDetail: React.FC = () => {
         )
       }
 
+      {/* Toast Modal */}
+      <ToastModal
+        isOpen={toastOpen}
+        message={toastMessage}
+        type={toastType}
+        onClose={() => setToastOpen(false)}
+      />
     </Container >
   );
 };

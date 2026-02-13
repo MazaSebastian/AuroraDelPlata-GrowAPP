@@ -24,7 +24,8 @@ import Patients from './pages/Patients';
 import ClinicalFollowUp from './pages/ClinicalFollowUp';
 import { notificationService } from './services/notificationService';
 import Login from './pages/Login';
-import { useAuth } from './context/AuthContext';
+import { useAuth, AuthProvider } from './context/AuthContext';
+import { DataProvider } from './context/DataContext';
 import './App.css';
 
 import Sidebar from './components/Sidebar';
@@ -64,149 +65,151 @@ function App() {
   const isLogin = location.pathname === '/login';
 
   return (
-    <div className="App">
-      {!isLogin && <Sidebar />}
-      {!isLogin && <ChatWidget />}
+    <DataProvider>
+      <div className="App">
+        {!isLogin && <Sidebar />}
+        {!isLogin && <ChatWidget />}
 
-      <Routes>
-        <Route path="/login" element={<Login />} />
+        <Routes>
+          <Route path="/login" element={<Login />} />
 
-        {/* Protected Routes Wrapped in Main Content */}
-        <Route path="/" element={
-          <RequireAuth>
-            <MainContent>
-              <Dashboard />
-            </MainContent>
-          </RequireAuth>
-        } />
-        <Route path="/crops" element={
-          <RequireAuth>
-            <MainContent>
-              <Crops />
-            </MainContent>
-          </RequireAuth>
-        } />
-        <Route path="/crops/:id" element={
-          <RequireAuth>
-            <MainContent>
-              <CropDetail />
-            </MainContent>
-          </RequireAuth>
-        } />
+          {/* Protected Routes Wrapped in Main Content */}
+          <Route path="/" element={
+            <RequireAuth>
+              <MainContent>
+                <Dashboard />
+              </MainContent>
+            </RequireAuth>
+          } />
+          <Route path="/crops" element={
+            <RequireAuth>
+              <MainContent>
+                <Crops />
+              </MainContent>
+            </RequireAuth>
+          } />
+          <Route path="/crops/:id" element={
+            <RequireAuth>
+              <MainContent>
+                <CropDetail />
+              </MainContent>
+            </RequireAuth>
+          } />
 
-        <Route path="/rooms" element={
-          <RequireAuth>
-            <MainContent>
-              <Rooms />
-            </MainContent>
-          </RequireAuth>
-        } />
+          <Route path="/rooms" element={
+            <RequireAuth>
+              <MainContent>
+                <Rooms />
+              </MainContent>
+            </RequireAuth>
+          } />
 
-        <Route path="/rooms/:id" element={
-          <RequireAuth>
-            <MainContent>
-              <RoomDetail />
-            </MainContent>
-          </RequireAuth>
-        } />
-        <Route path="/genetics" element={
-          <RequireAuth>
-            <MainContent>
-              <Genetics />
-            </MainContent>
-          </RequireAuth>
-        } />
-        <Route path="/clones" element={
-          <RequireAuth>
-            <MainContent>
-              <Clones />
-            </MainContent>
-          </RequireAuth>
-        } />
-        <Route path="/devices" element={
-          <RequireAuth>
-            <MainContent>
-              <Devices />
-            </MainContent>
-          </RequireAuth>
-        } />
+          <Route path="/rooms/:id" element={
+            <RequireAuth>
+              <MainContent>
+                <RoomDetail />
+              </MainContent>
+            </RequireAuth>
+          } />
+          <Route path="/genetics" element={
+            <RequireAuth>
+              <MainContent>
+                <Genetics />
+              </MainContent>
+            </RequireAuth>
+          } />
+          <Route path="/clones" element={
+            <RequireAuth>
+              <MainContent>
+                <Clones />
+              </MainContent>
+            </RequireAuth>
+          } />
+          <Route path="/devices" element={
+            <RequireAuth>
+              <MainContent>
+                <Devices />
+              </MainContent>
+            </RequireAuth>
+          } />
 
-        <Route path="/extractions" element={
-          <RequireAuth>
-            <MainContent>
-              <Extractions />
-            </MainContent>
-          </RequireAuth>
-        } />
+          <Route path="/extractions" element={
+            <RequireAuth>
+              <MainContent>
+                <Extractions />
+              </MainContent>
+            </RequireAuth>
+          } />
 
-        <Route path="/stock" element={
-          <RequireAuth>
-            <MainContent>
-              <Stock />
-            </MainContent>
-          </RequireAuth>
-        } />
+          <Route path="/stock" element={
+            <RequireAuth>
+              <MainContent>
+                <Stock />
+              </MainContent>
+            </RequireAuth>
+          } />
 
-        <Route path="/dispensary" element={
-          <RequireAuth>
-            <MainContent>
-              <Dispensary />
-            </MainContent>
-          </RequireAuth>
-        } />
-        <Route path="/settings" element={
-          <RequireAuth>
-            <MainContent>
-              <Settings />
-            </MainContent>
-          </RequireAuth>
-        } />
-        <Route path="/insumos" element={
-          <RequireAuth>
-            <MainContent>
-              <Insumos />
-            </MainContent>
-          </RequireAuth>
-        } />
-        <Route path="/compras" element={
-          <RequireAuth>
-            <MainContent>
-              <Compras />
-            </MainContent>
-          </RequireAuth>
-        } />
-        <Route path="/expenses" element={
-          <RequireAuth>
-            <MainContent>
-              <Expenses />
-            </MainContent>
-          </RequireAuth>
-        } />
-        <Route path="/patients" element={
-          <RequireAuth>
-            <MainContent>
-              <Patients />
-            </MainContent>
-          </RequireAuth>
-        } />
-        <Route path="/patients/:id/clinical" element={
-          <RequireAuth>
-            <MainContent>
-              <ClinicalFollowUp />
-            </MainContent>
-          </RequireAuth>
-        } />
-        <Route path="/metrics" element={
-          <RequireAuth>
-            <MainContent>
-              <Metrics />
-            </MainContent>
-          </RequireAuth>
-        } />
+          <Route path="/dispensary" element={
+            <RequireAuth>
+              <MainContent>
+                <Dispensary />
+              </MainContent>
+            </RequireAuth>
+          } />
+          <Route path="/settings" element={
+            <RequireAuth>
+              <MainContent>
+                <Settings />
+              </MainContent>
+            </RequireAuth>
+          } />
+          <Route path="/insumos" element={
+            <RequireAuth>
+              <MainContent>
+                <Insumos />
+              </MainContent>
+            </RequireAuth>
+          } />
+          <Route path="/compras" element={
+            <RequireAuth>
+              <MainContent>
+                <Compras />
+              </MainContent>
+            </RequireAuth>
+          } />
+          <Route path="/expenses" element={
+            <RequireAuth>
+              <MainContent>
+                <Expenses />
+              </MainContent>
+            </RequireAuth>
+          } />
+          <Route path="/patients" element={
+            <RequireAuth>
+              <MainContent>
+                <Patients />
+              </MainContent>
+            </RequireAuth>
+          } />
+          <Route path="/patients/:id/clinical" element={
+            <RequireAuth>
+              <MainContent>
+                <ClinicalFollowUp />
+              </MainContent>
+            </RequireAuth>
+          } />
+          <Route path="/metrics" element={
+            <RequireAuth>
+              <MainContent>
+                <Metrics />
+              </MainContent>
+            </RequireAuth>
+          } />
 
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </div>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </div>
+    </DataProvider>
   );
 }
 

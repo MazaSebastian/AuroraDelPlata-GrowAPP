@@ -1279,7 +1279,9 @@ const RoomDetail: React.FC = () => {
                                 await roomsService.updateBatch(batchId, {
                                     stage: 'vegetation',
                                     notes: newNotes,
-                                    current_room_id: room?.id
+                                    current_room_id: destinationRoomId, // CORRECT: Move to destination
+                                    clone_map_id: null, // CORRECT: Remove from source map
+                                    grid_position: null // CORRECT: Remove from source grid
                                 }, user?.id, 'Transplante: Inicio de Vegetación');
                             })());
                         }
@@ -1602,6 +1604,25 @@ const RoomDetail: React.FC = () => {
         }
     };
 
+    // Helper functions for Excel-style row labels (A, ..., Z, AA, AB, ...)
+    const getRowLabel = (n: number) => {
+        let s = "";
+        while (n > 0) {
+            let remainder = (n - 1) % 26;
+            s = String.fromCharCode(65 + remainder) + s;
+            n = Math.floor((n - 1) / 26);
+        }
+        return s;
+    };
+
+    const getRowIndex = (s: string) => {
+        let n = 0;
+        for (let i = 0; i < s.length; i++) {
+            n = n * 26 + (s.charCodeAt(i) - 64);
+        }
+        return n;
+    };
+
     const handleSowingSubmit = async () => {
         if (!room || !activeMapId || !sowingPosition || !newSowingBatch.genetic_id) {
             showToast("Faltan datos para realizar la siembra.", 'error');
@@ -1906,10 +1927,17 @@ const RoomDetail: React.FC = () => {
 
         try {
             const { batches, position, mapId, map } = distributionData;
-            // Calculate start row/col
-            const rowLetter = position.charAt(0);
-            const colStr = position.slice(1);
-            const startRow = rowLetter.charCodeAt(0) - 64;
+
+            // Fix for AA+ rows
+            const match = position.match(/^([A-Z]+)(\d+)$/);
+            if (!match) {
+                console.error("Invalid position format:", position);
+                return;
+            }
+            const rowLabel = match[1];
+            const colStr = match[2];
+
+            const startRow = getRowIndex(rowLabel);
             const startCol = parseInt(colStr, 10);
 
             const success = await roomsService.bulkDistributeBatchesToMap(
@@ -2009,8 +2037,17 @@ const RoomDetail: React.FC = () => {
                 console.log("Distribution Debug-Target ID:", targetId);
                 console.log("Distribution Debug-Resolved Position:", position);
 
-                const startRow = position.charAt(0).charCodeAt(0) - 64;
-                const startCol = parseInt(position.slice(1), 10);
+                const match = position.match(/^([A-Z]+)(\d+)$/);
+                if (!match) {
+                    console.error("Invalid position for distribution:", position);
+                    setLoading(false);
+                    return;
+                }
+                const rowLabel = match[1];
+                const colStr = match[2];
+
+                const startRow = getRowIndex(rowLabel);
+                const startCol = parseInt(colStr, 10);
 
                 console.log("Distribution Debug-StartRow:", startRow, "StartCol:", startCol);
 
@@ -2021,8 +2058,18 @@ const RoomDetail: React.FC = () => {
                 let r = startRow;
                 let c = startCol;
 
+                // Safety break to prevent infinite loops if logic fails
+                let iterations = 0;
+                const MAX_ITERATIONS = map.grid_rows * map.grid_columns * 2;
+
                 while (r <= map.grid_rows) {
-                    const pos = `${String.fromCharCode(64 + r)}${c}`;
+                    // Safety check
+                    if (iterations++ > MAX_ITERATIONS) {
+                        console.error("Infinite loop detected in distribution calculation");
+                        break;
+                    }
+
+                    const pos = `${getRowLabel(r)}${c}`;
                     if (!occupiedSet.has(pos)) {
                         freeSlots++;
                     }
