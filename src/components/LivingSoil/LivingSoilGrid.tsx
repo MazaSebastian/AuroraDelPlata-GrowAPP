@@ -50,7 +50,7 @@ const GridContainer = styled.div<{ rows: number; cols: number; cellSize: number 
   grid-template-columns: 40px repeat(${p => Number(p.cols)}, ${p => Number(p.cellSize)}px);
   grid-template-rows: 40px repeat(${p => Number(p.rows)}, ${p => Number(p.cellSize)}px);
   grid-auto-rows: ${p => Number(p.cellSize)}px; 
-  gap: 0; /* Removed gap for better hit precision, using padding instead */
+  gap: ${p => p.cellSize < 40 ? '1px' : '4px'}; /* Pixel Perfect Gap */
   overflow: auto;
   max-width: 100%;
   padding: 1rem;
@@ -58,6 +58,31 @@ const GridContainer = styled.div<{ rows: number; cols: number; cellSize: number 
   border-radius: 1rem;
   border: 1px solid #e2e8f0;
   margin: 0 auto;
+  
+  /* Custom Scrollbar */
+  &::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  &::-webkit-scrollbar-track {
+    background: #edf2f7;
+    border-radius: 4px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: #cbd5e0;
+    border-radius: 4px;
+    &:hover {
+      background: #a0aec0;
+    }
+  }
+
+  @media print {
+    overflow: visible !important;
+    border: none;
+    box-shadow: none;
+    max-width: none;
+    display: grid !important;
+  }
 `;
 
 const HeaderCell = styled.div<{ cellSize: number }>`
@@ -67,12 +92,11 @@ const HeaderCell = styled.div<{ cellSize: number }>`
   font-weight: 700;
   color: #718096;
   background: #edf2f7;
-  border-radius: ${p => p.cellSize < 40 ? '2px' : '0.5rem'};
-  font-size: ${p => p.cellSize < 40 ? '0.6rem' : '1rem'};
-  /* Simulate gap */
-  margin: ${p => p.cellSize < 40 ? '0.5px' : '4px'};
-  width: calc(100% - ${p => p.cellSize < 40 ? '1px' : '8px'});
-  height: calc(100% - ${p => p.cellSize < 40 ? '1px' : '8px'});
+  border-radius: ${p => p.cellSize < 40 ? '1px' : '0.375rem'};
+  font-size: ${p => p.cellSize < 40 ? '0.6rem' : '0.85rem'};
+  width: 100%;
+  height: 100%;
+  /* No margin needed with real grid-gap */
 `;
 
 const getStageBorderColor = (stage: BatchStage | undefined) => {
@@ -89,15 +113,8 @@ const getStageBorderColor = (stage: BatchStage | undefined) => {
 
 // Keep getStageIcon for legacy or tooltips if needed, but we won't use it in the grid cell main view anymore.
 // Or we can remove it if unused. Let's keep it for now in case we need it elsewhere.
-const getStageIcon = (stage: BatchStage | undefined) => {
-    switch (stage) {
-        case 'seedling': return <FaSeedling style={{ color: '#2b6cb0' }} />;
-        case 'vegetation': return <FaLeaf style={{ color: '#2f855a' }} />;
-        case 'flowering': return <FaCannabis style={{ color: '#c53030' }} />;
-        case 'completed': return <FaCheckCircle style={{ color: '#4a5568' }} />;
-        default: return <FaExclamationTriangle style={{ color: '#ecc94b' }} />;
-    }
-}
+// getStageIcon removed as it was unused.
+
 
 // --- Styled Components ---
 
@@ -105,30 +122,27 @@ const CellStyled = styled.div<{ $isOver?: boolean; $isOccupied?: boolean; $stage
   /* Background Logic */
   background: ${p => p.$isSelected ? '#48bb78' : p.$isOccupied ? (p.$geneticColor || '#ffffff') : p.$isOver ? '#ebf8ff' : 'white'};
   
-  /* Border Logic */
-  border: ${p => p.cellSize < 40
-        ? (p.$isSelected ? '2px solid #000' : '2px ' + (p.$isOccupied ? 'solid ' + getStageBorderColor(p.$stage) : 'solid #e2e8f0'))
-        : (p.$isSelected ? '3px solid #000' : '2px ' + (p.$isOccupied ? 'solid ' + getStageBorderColor(p.$stage) : 'dashed #cbd5e0'))
+  /* Border Logic - Simplified for cleaner look with gap */
+  border: ${p => p.$isSelected
+        ? '2px solid #2f855a' // Darker green for selection
+        : p.cellSize < 40
+            ? '1px solid ' + (p.$isOccupied ? getStageBorderColor(p.$stage) : '#e2e8f0')
+            : '2px ' + (p.$isOccupied ? 'solid ' + getStageBorderColor(p.$stage) : 'dashed #e2e8f0')
     };
   
   box-sizing: border-box;
-  border-radius: ${p => p.cellSize < 40 ? '2px' : '0.5rem'};
+  border-radius: ${p => p.cellSize < 40 ? '1px' : '0.5rem'}; /* Matches Gap */
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   position: relative;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  transition: ${p => p.$disableTransition ? 'none' : 'all 0.1s'};
-  cursor: ${p => p.$isOccupied ? 'pointer' : 'default'};
+  transition: ${p => p.$disableTransition ? 'none' : 'transform 0.1s, box-shadow 0.1s'};
   cursor: ${p => p.$isOccupied ? 'pointer' : 'default'};
   opacity: ${p => p.$stage === 'completed' ? 0.6 : 1};
   width: 100%;
   height: 100%;
-  overflow: visible; /* Changed to visible for tooltip */
+  overflow: hidden; /* visual polish: clip overflow content */
   
   /* Dynamic Font Sizing Base */
   font-size: ${p => Math.max(8, p.cellSize * 0.25)}px;
@@ -138,16 +152,11 @@ const CellStyled = styled.div<{ $isOver?: boolean; $isOccupied?: boolean; $stage
     &::after {
       content: '';
       position: absolute;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background: repeating-linear-gradient(
-        45deg,
-        rgba(255, 0, 0, 0.1),
-        rgba(255, 0, 0, 0.1) 10px,
-        rgba(255, 0, 0, 0.2) 10px,
-        rgba(255, 0, 0, 0.2) 20px
-      );
-      border: 2px solid #e53e3e;
-      pointer-events: none;
+      top: 2px; right: 2px;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #e53e3e;
+      box-shadow: 0 0 0 2px white;
       z-index: 5;
     }
   `}
@@ -156,17 +165,16 @@ const CellStyled = styled.div<{ $isOver?: boolean; $isOccupied?: boolean; $stage
   ${p => p.$isOver && `
     border: 2px dashed #48bb78;
     background-color: #f0fff4;
-    transform: scale(1.05);
+    transform: scale(0.98);
     z-index: 20;
   `}
 
   /* Hover Effects */
   &:hover {
-    border-color: ${p => p.$isSelected ? '#000' : p.$isOccupied ? getStageBorderColor(p.$stage) : '#3182ce'};
-    z-index: 100; 
-    transform: ${p => p.cellSize < 40 ? 'scale(1.2)' : p.$isOccupied ? 'scale(1.05)' : 'none'};
-    box-shadow: ${p => p.cellSize < 40 ? '0 0 0 1px #3182ce' : p.$isOccupied ? '0 4px 6px rgba(0,0,0,0.2)' : 'none'};
-    overflow: visible;
+    z-index: 10; 
+    transform: ${p => p.cellSize < 40 ? 'none' : 'translateY(-2px)'};
+    box-shadow: ${p => p.cellSize < 40 ? 'none' : '0 4px 6px rgba(0,0,0,0.1)'};
+    border-color: ${p => p.$isSelected ? '#276749' : '#3182ce'};
   }
 `;
 
@@ -178,9 +186,9 @@ const BatchItemStyled = styled.div<{ cellSize: number }>`
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 0.1em;
-  /* Add top padding when cell is large enough to have a top-left position label, to avoid overlap */
-  padding-top: ${p => p.cellSize >= 60 ? '1.2em' : '0.1em'};
+  padding: 2px;
+  /* Top padding for positioning label space if needed, otherwise center */
+  padding-top: ${p => p.cellSize >= 60 ? '12px' : '0'};
 `;
 
 
@@ -203,20 +211,25 @@ const BatchItem = ({ batch, cellSize }: { batch: Batch; cellSize: number }) => {
         <BatchItemStyled cellSize={cellSize}>
             {/* Tracking Code - Central Focus now */}
             <span style={{
-                fontSize: cellSize < 60 ? '0.5em' : '0.58em', // Slightly reduced from 0.6em for breathing room
-                fontWeight: '700', // Bolder to stand out
+                fontSize: cellSize < 75 ? '0.6em' : '0.55em',
+                fontWeight: '700',
                 textAlign: 'center',
-                lineHeight: 1.2,
-                color: '#2d3748', // Dark text on genetic bg? Might need contrast check.
-                // Assuming genetic bg is usually light enough (pastel). If dark, we need white text.
-                // For now keep dark grey.
-                textShadow: '0px 0px 2px rgba(255,255,255,0.8)', // Halo for legibility
+                lineHeight: 1.1,
+                color: '#2d3748',
+                // Removed text-shadow for cleaner look
+                // Added background pill for better contrast against genetic colors
+                background: 'rgba(255,255,255,0.6)',
+                backdropFilter: 'blur(1px)',
+                padding: '1px 4px',
+                borderRadius: '4px',
+
                 // Fixed: Allow tracking code to be fully visible
-                whiteSpace: cellSize >= 60 ? 'normal' : 'nowrap',
+                whiteSpace: cellSize >= 80 ? 'normal' : 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
-                marginBottom: '0.25em', // Increased from 0.1em
-                wordBreak: 'break-word', // Ensure long codes break if needed      }}>
+                marginBottom: '2px',
+                wordBreak: 'break-word',
+                maxWidth: '95%'
             }}>
                 {batch.tracking_code || batch.name}
             </span>
@@ -224,21 +237,23 @@ const BatchItem = ({ batch, cellSize }: { batch: Batch; cellSize: number }) => {
             {/* Genetic Badge - Visible >= 75px */}
             {cellSize >= 75 && (
                 <div style={{
-                    fontSize: '0.45em',
+                    fontSize: '0.4em',
                     fontWeight: '600',
-                    color: '#ffffff',
-                    backgroundColor: 'rgba(0,0,0,0.6)',
-                    borderRadius: '0.25rem',
-                    padding: '0.15em 0.5em',
-                    maxWidth: '98%',
+                    color: '#4a5568', // Darker text
+                    backgroundColor: 'rgba(255,255,255,0.85)', // Lighter bg
+                    border: '1px solid rgba(0,0,0,0.05)',
+                    borderRadius: '999px',
+                    padding: '2px 6px',
+                    maxWidth: '90%',
                     overflow: 'hidden',
                     whiteSpace: 'nowrap',
                     textOverflow: 'ellipsis',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    marginTop: '0.15em', // Increased from 0.1em
-                    letterSpacing: '0.02em'
+                    marginTop: '2px',
+                    letterSpacing: '0.01em',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
                 }}>
                     {batch.genetic?.name}
                 </div>
@@ -292,7 +307,7 @@ const FloatingTooltip = ({ batch, x, y }: { batch: Batch, x: number, y: number }
 
     // Get viewport dimensions
     const vw = window.innerWidth;
-    const vh = window.innerHeight;
+    // const vh = window.innerHeight; // Unused
 
     let left = x - tooltipWidth / 2;
     let top = y - tooltipHeight - 10; // Default above
@@ -323,9 +338,9 @@ const FloatingTooltip = ({ batch, x, y }: { batch: Batch, x: number, y: number }
                 🌱 {batch.stage}
             </div>
             {/* Notes / Alerts */}
-            {(batch.notes || batch.has_alert) && (
+            {(batch.notes) && (
                 <div style={{ marginTop: '0.5rem', paddingTop: '0.25rem', borderTop: '1px dashed #4A5568', color: '#F6E05E', fontStyle: 'italic' }}>
-                    ⚠️ {batch.notes || 'Advertencia activa'}
+                    ⚠️ {batch.notes}
                 </div>
             )}
         </FloatingTooltipContainer>,
@@ -375,7 +390,7 @@ const GridCell = React.memo(({
             $stage={batch?.stage}
             $geneticColor={batch ? getGeneticColor(batch.genetic?.name || batch.name).bg : undefined}
             $isSelected={isSelected}
-            $hasAlert={batch?.has_alert}
+            $hasAlert={!!batch?.notes}
             $disableTransition={disableTransition}
             cellSize={cellSize}
             onClick={(e) => {

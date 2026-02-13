@@ -7,3 +7,47 @@
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
   z-index: 10;
 }
+
+
+/* PRINT STYLES */
+@media screen {
+
+  .printable-map-details,
+  .printable-report {
+    display: none !important;
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  .printable-map-details,
+  .printable-report {
+    display: block !important;
+  }
+
+  /* Force background colors for map printing */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide sidebar and other distractions */
+  aside,
+  nav,
+  header,
+  footer {
+    display: none !important;
+  }
+
+  /* Ensure map takes full width */
+  .active-map-container {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+}

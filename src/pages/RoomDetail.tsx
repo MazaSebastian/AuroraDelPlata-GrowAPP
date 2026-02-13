@@ -22,7 +22,7 @@ import { Task, StickyNote, RecurrenceConfig } from '../types';
 import { GroupDetailModal } from '../components/GroupDetailModal';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 
-import { EsquejeraGrid } from '../components/Esquejera/EsquejeraGrid';
+// import { EsquejeraGrid } from '../components/Esquejera/EsquejeraGrid';
 import { LivingSoilGrid } from '../components/LivingSoil/LivingSoilGrid';
 import { LivingSoilBatchModal } from '../components/LivingSoil/LivingSoilBatchModal';
 import { StageSelectionModal } from '../components/LivingSoil/StageSelectionModal';
@@ -266,6 +266,22 @@ const ModalContent = styled.div`
   background: white; padding: 2rem; border-radius: 1rem; width: 90%; max-width: 500px; max-height: 90vh; overflow-y: auto;
 `;
 
+const TaskModalContent = styled.div`
+  background: white; 
+  padding: 2rem; 
+  border-radius: 1.5rem; 
+  width: 95%; 
+  max-width: 1000px; /* Wider for 2 columns */
+  max-height: 90vh; 
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+
+  @media (max-width: 768px) {
+    padding: 1rem;
+  }
+`;
+
 
 
 
@@ -343,7 +359,7 @@ const CancelButton = styled.button`
 `;
 
 const ActionButton = styled.button<{ $variant?: 'primary' | 'danger' | 'success' }>`
-  flex: 1; 
+ 
   padding: 0.75rem 1rem; 
   border: none; 
   border-radius: 0.5rem;
@@ -374,6 +390,26 @@ const ActionButton = styled.button<{ $variant?: 'primary' | 'danger' | 'success'
 
 
 
+const BackButton = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  color: #4a5568;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.5rem 1rem;
+  font-size: 0.95rem;
+  transition: all 0.2s;
+
+  &:hover {
+    background: #f7fafc;
+    color: #2d3748;
+    border-color: #cbd5e0;
+  }
+`;
 
 const FormGroup = styled.div`
 margin-bottom: 1.5rem;
@@ -797,7 +833,7 @@ const RoomDetail: React.FC = () => {
     const handleBulkDeleteConfirm = async () => {
         setLoading(true);
         try {
-            const success = await roomsService.deleteBatches(Array.from(selectedBatchIds), 'Eliminación Masiva desde Mapa');
+            const success = await roomsService.deleteBatches(Array.from(selectedBatchIds), 'Eliminación Masiva desde Mapa', user?.id);
             if (success) {
                 setToastState({ isOpen: true, message: 'Lotes eliminados correctamente', type: 'success' });
                 setIsSelectionMode(false);
@@ -828,7 +864,7 @@ const RoomDetail: React.FC = () => {
         try {
             // Update all selected batches
             const updatePromises = Array.from(selectedBatchIds).map(id =>
-                roomsService.updateBatchStage(id, newStage)
+                roomsService.updateBatchStage(id, newStage, user?.id)
             );
             await Promise.all(updatePromises);
 
@@ -1242,8 +1278,9 @@ const RoomDetail: React.FC = () => {
 
                                 await roomsService.updateBatch(batchId, {
                                     stage: 'vegetation',
-                                    notes: newNotes
-                                });
+                                    notes: newNotes,
+                                    current_room_id: room?.id
+                                }, user?.id, 'Transplante: Inicio de Vegetación');
                             })());
                         }
                     }
@@ -1266,8 +1303,9 @@ const RoomDetail: React.FC = () => {
             await roomsService.updateBatch(editBatchForm.id, {
                 name: editBatchForm.name,
                 quantity: Number(editBatchForm.quantity),
-                notes: editBatchForm.notes
-            });
+                notes: editBatchForm.notes,
+                current_room_id: room?.id
+            }, user?.id, 'Edición Manual de Lote');
 
             // Refresh
             if (id) {
@@ -1540,7 +1578,12 @@ const RoomDetail: React.FC = () => {
 
             // Execute Updates
             const promises = Array.from(selectedBatchIds).map(id =>
-                roomsService.updateBatch(id, updates)
+                roomsService.updateBatch(
+                    id,
+                    { ...updates, current_room_id: room?.id },
+                    user?.id,
+                    'Edición Masiva'
+                )
             );
 
             await Promise.all(promises);
@@ -1595,7 +1638,7 @@ const RoomDetail: React.FC = () => {
                 clone_map_id: activeMapId,
                 grid_position: sowingPosition,
                 notes: newSowingBatch.notes
-            });
+            }, user?.id);
 
             await loadData(room.id);
             setIsSowingModalOpen(false);
@@ -1626,7 +1669,7 @@ const RoomDetail: React.FC = () => {
     // Living Soil Handlers
     const handleUpdateStage = async (batch: Batch, newStage: any) => {
         try {
-            await roomsService.updateBatchStage(batch.id, newStage);
+            await roomsService.updateBatchStage(batch.id, newStage, user?.id);
             if (id) await loadData(id);
             showToast(`Etapa actualizada a ${newStage}`, 'success');
             // Update the modal's internal batch if possible, or close it.
@@ -1639,12 +1682,23 @@ const RoomDetail: React.FC = () => {
 
     const handleSaveNotes = async (batch: Batch, notes: string) => {
         try {
-            await roomsService.updateBatch(batch.id, { notes });
-            if (id) await loadData(id);
-            showToast("Notas guardadas", 'success');
-        } catch (error) {
-            console.error(error);
-            showToast("Error al guardar notas", 'error');
+            const hasContent = !!notes?.trim();
+            const updates = {
+                notes,
+                has_alert: hasContent,
+                current_room_id: room?.id // Ensure room context for history log
+            };
+            await roomsService.updateBatch(batch.id, updates, user?.id, 'Nota actualizada');
+
+            // Update local state
+            if (activeMapId && room?.batches) {
+                const updatedBatches = room.batches.map(b => b.id === batch.id ? { ...b, ...updates } : b);
+                setRoom(prev => prev ? { ...prev, batches: updatedBatches } : null);
+            }
+            showToast("Nota guardada", 'success');
+        } catch (e) {
+            console.error(e);
+            showToast("Error al guardar nota", 'error');
         }
     };
 
@@ -1697,33 +1751,10 @@ const RoomDetail: React.FC = () => {
         }
     };
 
-    const handleToggleAlert = async () => {
-        if (!room?.batches) return;
-
-        // Find selected batches
-        const selectedBatches = room.batches.filter(b => selectedBatchIds.has(b.id));
-        if (selectedBatches.length === 0) return;
-
-        // Determine target state: if any selected batch DOES NOT have alert, turn ON for all.
-        // Otherwise (all have alert), turn OFF.
-        const anyMissingAlert = selectedBatches.some(b => !b.has_alert);
-        const targetAlertState = anyMissingAlert;
-
-        setLoading(true);
-        try {
-            await Promise.all(selectedBatches.map(b =>
-                roomsService.updateBatchAlert(b.id, targetAlertState)
-            ));
-
-            showToast(targetAlertState ? 'Alerta activada' : 'Alerta desactivada', 'success');
-            if (id) await loadData(id);
-        } catch (error) {
-            console.error("Error toggling alert:", error);
-            showToast("Error al actualizar alerta", 'error');
-        } finally {
-            setLoading(false);
-        }
-    };
+    /* 
+    // Legacy Toggle Alert - Removed in favor of Register Observation
+    const handleToggleAlert = async () => { ... } 
+    */
 
 
 
@@ -1806,7 +1837,7 @@ const RoomDetail: React.FC = () => {
                 // Only use batchesToAssign if it was set, or just use batch.id directly if we are sure
                 // Since batchesToAssign was declared but not used in the new logic, let's use batch.id directly
                 // matching the original logic which used batchesToAssign[0] = batch.id
-                await roomsService.batchAssignToMap(batch.id, activeMapId, targetPositions, room.id);
+                await roomsService.batchAssignToMap(batch.id, activeMapId, targetPositions, room.id, user?.id);
             } else {
                 // Multi-unit distribution logic
                 const availableBatches = room.batches?.filter(b =>
@@ -1837,7 +1868,7 @@ const RoomDetail: React.FC = () => {
 
                     if (positionsForThisBatch.length > 0) {
                         promises.push(
-                            roomsService.batchAssignToMap(b.id, activeMapId, positionsForThisBatch, room.id)
+                            roomsService.batchAssignToMap(b.id, activeMapId, positionsForThisBatch, room.id, user?.id)
                         );
                     }
                     remainingQtyToAssign -= quantityFromThisBatch;
@@ -1887,7 +1918,8 @@ const RoomDetail: React.FC = () => {
                 startRow,
                 startCol,
                 map.grid_rows,
-                map.grid_columns
+                map.grid_columns,
+                user?.id
             );
 
             if (success) {
@@ -2068,7 +2100,7 @@ const RoomDetail: React.FC = () => {
 
             // API Call (Standard Move)
             try {
-                await roomsService.moveBatch(batch.id, room?.id || null, room?.id || '', notes, splitQty, position, activeMapId || undefined);
+                await roomsService.moveBatch(batch.id, room?.id || null, room?.id || '', notes, splitQty, position, activeMapId || undefined, user?.id);
                 // Refresh data to see the split result
                 if (id) await loadData(id);
             } catch (err) {
@@ -2090,7 +2122,7 @@ const RoomDetail: React.FC = () => {
                 // If it's a grid item (single), we move it back.
 
                 // Move to room (null map, null position)
-                await roomsService.moveBatch(batch.id, room?.id || null, room?.id || '', 'Devuelto a Stock', undefined, undefined, undefined);
+                await roomsService.moveBatch(batch.id, room?.id || null, room?.id || '', 'Devuelto a Stock', undefined, undefined, undefined, user?.id);
                 if (id) await loadData(id);
             } catch (err) {
                 console.error(err);
@@ -2111,7 +2143,7 @@ const RoomDetail: React.FC = () => {
 
             try {
                 // Explicit reason for metrics
-                await roomsService.deleteBatch(batch.id, 'Baja-Eliminado del Mapa');
+                await roomsService.deleteBatch(batch.id, 'Baja-Eliminado del Mapa', user?.id);
                 if (id) await loadData(id);
             } catch (err) {
                 console.error(err);
@@ -2188,7 +2220,8 @@ const RoomDetail: React.FC = () => {
                 pendingMapBatch.id,
                 newMap.id,
                 1, 1, // Start at A1
-                rows, cols
+                rows, cols,
+                user?.id
             );
 
             if (success) {
@@ -2257,7 +2290,8 @@ const RoomDetail: React.FC = () => {
                 1, // Start Row
                 1, // Start Col
                 rows,
-                cols
+                cols,
+                user?.id
             );
 
             if (id) await loadData(id);
@@ -2330,30 +2364,35 @@ const RoomDetail: React.FC = () => {
             const batchIds = Array.from(selectedBatchIds);
 
             // 1. Update in Supabase
-            const { error } = await supabase
-                .from('batches')
-                .update({
-                    notes: observationText,
-                    has_alert: true
-                })
-                .in('id', batchIds);
+            // Logic: If text exists, alert = true. If text is empty, alert = false.
+            const hasContent = !!observationText?.trim();
 
-            if (error) throw error;
+            // 1. Update via Service with Logging
+            const updatePromises = batchIds.map(id =>
+                roomsService.updateBatch(
+                    id,
+                    {
+                        notes: observationText,
+                        has_alert: !!observationText?.trim(),
+                        current_room_id: room?.id // Ensure history log is linked to this room
+                    },
+                    user?.id,
+                    'Observación Registrada'
+                )
+            );
+            await Promise.all(updatePromises);
+
+
 
             // 2. Update local state
             if (activeMapId && room?.batches) {
                 const updatedBatches = room.batches.map(b => {
                     if (selectedBatchIds.has(b.id)) {
-                        return { ...b, notes: observationText, has_alert: true };
+                        return { ...b, notes: observationText, has_alert: hasContent };
                     }
                     return b;
                 });
 
-                // We need to update the room state with the new batches
-                // Since room state is managed via setRoom which likely comes from a fetch, 
-                // we might want to refetch or manually update.
-                // Assuming setRoom is available or we can trigger a refresh.
-                // But wait, setRoom is state.
                 setRoom(prev => prev ? { ...prev, batches: updatedBatches } : null);
             }
 
@@ -2408,7 +2447,7 @@ const RoomDetail: React.FC = () => {
             parent_batch_id: undefined
         };
 
-        const created = await roomsService.createBatch(batchData);
+        const created = await roomsService.createBatch(batchData, user?.id);
 
         if (created) {
             if (id) await loadData(id);
@@ -2555,12 +2594,10 @@ const RoomDetail: React.FC = () => {
             <GlobalPrintStyles />
             <div className="no-print" style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><FaArrowLeft /></button>
+                    <BackButton onClick={() => navigate(-1)}><FaArrowLeft /> Volver</BackButton>
                     <Title>{room?.name} <Badge stage={room?.type}>{room?.type === 'vegetation' ? 'Vegetación' : room?.type === 'flowering' ? 'Floración' : room?.type === 'drying' ? 'Secando' : room?.type === 'living_soil' ? 'Agro/Living Soil' : room?.type}</Badge></Title>
                 </div>
-                <button onClick={handleOpenHistory} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.5rem 1rem', cursor: 'pointer', color: '#4a5568', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600 }}>
-                    <FaHistory /> Historial
-                </button>
+
             </div>
 
             {/* Room Summary Header */}
@@ -2664,19 +2701,6 @@ const RoomDetail: React.FC = () => {
                     <h2 style={{ fontSize: '1.5rem', color: '#2d3748', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <FaStickyNote color="#ecc94b" /> Pizarra de Notas
                     </h2>
-                    <button
-                        onClick={() => {
-                            setStickyContent('');
-                            setStickyColor('yellow');
-                            setIsStickyModalOpen(true);
-                        }}
-                        style={{
-                            background: '#ecc94b', color: 'white', border: 'none', padding: '0.5rem 1rem',
-                            borderRadius: '0.5rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem'
-                        }}
-                    >
-                        <FaPlus /> Nueva Nota
-                    </button>
                 </div>
 
                 {stickies.length > 0 ? (
@@ -2702,11 +2726,59 @@ const RoomDetail: React.FC = () => {
                                 </div>
                             </div>
                         ))}
+                        {/* Add New Note Placeholder Card */}
+                        <div
+                            onClick={() => {
+                                setStickyContent('');
+                                setStickyColor('yellow');
+                                setIsStickyModalOpen(true);
+                            }}
+                            style={{
+                                border: '2px dashed #cbd5e0',
+                                borderRadius: '0.5rem',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: '#a0aec0',
+                                cursor: 'pointer',
+                                minHeight: '120px',
+                                transition: 'all 0.2s ease',
+                                background: '#f7fafc'
+                            }}
+                        >
+                            <FaPlus size={24} style={{ marginBottom: '0.5rem' }} />
+                            <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>Click aqui + para agregar nota</span>
+                        </div>
                     </div>
                 ) : (
-                    <div style={{ padding: '2rem', border: '2px dashed #cbd5e0', borderRadius: '1rem', textAlign: 'center', color: '#a0aec0' }}>
-                        <FaStickyNote style={{ fontSize: '2rem', marginBottom: '0.5rem', opacity: 0.5 }} />
-                        <p>No hay notas fijadas en esta sala.</p>
+
+                    <div
+                        onClick={() => {
+                            setStickyContent('');
+                            setStickyColor('yellow');
+                            setIsStickyModalOpen(true);
+                        }}
+                        style={{
+                            padding: '1rem',
+                            border: '2px dashed #cbd5e0',
+                            borderRadius: '0.5rem',
+                            textAlign: 'center',
+                            color: '#a0aec0',
+                            cursor: 'pointer',
+                            background: '#f7fafc',
+                            transition: 'all 0.2s ease',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '1rem'
+                        }}
+                    >
+                        <FaStickyNote style={{ fontSize: '1.5rem', opacity: 0.5 }} />
+                        <div style={{ textAlign: 'left' }}>
+                            <p style={{ fontSize: '0.95rem', fontWeight: 600, color: '#718096', margin: 0 }}>No hay notas fijadas.</p>
+                            <p style={{ color: '#a0aec0', fontSize: '0.85rem', margin: 0 }}>Toca aqui + para agregar una nota</p>
+                        </div>
                     </div>
                 )}
             </div>
@@ -2734,6 +2806,16 @@ const RoomDetail: React.FC = () => {
                                         <FaTasks /> Nueva Tarea
                                     </button>
                                 )}
+                                <button
+                                    onClick={() => setIsHistoryModalOpen(true)}
+                                    style={{
+                                        display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                        background: 'white', color: '#4a5568', border: '1px solid #e2e8f0',
+                                        padding: '0.5rem 1rem', borderRadius: '0.5rem', fontWeight: 600, cursor: 'pointer'
+                                    }}
+                                >
+                                    <FaHistory /> Historial
+                                </button>
                                 <button
                                     onClick={(e) => {
                                         e.stopPropagation();
@@ -2766,16 +2848,7 @@ const RoomDetail: React.FC = () => {
                                 >
                                     <FaEdit /> Editar Sala
                                 </button>
-                                <button
-                                    onClick={() => navigate('/cultivos')}
-                                    style={{
-                                        display: 'flex', alignItems: 'center', gap: '0.5rem',
-                                        background: '#e2e8f0', color: '#4a5568', border: 'none',
-                                        padding: '0.5rem 1rem', borderRadius: '0.5rem', fontWeight: 600, cursor: 'pointer'
-                                    }}
-                                >
-                                    <FaArrowLeft /> Volver
-                                </button>
+
                             </div>
                         </div>
 
@@ -2946,68 +3019,60 @@ const RoomDetail: React.FC = () => {
                                         /* ACTIVE MAP VIEW */
                                         (() => {
                                             const activeMap = cloneMaps.find(m => m.id === activeMapId);
-                                            if (!activeMap) return <div>Mapa no encontrado</div>;
+                                            if (!activeMap) return (
+                                                <div style={{
+                                                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                                                    padding: '4rem 2rem', background: '#f8fafc', borderRadius: '1rem', border: '1px dashed #cbd5e0',
+                                                    color: '#718096', textAlign: 'center'
+                                                }}>
+                                                    <h3 style={{ fontSize: '1.25rem', color: '#4a5568', marginBottom: '0.5rem' }}>Mapa No Encontrado</h3>
+                                                    <p style={{ marginBottom: '1.5rem' }}>El mapa que intentas ver no existe o ha sido eliminado.</p>
+                                                    <button
+                                                        onClick={() => setActiveMapId(null)}
+                                                        style={{
+                                                            background: '#3182ce', color: 'white', padding: '0.5rem 1rem', borderRadius: '0.5rem',
+                                                            border: 'none', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem'
+                                                        }}
+                                                    >
+                                                        <FaArrowLeft /> Volver a la Lista
+                                                    </button>
+                                                </div>
+                                            );
                                             return (
                                                 <div className="active-map-container">
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+
+                                                    <div style={{
+                                                        display: 'flex',
+                                                        justifyContent: 'space-between',
+                                                        alignItems: 'center',
+                                                        marginBottom: '1rem',
+                                                        background: 'white',
+                                                        padding: '0.75rem 1rem',
+                                                        borderRadius: '0.75rem',
+                                                        border: '1px solid #e2e8f0',
+                                                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                                                    }}>
+                                                        {/* LEFT: Map Title & Info */}
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                                            <h3 style={{ margin: 0, fontSize: '1.5rem', color: '#2d3748' }}>{activeMap.name}</h3>
-                                                            <span style={{ background: '#ebf8ff', color: '#2b6cb0', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', fontSize: '0.8rem', fontWeight: 600 }}>
-                                                                {activeMap.grid_rows}x{activeMap.grid_columns}
+                                                            <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#2d3748', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                <FaMapMarkedAlt color="#4299e1" />
+                                                                {activeMap.name}
+                                                            </h3>
+                                                            <span style={{ background: '#ebf8ff', color: '#2b6cb0', padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 700 }}>
+                                                                {activeMap.grid_rows} x {activeMap.grid_columns}
                                                             </span>
-
-                                                            {/* ACTIVE MAP SELECTION CONTROLS */}
-                                                            <div className="no-print-map-controls" style={{ display: 'flex', gap: '0.5rem', marginLeft: '1rem' }}>
-                                                                {isSelectionMode && (
-                                                                    <button
-                                                                        onClick={() => handleToggleSelectionMode()}
-                                                                        style={{
-                                                                            background: 'white',
-                                                                            border: '1px solid #e2e8f0',
-                                                                            borderRadius: '0.375rem',
-                                                                            padding: '0.5rem 1rem',
-                                                                            fontSize: '0.85rem',
-                                                                            cursor: 'pointer',
-                                                                            color: '#e53e3e',
-                                                                            fontWeight: 600,
-                                                                            boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                                                                            display: 'flex', alignItems: 'center', gap: '0.5rem',
-                                                                            transition: 'all 0.2s',
-                                                                        }}
-                                                                    >
-                                                                        <FaTimes />
-                                                                        Cancelar Selección
-                                                                    </button>
-                                                                )}
-
-                                                                <button
-                                                                    onClick={() => {
-                                                                        document.body.classList.add('printing-map');
-                                                                        window.print();
-                                                                        document.body.classList.remove('printing-map');
-                                                                    }}
-                                                                    style={{
-                                                                        background: 'white',
-                                                                        border: '1px solid #e2e8f0',
-                                                                        borderRadius: '0.375rem',
-                                                                        padding: '0.5rem 1rem',
-                                                                        fontSize: '0.85rem',
-                                                                        cursor: 'pointer',
-                                                                        color: '#4a5568',
-                                                                        fontWeight: 600,
-                                                                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                                                                        display: 'flex', alignItems: 'center', gap: '0.5rem',
-                                                                    }}
-                                                                >
-                                                                    <FaPrint />
-                                                                    Imprimir
-                                                                </button>
-                                                            </div>
                                                         </div>
 
-                                                        <div className="no-print-map-controls" style={{ display: 'flex', gap: '0.5rem', marginLeft: '1rem' }}>
+                                                        {/* RIGHT: Actions Toolbar */}
+                                                        <div className="no-print-map-controls" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+
+                                                            {/* 1. SELECTION STATE CONTROLS */}
                                                             {isSelectionMode && selectedBatchIds.size > 0 && (
-                                                                <>
+                                                                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '0.5rem', paddingRight: '0.5rem', borderRight: '1px solid #e2e8f0' }}>
+                                                                    <span style={{ fontSize: '0.85rem', color: '#718096', fontWeight: 600 }}>
+                                                                        {selectedBatchIds.size} seleccionados
+                                                                    </span>
+
                                                                     {/* BULK ACTIONS DROPDOWN */}
                                                                     <div style={{ position: 'relative' }}>
                                                                         <button
@@ -3021,48 +3086,56 @@ const RoomDetail: React.FC = () => {
                                                                                 fontSize: '0.85rem',
                                                                                 fontWeight: 600,
                                                                                 cursor: 'pointer',
-                                                                                boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+                                                                                boxShadow: '0 2px 4px rgba(49, 130, 206, 0.3)',
                                                                                 display: 'flex', alignItems: 'center', gap: '0.5rem',
                                                                                 transition: 'background 0.2s'
                                                                             }}
                                                                         >
-                                                                            Acciones ({selectedBatchIds.size}) <FaChevronDown />
+                                                                            Acciones <FaChevronDown size={10} />
                                                                         </button>
 
                                                                         {isBulkActionsOpen && (
                                                                             <div style={{
                                                                                 position: 'absolute',
-                                                                                top: '110%',
+                                                                                top: '120%',
                                                                                 right: 0,
                                                                                 background: 'white',
                                                                                 border: '1px solid #e2e8f0',
                                                                                 borderRadius: '0.5rem',
-                                                                                boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06)',
+                                                                                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
                                                                                 zIndex: 50,
-                                                                                minWidth: '200px',
-                                                                                overflow: 'hidden'
+                                                                                minWidth: '220px',
+                                                                                overflow: 'hidden',
+                                                                                animation: 'fadeIn 0.1s ease-out'
                                                                             }}>
-                                                                                <div style={{ padding: '0.5rem 0.75rem', fontSize: '0.75rem', color: '#718096', borderBottom: '1px solid #edf2f7', background: '#f7fafc', fontWeight: 600 }}>
-                                                                                    SELECCIÓN: {selectedBatchIds.size} LOTES
+                                                                                <div style={{ padding: '0.75rem 1rem', background: '#f7fafc', borderBottom: '1px solid #edf2f7' }}>
+                                                                                    <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#a0aec0', letterSpacing: '0.05em' }}>ACCIONES DE LOTE</div>
                                                                                 </div>
 
                                                                                 {room?.type === 'living_soil' && (
                                                                                     <>
                                                                                         <button
                                                                                             onClick={() => { setIsBulkActionsOpen(false); setIsStageModalOpen(true); }}
-                                                                                            style={{ width: '100%', textAlign: 'left', padding: '0.75rem 1rem', background: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#2d3748', fontSize: '0.9rem', transition: 'background 0.1s' }}
+                                                                                            style={{ width: '100%', textAlign: 'left', padding: '0.75rem 1rem', background: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#2d3748', fontSize: '0.9rem', transition: 'background 0.1s' }}
                                                                                             onMouseEnter={e => e.currentTarget.style.background = '#ebf8ff'}
                                                                                             onMouseLeave={e => e.currentTarget.style.background = 'white'}
                                                                                         >
-                                                                                            <FaExchangeAlt color="#3182ce" /> Cambiar Fase
+                                                                                            <div style={{ background: '#bee3f8', padding: '0.4rem', borderRadius: '0.375rem', color: '#3182ce', display: 'flex' }}><FaExchangeAlt size={12} /></div>
+                                                                                            <span>Cambiar Fase / Etapa</span>
                                                                                         </button>
                                                                                         <button
-                                                                                            onClick={() => { setIsBulkActionsOpen(false); setIsObservationModalOpen(true); }}
-                                                                                            style={{ width: '100%', textAlign: 'left', padding: '0.75rem 1rem', background: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#2d3748', fontSize: '0.9rem', transition: 'background 0.1s' }}
+                                                                                            onClick={() => {
+                                                                                                setIsBulkActionsOpen(false);
+                                                                                                const firstSelectedBatch = room?.batches?.find(b => selectedBatchIds.has(b.id) && b.notes);
+                                                                                                setObservationText(firstSelectedBatch?.notes || '');
+                                                                                                setIsObservationModalOpen(true);
+                                                                                            }}
+                                                                                            style={{ width: '100%', textAlign: 'left', padding: '0.75rem 1rem', background: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#2d3748', fontSize: '0.9rem', transition: 'background 0.1s' }}
                                                                                             onMouseEnter={e => e.currentTarget.style.background = '#fffaf0'}
                                                                                             onMouseLeave={e => e.currentTarget.style.background = 'white'}
                                                                                         >
-                                                                                            <FaExclamationTriangle color="#d69e2e" /> Registrar Observación
+                                                                                            <div style={{ background: '#fefcbf', padding: '0.4rem', borderRadius: '0.375rem', color: '#d69e2e', display: 'flex' }}><FaExclamationTriangle size={12} /></div>
+                                                                                            <span>Registrar Observación</span>
                                                                                         </button>
                                                                                     </>
                                                                                 )}
@@ -3071,68 +3144,111 @@ const RoomDetail: React.FC = () => {
 
                                                                                 <button
                                                                                     onClick={() => { setIsBulkActionsOpen(false); handleBulkDeleteFirstStep(); }}
-                                                                                    style={{ width: '100%', textAlign: 'left', padding: '0.75rem 1rem', background: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#e53e3e', fontSize: '0.9rem', transition: 'background 0.1s' }}
+                                                                                    style={{ width: '100%', textAlign: 'left', padding: '0.75rem 1rem', background: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#e53e3e', fontSize: '0.9rem', transition: 'background 0.1s' }}
                                                                                     onMouseEnter={e => e.currentTarget.style.background = '#fff5f5'}
                                                                                     onMouseLeave={e => e.currentTarget.style.background = 'white'}
                                                                                 >
-                                                                                    <FaTrash color="#e53e3e" /> Eliminar Selección
+                                                                                    <div style={{ background: '#fed7d7', padding: '0.4rem', borderRadius: '0.375rem', color: '#e53e3e', display: 'flex' }}><FaTrash size={12} /></div>
+                                                                                    <span>Eliminar Selección</span>
                                                                                 </button>
                                                                             </div>
                                                                         )}
                                                                     </div>
-
-                                                                    {/* Overlay to close menu on click outside */}
-                                                                    {isBulkActionsOpen && (
-                                                                        <div
-                                                                            style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 40 }}
-                                                                            onClick={() => setIsBulkActionsOpen(false)}
-                                                                        />
-                                                                    )}
-                                                                </>
+                                                                </div>
                                                             )}
-                                                            <button
-                                                                onClick={() => setActiveMapId(null)}
-                                                                style={{
-                                                                    background: 'white', border: '1px solid #e2e8f0', padding: '0.5rem 1rem',
-                                                                    borderRadius: '0.5rem', color: '#4a5568', fontWeight: 600, cursor: 'pointer',
-                                                                    display: 'flex', alignItems: 'center', gap: '0.5rem'
-                                                                }}
-                                                            >
-                                                                <FaArrowLeft /> Volver a Mesas
-                                                            </button>
+
+                                                            {/* Overlay for Dropdown */}
+                                                            {isBulkActionsOpen && (
+                                                                <div
+                                                                    style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 40 }}
+                                                                    onClick={() => setIsBulkActionsOpen(false)}
+                                                                />
+                                                            )}
+
+                                                            {/* 2. PERSISTENT ACTIONS */}
+                                                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                                {isSelectionMode && (
+                                                                    <button
+                                                                        onClick={() => handleToggleSelectionMode()}
+                                                                        title="Cancelar Selección"
+                                                                        style={{
+                                                                            background: 'white',
+                                                                            border: '1px solid #e2e8f0',
+                                                                            borderRadius: '0.375rem',
+                                                                            padding: '0.5rem',
+                                                                            cursor: 'pointer',
+                                                                            color: '#718096',
+                                                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                                            transition: 'all 0.2s',
+                                                                        }}
+                                                                    >
+                                                                        <FaTimes />
+                                                                    </button>
+                                                                )}
+
+                                                                <button
+                                                                    onClick={() => {
+                                                                        document.body.classList.add('printing-map');
+                                                                        window.print();
+                                                                        document.body.classList.remove('printing-map');
+                                                                    }}
+                                                                    title="Imprimir Mapa"
+                                                                    style={{
+                                                                        background: 'white',
+                                                                        border: '1px solid #e2e8f0',
+                                                                        borderRadius: '0.375rem',
+                                                                        padding: '0.5rem 0.75rem',
+                                                                        fontSize: '0.85rem',
+                                                                        cursor: 'pointer',
+                                                                        color: '#4a5568',
+                                                                        fontWeight: 600,
+                                                                        display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                                                    }}
+                                                                >
+                                                                    <FaPrint />
+                                                                </button>
+
+                                                                <button
+                                                                    onClick={() => setActiveMapId(null)}
+                                                                    style={{
+                                                                        background: '#edf2f7',
+                                                                        border: 'none',
+                                                                        padding: '0.5rem 0.75rem',
+                                                                        borderRadius: '0.5rem',
+                                                                        color: '#4a5568',
+                                                                        fontWeight: 600,
+                                                                        cursor: 'pointer',
+                                                                        display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                                                        transition: 'background 0.2s'
+                                                                    }}
+                                                                    onMouseEnter={e => e.currentTarget.style.background = '#e2e8f0'}
+                                                                    onMouseLeave={e => e.currentTarget.style.background = '#edf2f7'}
+                                                                >
+                                                                    <FaArrowLeft /> Volver
+                                                                </button>
+                                                            </div>
+
                                                         </div>
                                                     </div>
 
                                                     <div className="printable-map-grid">
                                                         <div className="printable-map-grid">
-                                                            {room?.type === 'living_soil' ? (
-                                                                <LivingSoilGrid
-                                                                    {...(() => {
-                                                                        const activeMap = cloneMaps.find(m => m.id === activeMapId);
-                                                                        return {
-                                                                            rows: activeMap?.grid_rows || 20,
-                                                                            cols: activeMap?.grid_columns || 10,
-                                                                            batches: (room?.batches || []).filter(b => b.clone_map_id === activeMapId && b.quantity > 0),
-                                                                            mapId: activeMapId || undefined // Pass mapId for zoom persistence
-                                                                        }
-                                                                    })()}
-                                                                    onBatchClick={handleBatchClick}
-                                                                    selectedBatchIds={selectedBatchIds}
-                                                                    isSelectionMode={isSelectionMode}
-                                                                    onToggleSelectionMode={setIsSelectionMode}
-                                                                    onSelectionChange={(newSet) => setSelectedBatchIds(newSet)}
-                                                                />
-                                                            ) : (
-                                                                <EsquejeraGrid
-                                                                    rows={activeMap.grid_rows || 10}
-                                                                    cols={activeMap.grid_columns || 10}
-                                                                    batches={room?.batches?.filter(b => b.clone_map_id === activeMap.id) || []}
-                                                                    onBatchClick={(b) => { if (b) isSelectionMode ? handleBatchSelection(b) : handleBatchClick(b); }}
-                                                                    selectionMode={isSelectionMode}
-                                                                    selectedBatchIds={selectedBatchIds}
-                                                                    onSelectionChange={(newSet) => setSelectedBatchIds(newSet)}
-                                                                />
-                                                            )}
+                                                            <LivingSoilGrid
+                                                                {...(() => {
+                                                                    const activeMap = cloneMaps.find(m => m.id === activeMapId);
+                                                                    return {
+                                                                        rows: activeMap?.grid_rows || 20,
+                                                                        cols: activeMap?.grid_columns || 10,
+                                                                        batches: (room?.batches || []).filter(b => b.clone_map_id === activeMapId && b.quantity > 0),
+                                                                        mapId: activeMapId || undefined
+                                                                    }
+                                                                })()}
+                                                                onBatchClick={handleBatchClick}
+                                                                selectedBatchIds={selectedBatchIds}
+                                                                isSelectionMode={isSelectionMode}
+                                                                onToggleSelectionMode={setIsSelectionMode}
+                                                                onSelectionChange={(newSet) => setSelectedBatchIds(newSet)}
+                                                            />
                                                         </div>
 
                                                         {/* SOWING MODAL */}
@@ -3210,7 +3326,8 @@ const RoomDetail: React.FC = () => {
                                                 </div>
                                             );
                                         })()
-                                    )}
+                                    )
+                                    }
                                 </div>
 
                                 {/* SIDEBAR (Shared) */}
@@ -3223,7 +3340,7 @@ const RoomDetail: React.FC = () => {
                                     border: '1px solid #e2e8f0',
                                     display: 'flex',
                                     flexDirection: 'column',
-                                    height: 'calc(100vh-160px)',
+                                    maxHeight: 'calc(100vh - 160px)',
                                     position: 'sticky',
                                     top: '1rem'
                                 }}>
@@ -3665,162 +3782,224 @@ const RoomDetail: React.FC = () => {
             {
                 isTaskModalOpen && (
                     <PortalModalOverlay>
-                        <ModalContent>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <h3>
+                        <TaskModalContent>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                                <h3 style={{ fontSize: '1.5rem', margin: 0 }}>
                                     {selectedTask ? 'Detalle de Tarea' : 'Nueva Tarea'}
                                 </h3>
-                                <button onClick={() => setIsTaskModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.25rem', color: '#a0aec0' }}>
+                                <button onClick={() => setIsTaskModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.5rem', color: '#a0aec0', padding: '0.5rem' }}>
                                     ✕
                                 </button>
                             </div>
 
                             {user && (user.role === 'admin' || user.role === 'partner') ? (
                                 <>
-                                    {/* Removed misplaced modal */}
-                                    <FormGroup>
-                                        <label>Tipo de Tarea</label>
-                                        <select
-                                            value={taskForm.type}
-                                            onChange={e => {
-                                                const newType = e.target.value as any;
-                                                let newTitle = 'Tarea';
-                                                switch (newType) {
-                                                    case 'info': newTitle = 'Información'; break;
-                                                    case 'riego': newTitle = 'Riego'; break;
-                                                    case 'fertilizar': newTitle = 'Fertilizar'; break;
-                                                    case 'defoliacion': newTitle = 'Defoliación'; break;
-                                                    case 'poda_apical': newTitle = 'Poda Apical'; break;
-                                                    case 'hst': newTitle = 'HST'; break;
-                                                    case 'lst': newTitle = 'LST'; break;
-                                                    case 'entrenamiento': newTitle = 'Entrenamiento'; break;
-                                                    case 'esquejes': newTitle = 'Esquejes'; break;
-                                                    case 'warning': newTitle = 'Alerta'; break;
-                                                    default: newTitle = 'Tarea';
-                                                }
-                                                setTaskForm({ ...taskForm, type: newType, title: newTitle });
-                                            }}
-                                        >
-                                            <option value="info">Info</option>
-                                            <option value="riego">Riego</option>
-                                            <option value="fertilizar">Fertilizar</option>
-                                            <option value="defoliacion">Defoliación</option>
-                                            <option value="poda_apical">Poda Apical</option>
-                                            <option value="hst">HST</option>
-                                            <option value="lst">LST</option>
-                                            <option value="entrenamiento">Entrenamiento</option>
-                                            <option value="esquejes">Esquejes</option>
-                                            <option value="warning">Alerta</option>
-                                        </select>
-                                    </FormGroup>
-                                    <FormGroup>
-                                        <label>Fecha</label>
-                                        <input type="date" value={taskForm.due_date} onChange={e => setTaskForm({ ...taskForm, due_date: e.target.value })} />
-                                    </FormGroup>
-                                    <FormGroup>
-                                        <label>Asignar a</label>
-                                        <select value={taskForm.assigned_to} onChange={e => setTaskForm({ ...taskForm, assigned_to: e.target.value })}>
-                                            <option value="">-- Sin Asignar --</option>
-                                            {users.map(u => (
-                                                <option key={u.id} value={u.id}>{u.full_name || u.email || 'Usuario'}</option>
-                                            ))}
-                                        </select>
-                                    </FormGroup>
-                                    <FormGroup>
-                                        <label>Indicaciones / Instrucciones (Opcional)</label>
-                                        <textarea value={taskForm.description} onChange={e => setTaskForm({ ...taskForm, description: e.target.value })} placeholder="Escribe aquí los detalles precisos (ej: '5ml/L de CalMag')..." />
-                                    </FormGroup>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', flex: 1 }}>
+                                        {/* Left Column: Primary Info */}
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                                            <FormGroup>
+                                                <label style={{ color: '#4a5568', fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>Tipo de Tarea</label>
+                                                <select
+                                                    value={taskForm.type}
+                                                    onChange={e => {
+                                                        const newType = e.target.value as any;
+                                                        let newTitle = 'Tarea';
+                                                        switch (newType) {
+                                                            case 'info': newTitle = 'Información'; break;
+                                                            case 'riego': newTitle = 'Riego'; break;
+                                                            case 'fertilizar': newTitle = 'Fertilizar'; break;
+                                                            case 'defoliacion': newTitle = 'Defoliación'; break;
+                                                            case 'poda_apical': newTitle = 'Poda Apical'; break;
+                                                            case 'hst': newTitle = 'HST'; break;
+                                                            case 'lst': newTitle = 'LST'; break;
+                                                            case 'entrenamiento': newTitle = 'Entrenamiento'; break;
+                                                            case 'esquejes': newTitle = 'Esquejes'; break;
+                                                            case 'warning': newTitle = 'Alerta'; break;
+                                                            default: newTitle = 'Tarea';
+                                                        }
+                                                        setTaskForm({ ...taskForm, type: newType, title: newTitle });
+                                                    }}
+                                                    style={{ padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0', width: '100%', fontSize: '0.95rem', background: '#fff' }}
+                                                >
+                                                    <option value="info">Info</option>
+                                                    <option value="riego">Riego</option>
+                                                    <option value="fertilizar">Fertilizar</option>
+                                                    <option value="defoliacion">Defoliación</option>
+                                                    <option value="poda_apical">Poda Apical</option>
+                                                    <option value="hst">HST</option>
+                                                    <option value="lst">LST</option>
+                                                    <option value="entrenamiento">Entrenamiento</option>
+                                                    <option value="esquejes">Esquejes</option>
+                                                    <option value="warning">Alerta</option>
+                                                </select>
+                                            </FormGroup>
 
-                                    {/* Recurrence Section */}
-                                    <div style={{ marginTop: '1.5rem', borderTop: '1px solid #e2e8f0', paddingTop: '1rem' }}>
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600, color: '#2d3748', cursor: 'pointer' }}>
-                                            <input
-                                                type="checkbox"
-                                                checked={recurrenceEnabled}
-                                                onChange={e => setRecurrenceEnabled(e.target.checked)}
-                                                style={{ transform: 'scale(1.2)' }}
-                                            />
-                                            Repetir Tarea (Periodicidad)
-                                        </label>
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                                <FormGroup>
+                                                    <label style={{ color: '#4a5568', fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>Fecha</label>
+                                                    <input
+                                                        type="date"
+                                                        value={taskForm.due_date}
+                                                        onChange={e => setTaskForm({ ...taskForm, due_date: e.target.value })}
+                                                        style={{ padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0', width: '100%', fontSize: '0.95rem', fontFamily: 'inherit' }}
+                                                    />
+                                                </FormGroup>
+                                                <FormGroup>
+                                                    <label style={{ color: '#4a5568', fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>Asignar a</label>
+                                                    <select
+                                                        value={taskForm.assigned_to}
+                                                        onChange={e => setTaskForm({ ...taskForm, assigned_to: e.target.value })}
+                                                        style={{ padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0', width: '100%', fontSize: '0.95rem', background: '#fff' }}
+                                                    >
+                                                        <option value="">-- Sin Asignar --</option>
+                                                        {users.map(u => (
+                                                            <option key={u.id} value={u.id}>{u.full_name || u.email || 'Usuario'}</option>
+                                                        ))}
+                                                    </select>
+                                                </FormGroup>
+                                            </div>
 
-                                        {recurrenceEnabled && (
-                                            <div style={{ marginTop: '1rem', padding: '1rem', background: '#f7fafc', borderRadius: '0.5rem', border: '1px solid #edf2f7' }}>
-                                                <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
-                                                    <div style={{ flex: 1 }}>
-                                                        <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.25rem', color: '#718096' }}>Repetir cada:</label>
-                                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                                            <input
-                                                                type="number"
-                                                                min="1"
-                                                                value={recurrenceConfig.interval}
-                                                                onChange={e => setRecurrenceConfig(prev => ({ ...prev, interval: parseInt(e.target.value) || 1 }))}
-                                                                style={{ width: '60px', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e0' }}
-                                                            />
-                                                            <select
-                                                                value={recurrenceConfig.unit}
-                                                                onChange={e => setRecurrenceConfig(prev => ({ ...prev, unit: e.target.value as any, type: 'custom' }))}
-                                                                style={{ flex: 1, padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e0' }}
-                                                            >
-                                                                <option value="day">Días</option>
-                                                                <option value="week">Semanas</option>
-                                                                <option value="month">Meses</option>
-                                                            </select>
-                                                        </div>
-                                                    </div>
-                                                </div>
+                                            {/* Recurrence Section */}
+                                            <div style={{ padding: '1rem', background: '#f8fafc', borderRadius: '0.75rem', border: '1px solid #edf2f7' }}>
+                                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontWeight: 600, color: '#2d3748', cursor: 'pointer', marginBottom: recurrenceEnabled ? '1rem' : 0, fontSize: '0.95rem' }}>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={recurrenceEnabled}
+                                                        onChange={e => setRecurrenceEnabled(e.target.checked)}
+                                                        style={{ width: '1.25rem', height: '1.25rem', accentColor: '#3182ce' }}
+                                                    />
+                                                    Repetir Tarea (Periodicidad)
+                                                </label>
 
-                                                {recurrenceConfig.unit === 'week' && (
-                                                    <div style={{ marginBottom: '1rem' }}>
-                                                        <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.5rem', color: '#718096' }}>Se repite el:</label>
-                                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                                            {['D', 'L', 'M', 'M', 'J', 'V', 'S'].map((day, idx) => {
-                                                                const isSelected = recurrenceConfig.daysOfWeek?.includes(idx);
-                                                                return (
-                                                                    <button
-                                                                        key={idx}
-                                                                        onClick={() => {
-                                                                            setRecurrenceConfig(prev => {
-                                                                                const days = prev.daysOfWeek || [];
-                                                                                if (days.includes(idx)) return { ...prev, daysOfWeek: days.filter(d => d !== idx) };
-                                                                                return { ...prev, daysOfWeek: [...days, idx] };
-                                                                            });
-                                                                        }}
-                                                                        style={{
-                                                                            width: '32px', height: '32px', borderRadius: '50%', border: 'none',
-                                                                            background: isSelected ? '#3182ce' : '#e2e8f0',
-                                                                            color: isSelected ? 'white' : '#4a5568',
-                                                                            fontWeight: 'bold', cursor: 'pointer', fontSize: '0.8rem'
-                                                                        }}
+                                                {recurrenceEnabled && (
+                                                    <div style={{ animation: 'fadeIn 0.2s ease-out' }}>
+                                                        <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
+                                                            <div style={{ flex: 1 }}>
+                                                                <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.5rem', color: '#718096' }}>Repetir cada:</label>
+                                                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                                    <input
+                                                                        type="number"
+                                                                        min="1"
+                                                                        value={recurrenceConfig.interval}
+                                                                        onChange={e => setRecurrenceConfig(prev => ({ ...prev, interval: parseInt(e.target.value) || 1 }))}
+                                                                        style={{ width: '70px', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e0', fontSize: '0.9rem' }}
+                                                                    />
+                                                                    <select
+                                                                        value={recurrenceConfig.unit}
+                                                                        onChange={e => setRecurrenceConfig(prev => ({ ...prev, unit: e.target.value as any, type: 'custom' }))}
+                                                                        style={{ flex: 1, padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e0', fontSize: '0.9rem', background: '#fff' }}
                                                                     >
-                                                                        {day}
-                                                                    </button>
-                                                                );
-                                                            })}
+                                                                        <option value="day">Días</option>
+                                                                        <option value="week">Semanas</option>
+                                                                        <option value="month">Meses</option>
+                                                                    </select>
+                                                                </div>
+                                                            </div>
                                                         </div>
+
+                                                        {recurrenceConfig.unit === 'week' && (
+                                                            <div>
+                                                                <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.5rem', color: '#718096' }}>Se repite el:</label>
+                                                                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                                                    {['D', 'L', 'M', 'M', 'J', 'V', 'S'].map((day, idx) => {
+                                                                        const isSelected = recurrenceConfig.daysOfWeek?.includes(idx);
+                                                                        return (
+                                                                            <button
+                                                                                key={idx}
+                                                                                onClick={() => {
+                                                                                    setRecurrenceConfig(prev => {
+                                                                                        const days = prev.daysOfWeek || [];
+                                                                                        if (days.includes(idx)) return { ...prev, daysOfWeek: days.filter(d => d !== idx) };
+                                                                                        return { ...prev, daysOfWeek: [...days, idx] };
+                                                                                    });
+                                                                                }}
+                                                                                style={{
+                                                                                    width: '32px', height: '32px', borderRadius: '50%', border: '1px solid',
+                                                                                    borderColor: isSelected ? '#3182ce' : '#e2e8f0',
+                                                                                    background: isSelected ? '#3182ce' : 'white',
+                                                                                    color: isSelected ? 'white' : '#4a5568',
+                                                                                    fontWeight: 'bold', cursor: 'pointer', fontSize: '0.8rem',
+                                                                                    boxShadow: isSelected ? '0 2px 4px rgba(49,130,206,0.3)' : 'none',
+                                                                                    transition: 'all 0.2s'
+                                                                                }}
+                                                                            >
+                                                                                {day}
+                                                                            </button>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 )}
                                             </div>
-                                        )}
+                                        </div>
+
+                                        {/* Right Column: Instructions & Files */}
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                                            <FormGroup style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                                                <label style={{ color: '#4a5568', fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>Instrucciones</label>
+                                                <textarea
+                                                    value={taskForm.description}
+                                                    onChange={e => setTaskForm({ ...taskForm, description: e.target.value })}
+                                                    placeholder="Escribe aquí los detalles precisos (ej: '5ml/L de CalMag')..."
+                                                    style={{
+                                                        flex: 1,
+                                                        padding: '1rem',
+                                                        borderRadius: '0.5rem',
+                                                        border: '1px solid #e2e8f0',
+                                                        fontSize: '0.95rem',
+                                                        resize: 'none',
+                                                        minHeight: '200px',
+                                                        background: '#fafbfc',
+                                                        lineHeight: '1.5'
+                                                    }}
+                                                />
+                                            </FormGroup>
+
+                                            <div>
+                                                <label style={{ display: 'block', fontWeight: 600, color: '#4a5568', fontSize: '0.9rem', marginBottom: '0.5rem' }}>Gestor de archivos</label>
+                                                <button
+                                                    onClick={() => alert("Funcionalidad de subida de fotos en desarrollo. Se integrará con Supabase Storage.")}
+                                                    style={{
+                                                        background: 'white',
+                                                        border: '2px dashed #cbd5e0',
+                                                        padding: '1.5rem',
+                                                        width: '100%',
+                                                        borderRadius: '0.5rem',
+                                                        cursor: 'pointer',
+                                                        color: '#718096',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        gap: '0.5rem',
+                                                        transition: 'all 0.2s',
+                                                        fontWeight: 500
+                                                    }}
+                                                    onMouseEnter={e => { e.currentTarget.style.borderColor = '#3182ce'; e.currentTarget.style.color = '#3182ce'; e.currentTarget.style.background = '#ebf8ff'; }}
+                                                    onMouseLeave={e => { e.currentTarget.style.borderColor = '#cbd5e0'; e.currentTarget.style.color = '#718096'; e.currentTarget.style.background = 'white'; }}
+                                                >
+                                                    <FaPlus /> Subir Foto / Archivo
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
 
-                                    <div style={{ marginBottom: '1rem' }}>
-                                        <label style={{ display: 'block', fontWeight: 600, color: '#4a5568', fontSize: '0.9rem', marginBottom: '0.5rem' }}>Gestor de archivos</label>
-                                        <button
-                                            onClick={() => alert("Funcionalidad de subida de fotos en desarrollo. Se integrará con Supabase Storage.")}
-                                            style={{ background: '#edf2f7', border: '1px dashed #cbd5e0', padding: '1rem', width: '100%', borderRadius: '0.5rem', cursor: 'pointer', color: '#718096' }}
-                                        >
-                                            <FaPlus /> Subir Foto
-                                        </button>
-                                    </div>
-
-                                    <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+                                    {/* Footer Actions */}
+                                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid #edf2f7' }}>
                                         {selectedTask && (
                                             <CancelButton onClick={handleDeleteTask} style={{ color: '#e53e3e', borderColor: '#e53e3e' }}>
                                                 Eliminar
                                             </CancelButton>
                                         )}
-                                        <ActionButton onClick={handleSaveTask} $variant="success">
-                                            Guardar
+                                        <button
+                                            onClick={() => setIsTaskModalOpen(false)}
+                                            style={{ padding: '0.75rem 1.5rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0', background: 'white', color: '#4a5568', fontWeight: 600, cursor: 'pointer' }}
+                                        >
+                                            Cancelar
+                                        </button>
+                                        <ActionButton onClick={handleSaveTask} $variant="success" style={{ minWidth: '150px' }}>
+                                            {selectedTask ? 'Guardar Cambios' : 'Crear Tarea'}
                                         </ActionButton>
                                     </div>
                                 </>
@@ -3881,7 +4060,7 @@ const RoomDetail: React.FC = () => {
                                     </ActionButton>
                                 </div>
                             )}
-                        </ModalContent>
+                        </TaskModalContent>
                     </PortalModalOverlay>
                 )
             }
@@ -3983,7 +4162,7 @@ const RoomDetail: React.FC = () => {
                 isStickyModalOpen && (
                     <PortalModalOverlay>
                         <ModalContent style={{ background: 'white', borderTop: '8px solid #ecc94b' }}>
-                            <h3 style={{ color: '#2d3748', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <h3 style={{ color: '#2d3748', marginBottom: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
                                 <FaStickyNote color="#ecc94b" /> Nueva Nota
                             </h3>
 
@@ -3995,6 +4174,7 @@ const RoomDetail: React.FC = () => {
                                     onChange={e => setStickyContent(e.target.value)}
                                     placeholder="Escribe tu nota aquí..."
                                     style={{
+                                        width: '100%',
                                         background: '#fff',
                                         border: '1px solid #e2e8f0',
                                         minHeight: '120px',
@@ -4005,7 +4185,7 @@ const RoomDetail: React.FC = () => {
                                 />
                             </FormGroup>
 
-                            <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
+                            <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', justifyContent: 'center' }}>
                                 {(['yellow', 'blue', 'pink', 'green'] as const).map(c => (
                                     <button
                                         key={c}
@@ -4496,27 +4676,16 @@ const RoomDetail: React.FC = () => {
 
             {/* Custom Delete Confirmation Modal */}
             {
-                deleteConfirm.isOpen && deleteConfirm.batch && (
-                    <PortalModalOverlay>
-                        <ModalContent style={{ maxWidth: '400px', textAlign: 'center' }}>
-                            <div style={{ color: '#e53e3e', fontSize: '3rem', marginBottom: '1rem' }}>
-                                <FaTrash />
-                            </div>
-                            <h3 style={{ fontSize: '1.25rem', color: '#2d3748', marginBottom: '0.5rem' }}>¿Eliminar definitivamente?</h3>
-                            <p style={{ color: '#718096', marginBottom: '1.5rem' }}>
-                                Estás a punto de eliminar <strong>{deleteConfirm.batch.tracking_code || deleteConfirm.batch.name}</strong>. Esta acción no se puede deshacer.
-                            </p>
-                            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-                                <CancelButton onClick={() => setDeleteConfirm({ isOpen: false, batch: null })}>
-                                    Cancelar
-                                </CancelButton>
-                                <ActionButton onClick={handleConfirmDelete} $variant="danger" style={{ background: '#e53e3e', borderColor: '#e53e3e' }}>
-                                    Eliminar
-                                </ActionButton>
-                            </div>
-                        </ModalContent>
-                    </PortalModalOverlay>
-                )
+                <ConfirmationModal
+                    isOpen={deleteConfirm.isOpen && !!deleteConfirm.batch}
+                    title="¿Eliminar definitivamente?"
+                    message={`Estás a punto de eliminar ${deleteConfirm.batch?.tracking_code || deleteConfirm.batch?.name}. Esta acción no se puede deshacer.`}
+                    onConfirm={handleConfirmDelete}
+                    onCancel={() => setDeleteConfirm({ isOpen: false, batch: null })}
+                    confirmText="Eliminar"
+                    cancelText="Cancelar"
+                    isDestructive={true}
+                />
             }
 
             {/* Edit Batch Modal */}
@@ -4558,57 +4727,59 @@ const RoomDetail: React.FC = () => {
             }
 
             {/* Bulk Edit Modal */}
-            {isBulkEditModalOpen && (
-                <PortalModalOverlay>
-                    <ModalContent style={{ width: '400px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                            <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', margin: 0 }}>
-                                Editando {selectedBatchIds.size} Lotes
-                            </h2>
-                            <button onClick={() => setIsBulkEditModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.25rem' }}>✕</button>
-                        </div>
+            {
+                isBulkEditModalOpen && (
+                    <PortalModalOverlay>
+                        <ModalContent style={{ width: '400px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                                <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', margin: 0 }}>
+                                    Editando {selectedBatchIds.size} Lotes
+                                </h2>
+                                <button onClick={() => setIsBulkEditModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.25rem' }}>✕</button>
+                            </div>
 
-                        <div style={{ marginBottom: '1.5rem' }}>
-                            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, color: '#4a5568' }}>Nueva Etapa (Opcional)</label>
-                            <select
-                                value={bulkEditForm.stage}
-                                onChange={e => setBulkEditForm({ ...bulkEditForm, stage: e.target.value })}
-                                style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0' }}
-                            >
-                                <option value="">-- No cambiar --</option>
-                                <option value="seedling">Plántula</option>
-                                <option value="vegetation">Vegetativo</option>
-                                <option value="flowering">Floración</option>
-                                <option value="drying">Secado</option>
-                                <option value="completed">Finalizado</option>
-                            </select>
-                        </div>
+                            <div style={{ marginBottom: '1.5rem' }}>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, color: '#4a5568' }}>Nueva Etapa (Opcional)</label>
+                                <select
+                                    value={bulkEditForm.stage}
+                                    onChange={e => setBulkEditForm({ ...bulkEditForm, stage: e.target.value })}
+                                    style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0' }}
+                                >
+                                    <option value="">-- No cambiar --</option>
+                                    <option value="seedling">Plántula</option>
+                                    <option value="vegetation">Vegetativo</option>
+                                    <option value="flowering">Floración</option>
+                                    <option value="drying">Secado</option>
+                                    <option value="completed">Finalizado</option>
+                                </select>
+                            </div>
 
-                        <div style={{ marginBottom: '1.5rem' }}>
-                            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, color: '#4a5568' }}>Notas / Bitácora (Se sobreescribirá)</label>
-                            <textarea
-                                value={bulkEditForm.notes}
-                                onChange={e => setBulkEditForm({ ...bulkEditForm, notes: e.target.value })}
-                                placeholder="Escribe una nota para aplicar a todos..."
-                                style={{ width: '100%', minHeight: '100px', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0' }}
-                            />
-                        </div>
+                            <div style={{ marginBottom: '1.5rem' }}>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, color: '#4a5568' }}>Notas / Bitácora (Se sobreescribirá)</label>
+                                <textarea
+                                    value={bulkEditForm.notes}
+                                    onChange={e => setBulkEditForm({ ...bulkEditForm, notes: e.target.value })}
+                                    placeholder="Escribe una nota para aplicar a todos..."
+                                    style={{ width: '100%', minHeight: '100px', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0' }}
+                                />
+                            </div>
 
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
-                            <button onClick={() => setIsBulkEditModalOpen(false)} style={{ background: 'white', border: '1px solid #e2e8f0', padding: '0.5rem 1rem', borderRadius: '0.5rem', cursor: 'pointer' }}>Cancelar</button>
-                            <button onClick={handleBulkEditSubmit} style={{ background: '#3182ce', color: 'white', border: 'none', padding: '0.5rem 1.5rem', borderRadius: '0.5rem', fontWeight: 600, cursor: 'pointer' }}>
-                                Aplicar Cambios
-                            </button>
-                        </div>
-                    </ModalContent>
-                </PortalModalOverlay>
-            )}
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
+                                <button onClick={() => setIsBulkEditModalOpen(false)} style={{ background: 'white', border: '1px solid #e2e8f0', padding: '0.5rem 1rem', borderRadius: '0.5rem', cursor: 'pointer' }}>Cancelar</button>
+                                <button onClick={handleBulkEditSubmit} style={{ background: '#3182ce', color: 'white', border: 'none', padding: '0.5rem 1.5rem', borderRadius: '0.5rem', fontWeight: 600, cursor: 'pointer' }}>
+                                    Aplicar Cambios
+                                </button>
+                            </div>
+                        </ModalContent>
+                    </PortalModalOverlay>
+                )
+            }
 
             {/* History Modal */}
             {
                 isHistoryModalOpen && (
                     <PortalModalOverlay>
-                        <ModalContent style={{ maxWidth: '700px' }}>
+                        <ModalContent style={{ maxWidth: '1000px', width: '90%' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                                 <h2 style={{ fontSize: '1.5rem', margin: 0, color: '#2d3748', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                     <FaHistory color="#4299e1" /> Historial de Movimientos
@@ -4630,24 +4801,61 @@ const RoomDetail: React.FC = () => {
                                         <thead>
                                             <tr style={{ borderBottom: '2px solid #e2e8f0', textAlign: 'left' }}>
                                                 <th style={{ padding: '0.75rem', color: '#4a5568', fontSize: '0.85rem' }}>Fecha</th>
+                                                <th style={{ padding: '0.75rem', color: '#4a5568', fontSize: '0.85rem' }}>Usuario</th>
                                                 <th style={{ padding: '0.75rem', color: '#4a5568', fontSize: '0.85rem' }}>Código</th>
                                                 <th style={{ padding: '0.75rem', color: '#4a5568', fontSize: '0.85rem' }}>Acción/Notas</th>
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {roomHistory.map((move: any) => (
-                                                <tr key={move.id} style={{ borderBottom: '1px solid #edf2f7' }}>
-                                                    <td style={{ padding: '0.75rem', color: '#2d3748', fontSize: '0.9rem' }}>
-                                                        {new Date(move.created_at).toLocaleString()}
-                                                    </td>
-                                                    <td style={{ padding: '0.75rem', fontWeight: 600, color: '#2d3748', fontSize: '0.9rem' }}>
-                                                        {move.batch?.tracking_code || move.batch?.name || 'Desconocido'}
-                                                    </td>
-                                                    <td style={{ padding: '0.75rem', color: '#4a5568', fontSize: '0.9rem' }}>
-                                                        {move.notes || '-'}
-                                                    </td>
-                                                </tr>
-                                            ))}
+                                            {roomHistory.map((move: any) => {
+                                                // Date Formatting
+                                                const dateObj = move.moved_at ? new Date(move.moved_at) : null;
+                                                const dateStr = dateObj ? dateObj.toLocaleDateString('es-AR', { weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit' }) : '-';
+                                                const timeStr = dateObj ? dateObj.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: true }).toLowerCase() : '';
+                                                const fullDate = dateObj ? `${dateStr.charAt(0).toUpperCase() + dateStr.slice(1)} - ${timeStr}` : '-';
+
+                                                // Color Coding Logic
+                                                let rowBg = 'transparent';
+                                                let noteColor = '#4a5568';
+                                                let borderColor = '#edf2f7';
+
+                                                const noteLower = (move.notes || '').toLowerCase();
+
+                                                if (noteLower.includes('observación') || noteLower.includes('alerta')) {
+                                                    rowBg = '#fffff0'; // Light Yellow
+                                                    noteColor = '#d69e2e'; // Dark Yellow
+                                                    borderColor = '#f6e05e';
+                                                } else if (noteLower.includes('etapa') || noteLower.includes('transplante') || noteLower.includes('siembra')) {
+                                                    rowBg = '#f0fff4'; // Light Green
+                                                    noteColor = '#38a169'; // Dark Green
+                                                    borderColor = '#68d391';
+                                                } else if (noteLower.includes('eliminado') || noteLower.includes('baja') || noteLower.includes('descartad')) {
+                                                    rowBg = '#fff5f5'; // Light Red
+                                                    noteColor = '#e53e3e'; // Dark Red
+                                                    borderColor = '#fc8181';
+                                                } else if (noteLower.includes('nota') || noteLower.includes('edición')) {
+                                                    rowBg = '#ebf8ff'; // Light Blue
+                                                    noteColor = '#3182ce'; // Dark Blue
+                                                    borderColor = '#63b3ed';
+                                                }
+
+                                                return (
+                                                    <tr key={move.id} style={{ borderBottom: `1px solid ${borderColor}`, background: rowBg }}>
+                                                        <td style={{ padding: '0.75rem', color: '#2d3748', fontSize: '0.9rem', whiteSpace: 'nowrap' }}>
+                                                            {fullDate}
+                                                        </td>
+                                                        <td style={{ padding: '0.75rem', color: '#4a5568', fontSize: '0.9rem' }}>
+                                                            {move.user?.full_name || move.user?.email || 'Sistema'}
+                                                        </td>
+                                                        <td style={{ padding: '0.75rem', fontWeight: 600, color: '#2d3748', fontSize: '0.9rem' }}>
+                                                            {move.batch?.tracking_code || move.batch?.name || 'Desconocido'}
+                                                        </td>
+                                                        <td style={{ padding: '0.75rem', color: noteColor, fontSize: '0.9rem', fontWeight: 500 }}>
+                                                            {move.notes || '-'}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
                                         </tbody>
                                     </table>
                                 )}
@@ -4893,7 +5101,7 @@ const RoomDetail: React.FC = () => {
                                 </button>
                                 <button
                                     onClick={handleUpdateRoom}
-                                    style={{ background: '#3182ce', color: 'white', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 600 }}
+                                    style={{ background: '#48bb78', color: 'white', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 600 }}
                                 >
                                     Guardar Cambios
                                 </button>
@@ -4998,7 +5206,8 @@ const RoomDetail: React.FC = () => {
                                 startRow,
                                 startCol,
                                 map.grid_rows,
-                                map.grid_columns
+                                map.grid_columns,
+                                user?.id
                             );
                             if (success) {
                                 if (id) await loadData(id);
@@ -5036,46 +5245,51 @@ const RoomDetail: React.FC = () => {
                 )
             }
             {/* OBSEVATION MODAL */}
-            {isObservationModalOpen && (
-                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <div style={{ background: 'white', padding: '1.5rem', borderRadius: '0.5rem', width: '90%', maxWidth: '400px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}>
-                        <h3 style={{ marginTop: 0, color: '#2d3748', marginBottom: '0.5rem' }}>Registrar Observación</h3>
-                        <p style={{ color: '#718096', fontSize: '0.9rem', marginBottom: '1rem' }}>
-                            Esto agregará una nota y una alerta a los {selectedBatchIds.size} lotes seleccionados.
-                        </p>
-                        <textarea
-                            value={observationText}
-                            onChange={(e) => setObservationText(e.target.value)}
-                            placeholder="Escribe tu observación aquí..."
-                            style={{
-                                width: '100%',
-                                minHeight: '100px',
-                                padding: '0.75rem',
-                                borderRadius: '0.375rem',
-                                border: '1px solid #e2e8f0',
-                                marginBottom: '1rem',
-                                fontFamily: 'inherit',
-                                resize: 'vertical'
-                            }}
-                            autoFocus
-                        />
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-                            <button
-                                onClick={() => setIsObservationModalOpen(false)}
-                                style={{ padding: '0.5rem 1rem', background: 'white', border: '1px solid #cbd5e0', borderRadius: '0.375rem', cursor: 'pointer', color: '#4a5568' }}
-                            >
-                                Cancelar
-                            </button>
-                            <button
-                                onClick={handleRegisterObservation}
-                                style={{ padding: '0.5rem 1rem', background: '#d69e2e', border: 'none', borderRadius: '0.375rem', cursor: 'pointer', color: 'white', fontWeight: 600 }}
-                            >
-                                Guardar Observación
-                            </button>
+            {
+                isObservationModalOpen && (
+                    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <div style={{ background: 'white', padding: '1.5rem', borderRadius: '0.5rem', width: '90%', maxWidth: '400px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}>
+                            <h3 style={{ marginTop: 0, color: '#2d3748', marginBottom: '0.5rem' }}>Registrar Observación</h3>
+                            <p style={{ color: '#718096', fontSize: '0.9rem', marginBottom: '1rem' }}>
+                                Esto agregará una nota y una alerta a los {selectedBatchIds.size} lotes seleccionados.
+                            </p>
+                            <textarea
+                                value={observationText}
+                                onChange={(e) => setObservationText(e.target.value)}
+                                placeholder="Escribe tu observación aquí..."
+                                style={{
+                                    width: '100%',
+                                    minHeight: '100px',
+                                    padding: '0.75rem',
+                                    borderRadius: '0.375rem',
+                                    border: '1px solid #e2e8f0',
+                                    marginBottom: '0.5rem',
+                                    fontFamily: 'inherit',
+                                    resize: 'vertical'
+                                }}
+                                autoFocus
+                            />
+                            <div style={{ fontSize: '0.8rem', color: '#a0aec0', marginBottom: '1rem', fontStyle: 'italic' }}>
+                                (Elimina esta nota por completo para desactivar la alerta de observación)
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                                <button
+                                    onClick={() => setIsObservationModalOpen(false)}
+                                    style={{ padding: '0.5rem 1rem', background: 'white', border: '1px solid #cbd5e0', borderRadius: '0.375rem', cursor: 'pointer', color: '#4a5568' }}
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={handleRegisterObservation}
+                                    style={{ padding: '0.5rem 1rem', background: '#d69e2e', border: 'none', borderRadius: '0.375rem', cursor: 'pointer', color: 'white', fontWeight: 600 }}
+                                >
+                                    Guardar Observación
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
             <ToastModal
                 isOpen={toastState.isOpen}
                 message={toastState.message}
@@ -5170,31 +5384,7 @@ const RoomDetail: React.FC = () => {
                     <div><strong>Fecha:</strong> {new Date().toLocaleDateString()}</div>
                 </div>
 
-                {/* COMPRESSED MAP (Only for Living Soil) */}
-                {room?.type === 'living_soil' && (
-                    <div style={{ border: '1px solid #000', padding: '10px', marginBottom: '2rem', pageBreakInside: 'avoid' }}>
-                        <h3 style={{ marginTop: 0, fontSize: '1rem', marginBottom: '0.5rem' }}>Mapa de Distribución (Vista Compacta)</h3>
-                        {/* We scale it down to ensure it fits, centered */}
-                        <div style={{ display: 'flex', justifyContent: 'center' }}>
-                            <div style={{ transform: 'scale(0.7)', transformOrigin: 'top center', marginBottom: '-25%' }}>
-                                <LivingSoilGrid
-                                    {...(() => {
-                                        const activeMap = cloneMaps.find(m => m.id === activeMapId) || cloneMaps[0];
-                                        return {
-                                            rows: activeMap?.grid_rows || 20,
-                                            cols: activeMap?.grid_columns || 10,
-                                            batches: (room?.batches || []).filter(b => b.clone_map_id === activeMap?.id && b.quantity > 0),
-                                            mapId: undefined // Force default zoom since we don't want persistent zoom here
-                                        }
-                                    })()}
-                                    onBatchClick={() => { }} // No interaction on print
-                                    selectedBatchIds={new Set()} // No selection on print
-                                    isSelectionMode={false}
-                                />
-                            </div>
-                        </div>
-                    </div>
-                )}
+
 
                 {/* DATA GRID */}
                 <div>
@@ -5244,7 +5434,7 @@ const RoomDetail: React.FC = () => {
                 </div>
             </div>
 
-        </Container>
+        </Container >
     );
 };
 

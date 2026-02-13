@@ -99,17 +99,21 @@ const BackButton = styled.button`
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  background: none;
-  border: none;
-  color: #718096;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  color: #4a5568;
   font-weight: 600;
   cursor: pointer;
   margin-bottom: 1rem;
-  padding: 0;
+  padding: 0.5rem 1rem;
   font-size: 0.95rem;
+  transition: all 0.2s;
 
   &:hover {
-    color: #2f855a;
+    background: #f7fafc;
+    color: #2d3748;
+    border-color: #cbd5e0;
   }
 `;
 
@@ -1553,23 +1557,7 @@ const CropDetail: React.FC = () => {
           </h2>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
 
-            <button
-              onClick={() => setIsRoomModalOpen(true)}
-              style={{
-                background: '#3182ce',
-                color: 'white',
-                border: 'none',
-                padding: '0.5rem 1rem',
-                borderRadius: '0.5rem',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                cursor: 'pointer',
-                fontWeight: 600
-              }}
-            >
-              <FaPlus /> Nueva Sala
-            </button>
+
           </div>
         </div>
 
@@ -1710,7 +1698,13 @@ const CropDetail: React.FC = () => {
                           left: 0,
                           right: 0,
                           height: '4px',
-                          background: room.type === 'vegetation' ? '#48bb78' : room.type === 'flowering' ? '#ed8936' : '#ecc94b'
+                          background: room.type === 'vegetation' ? '#48bb78' // Green
+                            : room.type === 'flowering' ? '#ed8936' // Orange
+                              : room.type === 'clones' ? '#63b3ed' // Blue
+                                : room.type === 'living_soil' ? '#319795' // Teal
+                                  : room.type === 'mother' ? '#d53f8c' // Pink
+                                    : room.type === 'germination' ? '#9ae6b4' // Light Green
+                                      : '#ecc94b' // Yellow (Default)
                         }} />
 
                         <div style={{ display: 'flex', flexDirection: 'column', marginBottom: '1rem', marginTop: '3.5rem' }}>
@@ -2109,6 +2103,65 @@ const CropDetail: React.FC = () => {
                     </SortableRoomItem>
                   )
                 })}
+
+                {/* Add New Room Card */}
+                <div
+                  onClick={() => setIsRoomModalOpen(true)}
+                  style={{
+                    padding: '1.5rem',
+                    borderRadius: '0.5rem',
+                    border: '2px dashed #cbd5e0',
+                    textAlign: 'center',
+                    color: '#a0aec0',
+                    cursor: 'pointer',
+                    background: '#f7fafc',
+                    transition: 'all 0.2s ease',
+                    marginTop: '1.5rem', // Separation from Masonry flow if needed, or part of it? 
+                    // Since MasonryContainer has column flow, appending a div AFTER it puts it at the bottom of the container wrapper.
+                    // Wait, if it's outside MasonryContainer, it spans full width below. That might be better for a "footer" add button 
+                    // than getting lost in a column. 
+                    // Let's try appending it INSIDE first as a card, but if Masonry is column-count, order is top-to-bottom.
+                    // Actually, let's put it INSIDE MasonryContainer to be just another card.
+                    // BUT, Masonry order is weird. 
+                    // User said "junto a la ultima tarjeta". If I put it in Masonry, it might go to top of next column.
+                    // Let's try putting it inside.
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '1rem',
+                    minHeight: '200px', // Match typical card height
+                    opacity: 0.8,
+                    breakInside: 'avoid',
+                    marginBottom: '1.5rem'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = '#48bb78';
+                    e.currentTarget.style.color = '#48bb78';
+                    e.currentTarget.style.background = '#f0fff4';
+                    e.currentTarget.style.opacity = '1';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = '#cbd5e0';
+                    e.currentTarget.style.color = '#a0aec0';
+                    e.currentTarget.style.background = '#f7fafc';
+                    e.currentTarget.style.opacity = '0.8';
+                  }}
+                >
+                  <div style={{
+                    width: '50px',
+                    height: '50px',
+                    borderRadius: '50%',
+                    border: '2px dashed currentColor',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '1.5rem'
+                  }}>
+                    <FaPlus />
+                  </div>
+                  <span style={{ fontWeight: 600, fontSize: '1rem', color: '#718096' }}>Haz click aquí para crear una nueva sala</span>
+                </div>
               </MasonryContainer>
             </SortableContext>
             <DragOverlay>

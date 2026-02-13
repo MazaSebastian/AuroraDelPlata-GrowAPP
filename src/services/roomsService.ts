@@ -267,7 +267,7 @@ export const roomsService = {
         return data || [];
     },
 
-    async createBatch(batch: Omit<Batch, 'id' | 'created_at'>): Promise<Batch | null> {
+    async createBatch(batch: Omit<Batch, 'id' | 'created_at'>, userId?: string): Promise<Batch | null> {
         const { data, error } = await getClient()
             .from('batches')
             .insert([batch])
@@ -286,105 +286,15 @@ export const roomsService = {
                 .insert([{
                     batch_id: data.id,
                     to_room_id: data.current_room_id,
-                    notes: 'Creación de Lote'
+                    notes: 'Creación de Lote',
+                    created_by: userId
                 }]);
         }
 
         return data;
     },
 
-    async moveBatch(batchId: string, fromRoomId: string | null, toRoomId: string, notes?: string, quantityToMove?: number, gridPosition?: string, cloneMapId?: string): Promise<boolean> {
-        // Fetch source batch first to check quantity if splitting
-        const { data: sourceBatch } = await getClient()
-            .from('batches')
-            .select('*')
-            .eq('id', batchId)
-            .single();
 
-        if (!sourceBatch) return false;
-
-        // Check if it's a split
-        if (quantityToMove && quantityToMove < sourceBatch.quantity) {
-            // SPLIT LOGIC
-            // 1. Decrement Source
-            const { error: updateError } = await getClient()
-                .from('batches')
-                .update({ quantity: sourceBatch.quantity - quantityToMove })
-                .eq('id', batchId);
-
-            if (updateError) {
-                console.error('Error updating source batch quantity:', updateError);
-                return false;
-            }
-
-            // 2. Create New Batch for the moved part
-            const { data: newBatch, error: createError } = await getClient()
-                .from('batches')
-                .insert([{
-                    name: `${sourceBatch.name}-M`,
-                    quantity: quantityToMove,
-                    stage: sourceBatch.stage,
-                    genetic_id: sourceBatch.genetic_id,
-                    start_date: sourceBatch.start_date,
-                    current_room_id: toRoomId,
-                    clone_map_id: cloneMapId || null,
-                    grid_position: gridPosition || null,
-                    parent_batch_id: batchId // Link to parent
-                }])
-                .select()
-                .single();
-
-            if (createError || !newBatch) {
-                console.error('Error creating split batch:', createError);
-                return false;
-            }
-
-            // 3. Log Movement for the NEW batch
-            await getClient()
-                .from('batch_movements')
-                .insert([{
-                    batch_id: newBatch.id,
-                    from_room_id: fromRoomId,
-                    to_room_id: toRoomId,
-                    notes: `${notes || ''} (Split ${quantityToMove} copies)`
-                }]);
-
-            return true;
-
-        } else {
-            // FULL MOVE LOGIC (Existing)
-            // 1. Update Batch Location
-            const { error: updateError } = await getClient()
-                .from('batches')
-                .update({
-                    current_room_id: toRoomId,
-                    clone_map_id: cloneMapId || null,
-                    grid_position: gridPosition || null
-                })
-                .eq('id', batchId);
-
-            if (updateError) {
-                console.error('Error moving batch:', updateError);
-                return false;
-            }
-
-            // 2. Log Movement
-            const { error: logError } = await getClient()
-                .from('batch_movements')
-                .insert([{
-                    batch_id: batchId,
-                    from_room_id: fromRoomId,
-                    to_room_id: toRoomId,
-                    notes: notes
-                }]);
-
-            if (logError) {
-                console.error('Error logging movement:', logError);
-            }
-
-            return true;
-        }
-    },
 
     async updateBatchAlert(batchId: string, hasAlert: boolean): Promise<boolean> {
         const { error } = await getClient()
@@ -399,7 +309,10 @@ export const roomsService = {
         return true;
     },
 
-    async updateBatchStage(batchId: string, newStage: BatchStage): Promise<boolean> {
+    async updateBatchStage(batchId: string, newStage: BatchStage, userId?: string): Promise<boolean> {
+        // 1. Get current room for logging
+        const { data: batch } = await getClient().from('batches').select('current_room_id, stage').eq('id', batchId).single();
+
         const { error } = await getClient()
             .from('batches')
             .update({ stage: newStage })
@@ -409,10 +322,30 @@ export const roomsService = {
             console.error('Error updating batch stage:', error);
             return false;
         }
+
+        // 2. Log Movement
+        if (userId && batch) {
+            await getClient().from('batch_movements').insert([{
+                batch_id: batchId,
+                from_room_id: batch.current_room_id,
+                to_room_id: batch.current_room_id,
+                moved_at: new Date().toISOString(),
+                notes: `Cambio de etapa: ${batch.stage} -> ${newStage}`,
+                created_by: userId
+            }]);
+        }
+
         return true;
     },
 
-    async updateBatch(batchId: string, updates: Partial<Batch>): Promise<boolean> {
+    async updateBatch(batchId: string, updates: Partial<Batch>, userId?: string, actionDetail?: string): Promise<boolean> {
+        // 1. Get current info for logging if needed
+        let currentRoomId = updates.current_room_id;
+        if (!currentRoomId && userId) {
+            const { data: batch } = await getClient().from('batches').select('current_room_id').eq('id', batchId).single();
+            currentRoomId = batch?.current_room_id;
+        }
+
         const { error } = await getClient()
             .from('batches')
             .update(updates)
@@ -422,10 +355,26 @@ export const roomsService = {
             console.error('Error updating batch:', error);
             return false;
         }
+
+        // 2. Log Action if userId provided
+        if (userId && actionDetail) {
+            // Use the actual note content if available in updates, otherwise use the action description
+            const logNote = updates.notes ? `${actionDetail}: ${updates.notes}` : actionDetail;
+
+            await getClient().from('batch_movements').insert([{
+                batch_id: batchId,
+                from_room_id: currentRoomId,
+                to_room_id: currentRoomId,
+                moved_at: new Date().toISOString(),
+                notes: logNote,
+                created_by: userId
+            }]);
+        }
+
         return true;
     },
 
-    async deleteBatch(batchId: string, reason?: string): Promise<boolean> {
+    async deleteBatch(batchId: string, reason?: string, userId?: string): Promise<boolean> {
         // SOFT DELETE LOGIC
 
         // 1. Fetch info for logging
@@ -437,10 +386,10 @@ export const roomsService = {
             .from('batches')
             .update({
                 discarded_at: new Date().toISOString(),
-                // discard_reason: reason || 'Eliminado manualmente', // Removing strictly to avoid 400 Bad Request if column missing
-                current_room_id: null, // Remove from room
-                clone_map_id: null, // Remove from map
-                grid_position: null // Remove position
+                // discard_reason: reason || 'Eliminado manualmente', 
+                current_room_id: null,
+                clone_map_id: null,
+                grid_position: null
             })
             .eq('id', batchId);
 
@@ -456,19 +405,29 @@ export const roomsService = {
                 batch_id: batchId,
                 from_room_id: roomId,
                 to_room_id: null, // Goes nowhere
-                notes: `Eliminado/Baja: ${reason || 'Manual'}`
+                notes: `Eliminado/Baja: ${reason || 'Manual'}`,
+                created_by: userId,
+                moved_at: new Date().toISOString()
             }]);
 
         return true;
     },
 
-    async deleteBatches(batchIds: string[], reason?: string): Promise<boolean> {
+    async deleteBatches(batchIds: string[], reason?: string, userId?: string): Promise<boolean> {
         if (batchIds.length === 0) return true;
+
+        // 1. Fetch room info for logging BEFORE deleting (soft delete clears room_id)
+        const { data: batchesInfo } = await getClient()
+            .from('batches')
+            .select('id, current_room_id')
+            .in('id', batchIds);
+
+        const batchRoomMap = new Map(batchesInfo?.map(b => [b.id, b.current_room_id]) || []);
 
         const CHUNK_SIZE = 50;
         let hasError = false;
 
-        // 1. Mark as discarded in Chunks
+        // 2. Mark as discarded in Chunks
         for (let i = 0; i < batchIds.length; i += CHUNK_SIZE) {
             const chunk = batchIds.slice(i, i + CHUNK_SIZE);
 
@@ -476,7 +435,7 @@ export const roomsService = {
                 .from('batches')
                 .update({
                     discarded_at: new Date().toISOString(),
-                    // discard_reason: reason || 'Eliminación Masiva', // Removing to avoid potential 400 error
+                    // discard_reason: reason || 'Eliminación Masiva', 
                     current_room_id: null,
                     clone_map_id: null,
                     grid_position: null
@@ -494,12 +453,14 @@ export const roomsService = {
             return false;
         }
 
-        // 2. Log Movements (Chunked)
+        // 3. Log Movements (Chunked)
         const allLogs = batchIds.map(id => ({
             batch_id: id,
-            from_room_id: null,
+            from_room_id: batchRoomMap.get(id) || null,
             to_room_id: null,
-            notes: `Eliminado/Baja Masiva: ${reason || 'Manual'}`
+            notes: `Eliminado/Baja Masiva: ${reason || 'Manual'}`,
+            created_by: userId,
+            moved_at: new Date().toISOString()
         }));
 
         const LOG_CHUNK_SIZE = 100;
@@ -514,7 +475,7 @@ export const roomsService = {
         return true;
     },
 
-    async batchAssignToMap(sourceBatchId: string, mapId: string, positions: string[], roomId: string): Promise<boolean> {
+    async batchAssignToMap(sourceBatchId: string, mapId: string, positions: string[], roomId: string, userId?: string): Promise<boolean> {
         const qty = positions.length;
         if (qty === 0) return true;
 
@@ -598,7 +559,8 @@ export const roomsService = {
                 batch_id: b.id,
                 from_room_id: sourceBatch.current_room_id,
                 to_room_id: roomId,
-                notes: `Creación (Auto-Assign): ${b.tracking_code}`
+                notes: `Creación (Auto-Assign): ${b.tracking_code}`,
+                created_by: userId
             }));
 
             await getClient().from('batch_movements').insert(movements);
@@ -607,7 +569,7 @@ export const roomsService = {
         return true;
     },
 
-    async distributeBatchToMap(sourceBatchId: string, mapId: string, startRow: number, startCol: number, mapRows: number, mapCols: number): Promise<boolean> {
+    async distributeBatchToMap(sourceBatchId: string, mapId: string, startRow: number, startCol: number, mapRows: number, mapCols: number, userId?: string): Promise<boolean> {
         // 1. Fetch Source Batch
         const { data: sourceBatch } = await getClient()
             .from('batches')
@@ -660,7 +622,7 @@ export const roomsService = {
                 discard_reason: 'Distribuido en Mapa (Individualización)',
                 quantity: 0, // Set to 0 to be sure
                 current_room_id: null,
-                notes: `Distribuido en mapa ${mapId} como ${totalToDistribute} plantas individuales.`
+                notes: `Distribuido en mapa ${mapId} como ${totalToDistribute} plantas individuales. Log: ${userId || 'No User'}`
             })
             .eq('id', sourceBatchId);
 
@@ -708,24 +670,113 @@ export const roomsService = {
                 // If not, use source ID (we are the root).
                 parent_batch_id: sourceBatch.parent_batch_id || sourceBatchId,
                 tracking_code: trackingCode,
-                notes: `Individualizado desde lote original${sourceBatch.notes?.match(/\[Grupo:.*?\]/)?.[0] ? ' ' + sourceBatch.notes.match(/\[Grupo:.*?\]/)?.[0] : ''}`
+                notes: sourceBatch.notes?.match(/\[Grupo:.*?\]/)?.[0] || ''
             };
         });
 
-        const { error: insertError } = await getClient()
+        const { data: insertedBatches, error: insertError } = await getClient()
             .from('batches')
-            .insert(newBatches);
+            .insert(newBatches)
+            .select('id, tracking_code');
 
         if (insertError) {
             console.error("Error creating individual batches", insertError);
             return false;
         }
 
+        // 5. Log Distribution
+        if (insertedBatches && insertedBatches.length > 0) {
+            const movements = insertedBatches.map(b => ({
+                batch_id: b.id,
+                from_room_id: sourceBatch.current_room_id,
+                to_room_id: sourceBatch.current_room_id,
+                notes: `Individualización en Mapa: ${b.tracking_code}`,
+                created_by: userId
+            }));
+
+            await getClient().from('batch_movements').insert(movements);
+        }
+
         return true;
     },
 
+    async moveBatch(batchId: string, fromRoomId: string | null, toRoomId: string | null, notes?: string, quantity?: number, gridPosition?: string, cloneMapId?: string, userId?: string): Promise<boolean> {
+        // 1. Check if we need to split
+        if (quantity) {
+            const { data: batch } = await getClient().from('batches').select('quantity, name, genetic_id, stage, start_date').eq('id', batchId).single();
+
+            if (batch && batch.quantity > quantity) {
+                // SPLIT LOGIC
+                const newQuantity = batch.quantity - quantity;
+
+                // Update original (remaining)
+                await getClient().from('batches').update({ quantity: newQuantity }).eq('id', batchId);
+
+                // Create new moved batch
+                const { data: newBatch, error: createError } = await getClient().from('batches').insert([{
+                    name: `${batch.name}-Movido`, // Should ideally prompt for name or auto-generate properly
+                    quantity: quantity,
+                    genetic_id: batch.genetic_id,
+                    stage: batch.stage,
+                    start_date: batch.start_date,
+                    current_room_id: toRoomId,
+                    clone_map_id: cloneMapId,
+                    grid_position: gridPosition,
+                    notes: notes
+                }]).select().single();
+
+                if (createError) {
+                    console.error("Error splitting batch", createError);
+                    return false;
+                }
+
+                // Log Movement for NEW batch
+                await getClient().from('batch_movements').insert([{
+                    batch_id: newBatch.id,
+                    from_room_id: fromRoomId,
+                    to_room_id: toRoomId,
+                    notes: `Movido (Split): ${notes}`,
+                    created_by: userId
+                }]);
+
+                return true;
+            }
+        }
+
+        // STANDARD MOVE (or full move)
+        const updates: any = {
+            current_room_id: toRoomId,
+            notes: notes // Update note on batch too? Maybe append?
+        };
+
+        if (gridPosition !== undefined) updates.grid_position = gridPosition;
+        if (cloneMapId !== undefined) updates.clone_map_id = cloneMapId;
+
+        const { error } = await getClient()
+            .from('batches')
+            .update(updates)
+            .eq('id', batchId);
+
+        if (error) {
+            console.error('Error moving batch:', error);
+            return false;
+        }
+
+        // Log Movement
+        await getClient().from('batch_movements').insert([{
+            batch_id: batchId,
+            from_room_id: fromRoomId,
+            to_room_id: toRoomId,
+            notes: notes,
+            created_by: userId
+        }]);
+
+        return true;
+    },
+
+
     // Bulk API for faster map creation
-    async bulkDistributeBatchesToMap(batches: any[], mapId: string, startRow: number, startCol: number, mapRows: number, mapCols: number): Promise<boolean> {
+    async bulkDistributeBatchesToMap(batches: any[], mapId: string, startRow: number, startCol: number, mapRows: number, mapCols: number, userId?: string): Promise<boolean> {
         if (!batches || batches.length === 0) return false;
 
         // 0. Fetch existing batches in the map to avoid overlap
@@ -817,7 +868,7 @@ export const roomsService = {
                     grid_position: pos,
                     parent_batch_id: batch.parent_batch_id || batch.id,
                     tracking_code: trackingCode,
-                    notes: `Distribuido en mapa ${mapId} (Bulk)${batch.notes?.match(/\[Grupo:.*?\]/)?.[0] ? ' ' + batch.notes.match(/\[Grupo:.*?\]/)?.[0] : ''}`
+                    notes: batch.notes?.match(/\[Grupo:.*?\]/)?.[0] || ''
                 });
             }
             // Update seq for next batch of same genetic
@@ -829,9 +880,10 @@ export const roomsService = {
         // 2. Perform Batch Operations
 
         // A. Insert new batches
-        const { error: insertError } = await getClient()
+        const { data: insertedBatches, error: insertError } = await getClient()
             .from('batches')
-            .insert(newBatchesToInsert);
+            .insert(newBatchesToInsert)
+            .select('id, tracking_code');
 
         if (insertError) {
             console.error("Bulk insert failed", insertError);
@@ -846,13 +898,50 @@ export const roomsService = {
                 discard_reason: 'Distribuido en Mapa (Bulk)',
                 quantity: 0,
                 current_room_id: null,
-                notes: `Distribuido en mapa ${mapId} como parte de grupo.`
+                notes: `Distribuido en mapa ${mapId} como parte de grupo. Log: ${userId || 'No User'}`
             })
             .in('id', sourceBatchIdsToUpdate);
 
         if (updateError) {
             console.error("Bulk update source failed", updateError);
             return false;
+        }
+
+        // C. Log Distribution
+        if (insertedBatches && insertedBatches.length > 0) {
+            const movements = insertedBatches.map(b => ({
+                batch_id: b.id,
+                from_room_id: null, // Source was from various rooms? Or same map context?
+                // Usually bulk distribute comes from "Available Batches" in the room.
+                // But batches might have 'current_room_id' set.
+                // For now, let's use null or try to infer.
+                // Actually, we can just say "Distribucion Masiva".
+                // Ideally we should know the room.
+                to_room_id: null, // It stays in the room technically? Or map specific?
+                // The batches table has 'current_room_id'.
+                // The new batches have 'current_room_id' set from source.
+                // Let's rely on that.
+                notes: `Distribución Masiva en Mapa: ${b.tracking_code}`,
+                created_by: userId
+            }));
+
+            // Note: batch_movements usually requires valid room IDs for filtering history.
+            // If from/to are null, history might not show it.
+            // We should use the room ID from the source batches.
+            // But we don't have it easily here without fetching or passing.
+            // 'distributeBatchesToMap' doesn't take roomId?
+            // Actually newBatchesToInsert has 'current_room_id'.
+            // Let's use that.
+
+            const movementsWithRooms = newBatchesToInsert.map((nb, idx) => ({
+                batch_id: insertedBatches[idx].id,
+                from_room_id: nb.current_room_id,
+                to_room_id: nb.current_room_id,
+                notes: `Distribución Masiva: ${insertedBatches[idx].tracking_code}`,
+                created_by: userId
+            }));
+
+            await getClient().from('batch_movements').insert(movementsWithRooms);
         }
 
         return true;
@@ -906,7 +995,7 @@ export const roomsService = {
     },
 
     async getRoomMovements(roomId: string): Promise<any[]> {
-        const { data, error } = await getClient()
+        const { data: movements, error } = await getClient()
             .from('batch_movements')
             .select(`
                 *,
@@ -915,17 +1004,38 @@ export const roomsService = {
                 to_room:rooms!to_room_id(name)
             `)
             .or(`from_room_id.eq.${roomId},to_room_id.eq.${roomId}`)
-            .order('created_at', { ascending: false })
-            .limit(50); // Limit to last 50 for performance
+            .order('moved_at', { ascending: false })
+            .limit(50);
 
         if (error) {
             console.error('Error fetching movements:', error);
             return [];
         }
-        return data || [];
+
+        if (!movements || movements.length === 0) return [];
+
+        // Fetch User Profiles for created_by
+        const userIds = Array.from(new Set(movements.map(m => m.created_by).filter(Boolean)));
+
+        if (userIds.length > 0) {
+            const { data: profiles } = await getClient()
+                .from('profiles')
+                .select('id, full_name, email')
+                .in('id', userIds);
+
+            const profileMap = new Map(profiles?.map(p => [p.id, p]));
+
+            // Merge profile info
+            return movements.map(m => ({
+                ...m,
+                user: m.created_by ? profileMap.get(m.created_by) : null
+            }));
+        }
+
+        return movements;
     },
 
-    async transplantBatches(fromRoomId: string, toRoomId: string, movements: { geneticId: string, quantity: number }[]): Promise<boolean> {
+    async transplantBatches(fromRoomId: string, toRoomId: string, movements: { geneticId: string, quantity: number }[], userId?: string): Promise<boolean> {
         // This function needs to process each genetic group
         // Strategy: 
         // 1. For each genetic, fetch ALL available batches in the room, ordered by creation date (older first).
@@ -964,7 +1074,8 @@ export const roomsService = {
                     'Transplante a Vegetación',
                     qtyToTake,
                     undefined, // No grid position in target (for now)
-                    undefined  // No map in target
+                    undefined,  // No map in target
+                    userId
                 );
 
                 remaining -= qtyToTake;
@@ -974,7 +1085,7 @@ export const roomsService = {
         return true;
     },
 
-    async moveBatches(batchIds: string[], toRoomId: string, notes: string = 'Transplante Masivo'): Promise<boolean> {
+    async moveBatches(batchIds: string[], toRoomId: string, notes: string = 'Transplante Masivo', userId?: string): Promise<boolean> {
         if (!batchIds.length) return false;
 
         const { error } = await getClient()
@@ -1000,7 +1111,7 @@ export const roomsService = {
         return true;
     },
 
-    async harvestBatches(batchIds: string[], toRoomId?: string): Promise<boolean> {
+    async harvestBatches(batchIds: string[], toRoomId?: string, userId?: string): Promise<boolean> {
         if (!batchIds.length) return false;
 
         const updates: any = {
@@ -1028,7 +1139,9 @@ export const roomsService = {
             batch_id: id,
             from_room_id: null, // Unknown without fetch, but allowable in log? Or we leave null.
             to_room_id: toRoomId || null,
-            notes: 'Cosecha: Planta procesada'
+            notes: 'Cosecha: Planta procesada',
+            created_by: userId,
+            moved_at: new Date().toISOString()
         }));
 
         const { error: logError } = await getClient().from('batch_movements').insert(movements);

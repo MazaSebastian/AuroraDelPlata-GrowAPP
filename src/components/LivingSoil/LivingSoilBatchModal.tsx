@@ -198,16 +198,18 @@ export const LivingSoilBatchModal: React.FC<LivingSoilBatchModalProps> = ({
                     </StagesContainer>
 
                     <h4 style={{ margin: '0 0 0.5rem' }}>Notas / Bitácora</h4>
-                    <NotesArea
+                    <textarea
                         value={notes}
                         onChange={(e) => setNotes(e.target.value)}
                         placeholder="Registrar eventos, altura, poda..."
+                        style={{ width: '100%', minHeight: '80px', padding: '0.5rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0', fontFamily: 'inherit' }}
                     />
+                    <div style={{ fontSize: '0.8rem', color: '#a0aec0', marginTop: '0.25rem', fontStyle: 'italic', marginBottom: '1rem' }}>
+                        (Elimina esta nota por completo para desactivar la alerta de observación)
+                    </div>
 
                     <ActionRow>
-                        <DeleteButton onClick={() => {
-                            if (window.confirm("¿Eliminar planta?")) onDeleteBatch(batch);
-                        }}>
+                        <DeleteButton onClick={() => onDeleteBatch(batch)}>
                             <FaTrash /> Eliminar
                         </DeleteButton>
                         <SaveButton onClick={handleSave} disabled={loading}>

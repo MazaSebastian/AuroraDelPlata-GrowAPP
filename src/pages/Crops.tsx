@@ -490,7 +490,7 @@ const Crops: React.FC = () => {
     <Container>
       <Header>
         <h1>Cultivos</h1>
-        <CreateButton onClick={() => setIsModalOpen(true)}><FaPlus /> Nuevo Cultivo</CreateButton>
+
       </Header>
 
       <Grid>
@@ -575,6 +575,51 @@ const Crops: React.FC = () => {
             </CardBody>
           </Card>
         ))}
+        {/* Add New Crop Card */}
+        <div
+          onClick={() => setIsModalOpen(true)}
+          style={{
+            background: '#f7fafc',
+            borderRadius: '1.25rem',
+            border: '2px dashed #cbd5e0',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            minHeight: '250px', // Match typical card height
+            gap: '1rem',
+            transition: 'all 0.2s ease',
+            opacity: 0.8
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = '#48bb78';
+            e.currentTarget.style.color = '#48bb78';
+            e.currentTarget.style.background = '#f0fff4';
+            e.currentTarget.style.opacity = '1';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = '#cbd5e0';
+            e.currentTarget.style.color = '#a0aec0';
+            e.currentTarget.style.background = '#f7fafc';
+            e.currentTarget.style.opacity = '0.8';
+          }}
+        >
+          <div style={{
+            width: '60px',
+            height: '60px',
+            borderRadius: '50%',
+            border: '2px dashed currentColor',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '1.5rem',
+            color: 'inherit'
+          }}>
+            <FaPlus />
+          </div>
+          <span style={{ fontWeight: 600, fontSize: '1rem', color: '#718096', textAlign: 'center', padding: '0 1rem' }}>Haz click aquí para crear un nuevo cultivo</span>
+        </div>
       </Grid>
 
       {/* Create Modal */}

@@ -281,4 +281,58 @@ export const GlobalStyles = createGlobalStyle`
   .p-4 { padding: 1rem; }
   .p-5 { padding: 1.25rem; }
   .p-6 { padding: 1.5rem; }
+
+  /* PRINT STYLES */
+  @media screen {
+    .printable-map-details,
+    .printable-report {
+      display: none !important;
+    }
+  }
+
+  @media print {
+    .no-print {
+      display: none !important;
+    }
+
+    .printable-map-details,
+    .printable-report {
+      display: block !important;
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 9999;
+      background-color: white;
+    }
+
+    /* Force background colors for map printing */
+    * {
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    /* Hide sidebar and other distractions */
+    aside,
+    nav,
+    header,
+    footer {
+      display: none !important;
+    }
+
+    body, html {
+      overflow: visible !important;
+      height: auto !important;
+    }
+
+    /* Ensure map takes full width */
+    .active-map-container {
+      width: 100% !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      box-shadow: none !important;
+      border: none !important;
+    }
+  }
 `;
