@@ -44,6 +44,7 @@ body {
     opacity: 0;
     transform: translateY(10px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -54,15 +55,19 @@ body {
   from {
     transform: translateX(-100%);
   }
+
   to {
     transform: translateX(0);
   }
 }
 
 @keyframes pulse {
-  0%, 100% {
+
+  0%,
+  100% {
     opacity: 1;
   }
+
   50% {
     opacity: 0.5;
   }
@@ -96,6 +101,7 @@ body {
 
 /* Prevenir zoom en inputs en iOS */
 @media screen and (-webkit-min-device-pixel-ratio: 0) {
+
   select,
   textarea,
   input {
@@ -142,7 +148,8 @@ body {
 }
 
 /* Permitir selección de texto en inputs y textareas */
-input, textarea {
+input,
+textarea {
   -webkit-user-select: text;
   -khtml-user-select: text;
   -moz-user-select: text;
@@ -152,3 +159,17 @@ input, textarea {
 
 
 
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import styled from 'styled-components';
+import styled, { keyframes } from 'styled-components';
 import {
   FaSeedling,
   FaPlus,
@@ -21,6 +21,26 @@ import { ToastModal } from '../components/ToastModal';
 
 
 
+const fadeIn = keyframes`
+  from { opacity: 0; }
+  to { opacity: 1; }
+`;
+
+const fadeOut = keyframes`
+  from { opacity: 1; }
+  to { opacity: 0; }
+`;
+
+const scaleIn = keyframes`
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+`;
+
+const scaleOut = keyframes`
+  from { transform: scale(1); opacity: 1; }
+  to { transform: scale(0.95); opacity: 0; }
+`;
+
 const Container = styled.div`
   padding: 2rem;
   padding-top: 5rem;
@@ -28,6 +48,7 @@ const Container = styled.div`
   margin: 0 auto;
   min-height: 100vh;
   background-color: #f8fafc;
+  animation: ${fadeIn} 0.5s ease-in-out;
 `;
 
 const Header = styled.div`
@@ -55,15 +76,16 @@ const Grid = styled.div`
   align-items: flex-start;
 `;
 
-const Card = styled.div`
+const Card = styled.div<{ forceHover?: boolean }>`
   background: white;
   border-radius: 1.25rem;
   overflow: hidden;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025);
+  box-shadow: ${p => p.forceHover ? '0 20px 25px -5px rgba(0, 0, 0, 0.1)' : '0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025)'};
   border: 1px solid #edf2f7;
   transition: transform 0.2s, box-shadow 0.2s;
   display: flex;
   flex-direction: column;
+  transform: ${p => p.forceHover ? 'translateY(-4px)' : 'none'};
 
   &:hover {
     transform: translateY(-4px);
@@ -153,7 +175,7 @@ const CreateButton = styled.button`
 `;
 
 
-const ModalOverlay = styled.div`
+const ModalOverlay = styled.div<{ isClosing?: boolean }>`
   position: fixed;
   top: 0;
   left: 0;
@@ -165,21 +187,17 @@ const ModalOverlay = styled.div`
   justify-content: center;
   z-index: 1000;
   backdrop-filter: blur(4px);
+  animation: ${p => p.isClosing ? fadeOut : fadeIn} 0.2s ease-in-out forwards;
 `;
 
-const ModalContent = styled.div`
+const ModalContent = styled.div<{ isClosing?: boolean }>`
   background: white;
   padding: 2rem;
   border-radius: 1.5rem;
   width: 90%;
   max-width: 500px;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-  animation: fadeIn 0.2s ease-out;
-
-  @keyframes fadeIn {
-    from { opacity: 0; transform: scale(0.95); }
-    to { opacity: 1; transform: scale(1); }
-  }
+  animation: ${p => p.isClosing ? scaleOut : scaleIn} 0.2s ease-in-out forwards;
 
   h2 {
     margin-top: 0;
@@ -226,14 +244,14 @@ const Button = styled.button<{ variant?: 'primary' | 'secondary' }>`
   padding: 0.75rem 1.5rem;
   border-radius: 0.5rem;
   border: 1px solid ${p => p.variant === 'secondary' ? '#e2e8f0' : 'transparent'};
-  background: ${p => p.variant === 'secondary' ? 'white' : '#3182ce'};
+  background: ${p => p.variant === 'secondary' ? 'white' : '#38a169'};
   color: ${p => p.variant === 'secondary' ? '#4a5568' : 'white'};
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
 
   &:hover {
-    background: ${p => p.variant === 'secondary' ? '#f7fafc' : '#2b6cb0'};
+    background: ${p => p.variant === 'secondary' ? '#f7fafc' : '#2f855a'};
   }
 `;
 
@@ -255,6 +273,59 @@ const getColorHex = (colorName?: string) => {
 
 
 
+const rotate = keyframes`
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+`;
+
+const CreateCard = styled.div`
+  background: #f7fafc;
+  border-radius: 1.25rem;
+  border: 2px dashed #cbd5e0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  min-height: 250px;
+  gap: 1rem;
+  transition: all 0.2s ease;
+  opacity: 0.8;
+  color: #a0aec0;
+
+  &:hover {
+    border-color: #48bb78;
+    color: #48bb78;
+    background: #f0fff4;
+    opacity: 1;
+  }
+`;
+
+const DashedCircle = styled.div`
+  width: 60px;
+  height: 60px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  color: inherit;
+  transition: all 0.5s ease;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    border-radius: 50%;
+    border: 2px dashed currentColor;
+    transition: all 0.5s ease;
+  }
+
+  ${CreateCard}:hover &::before {
+    animation: ${rotate} 10s linear infinite;
+  }
+`;
+
 const Crops: React.FC = () => {
   const [crops, setCrops] = useState<Crop[]>([]);
   // Toast State
@@ -264,7 +335,9 @@ const Crops: React.FC = () => {
 
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isClosingCreate, setIsClosingCreate] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [isCreating, setIsCreating] = useState(false); // New state for creation loading
   const [lastActivityMap, setLastActivityMap] = useState<Record<string, string>>({});
 
   // New Crop Form State
@@ -318,21 +391,32 @@ const Crops: React.FC = () => {
     setLastActivityMap(activityMap);
   }, []);
 
-  const loadCrops = React.useCallback(async () => {
-    setLoading(true);
-    const data = await cropsService.getCrops();
+  const loadCrops = React.useCallback(async (isInitial = false, silent = false) => {
+    if (!silent) setLoading(true);
+
+    const fetchPromise = async () => {
+      const data = await cropsService.getCrops();
+      await loadLastActivities(data);
+      return data;
+    };
+
+    const minTimePromise = isInitial
+      ? new Promise(resolve => setTimeout(resolve, 1500))
+      : Promise.resolve();
+
+    const [data] = await Promise.all([
+      fetchPromise(),
+      minTimePromise
+    ]);
+
     setCrops(data);
-
-    // Load last activities
-    loadLastActivities(data);
-
-    setLoading(false);
+    if (!silent) setLoading(false);
   }, [loadLastActivities]);
 
   // Load initial data
   // Using useState + useEffect instead of useMemo to allow async fetching
   React.useEffect(() => {
-    loadCrops();
+    loadCrops(true);
   }, [loadCrops]);
 
 
@@ -346,6 +430,7 @@ const Crops: React.FC = () => {
     }
 
     try {
+      setIsCreating(true);
       // Default values for simplified "Spot" creation
       const normalizedDate = new Date(); // Current date as default start
       normalizedDate.setHours(12, 0, 0, 0);
@@ -360,7 +445,7 @@ const Crops: React.FC = () => {
 
       if (newCrop) {
         setCrops(prev => [newCrop, ...prev]);
-        setIsModalOpen(false);
+        setIsClosingCreate(true); // Trigger exit animation
         setFormData({
           name: '',
           startDate: new Date().toISOString().split('T')[0],
@@ -369,6 +454,10 @@ const Crops: React.FC = () => {
           color: 'green',
           geneticId: ''
         });
+        setToastMessage("Cultivo creado exitosamente!");
+        setToastType('success');
+        setToastAnimate(true);
+        setToastOpen(true);
       } else {
         setToastMessage("Error al crear el cultivo. El servicio devolvió null.");
         setToastType('error');
@@ -378,13 +467,18 @@ const Crops: React.FC = () => {
       console.error("Error creating spot:", error);
       setToastMessage(`Ocurrió un error al crear el cultivo: ${error.message || JSON.stringify(error)}`);
       setToastType('error');
+      setToastAnimate(true);
       setToastOpen(true);
+    } finally {
+      setIsCreating(false);
     }
   };
 
   // Confirm Modal State
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [cropToDelete, setCropToDelete] = useState<Crop | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [toastAnimate, setToastAnimate] = useState(true);
 
   const handleDeleteCrop = (e: React.MouseEvent, id: string, name: string) => {
     e.stopPropagation();
@@ -395,14 +489,18 @@ const Crops: React.FC = () => {
   const handleConfirmDelete = async () => {
     if (!cropToDelete) return;
 
+    setIsDeleting(true);
     const success = await cropsService.deleteCrop(cropToDelete.id);
+    setIsDeleting(false);
+
     if (success) {
-      loadCrops();
+      loadCrops(false, true); // Silent reload
       setConfirmOpen(false);
 
       // Show Success Toast
       setToastMessage(`El cultivo "${cropToDelete.name}" ha sido eliminado correctamente.`);
       setToastType('success');
+      setToastAnimate(false); // Disable animation for smooth transition
       setToastOpen(true);
 
       setCropToDelete(null);
@@ -410,6 +508,7 @@ const Crops: React.FC = () => {
       // Show Error Toast instead of alert
       setToastMessage("Error al eliminar el Cultivo. Inténtalo de nuevo.");
       setToastType('error');
+      setToastAnimate(true);
       setToastOpen(true);
     }
   };
@@ -429,7 +528,7 @@ const Crops: React.FC = () => {
 
     const success = await cropsService.updateCrop(editingCrop.id, { name: newName });
     if (success) {
-      loadCrops();
+      loadCrops(false, true); // Silent reload
       setIsEditOpen(false);
       setEditingCrop(null);
     } else {
@@ -451,7 +550,7 @@ const Crops: React.FC = () => {
     if (!cropForColor) return;
     const success = await cropsService.updateCrop(cropForColor.id, { color });
     if (success) {
-      loadCrops();
+      loadCrops(false, true); // Silent reload
       // Modal closes automatically in ColorPickerModal onSelect calls (or we can close it here if we change the component logic)
       // But component calls onClose only if we didn't pass logic inside.
       // Wait, my component calls onSelectColor then onClose.
@@ -483,7 +582,7 @@ const Crops: React.FC = () => {
   };
 
   if (loading) {
-    return <LoadingSpinner text="Cargando tus cultivos..." fullScreen />;
+    return <LoadingSpinner text="Cargando tus cultivos..." fullScreen duration={1500} />;
   }
 
   return (
@@ -494,30 +593,39 @@ const Crops: React.FC = () => {
       </Header>
 
       <Grid>
-        {crops.map(c => (
-          <Card key={c.id} onClick={() => handleCardClick(c.id)} style={{ cursor: 'pointer', borderTop: `4px solid ${getColorHex(c.color)}` }}>
-            <CardHeader style={{ background: `${getColorHex(c.color)}15`, justifyContent: 'space-between' }}>
+        {crops.map((crop) => (
+          <Card
+            key={crop.id}
+            onClick={() => handleCardClick(crop.id)}
+            forceHover={
+              editingCrop?.id === crop.id ||
+              cropToDelete?.id === crop.id ||
+              cropForColor?.id === crop.id
+            }
+            style={{ cursor: 'pointer', borderTop: `4px solid ${getColorHex(crop.color)}` }}
+          >
+            <CardHeader style={{ background: `${getColorHex(crop.color)}15`, justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <div className="icon" style={{ color: getColorHex(c.color) }}><FaSeedling /></div>
-                <div className="title">{c.name}</div>
+                <div className="icon" style={{ color: getColorHex(crop.color) }}><FaSeedling /></div>
+                <div className="title">{crop.name}</div>
               </div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <button
-                  onClick={(e) => handleOpenColorPicker(e, c)}
+                  onClick={(e) => handleOpenColorPicker(e, crop)}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#718096', padding: '0.25rem', display: 'flex' }}
                   title="Cambiar Color"
                 >
                   <FaPalette />
                 </button>
                 <button
-                  onClick={(e) => handleEditCropName(e, c)}
+                  onClick={(e) => handleEditCropName(e, crop)}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#718096', padding: '0.25rem', display: 'flex' }}
                   title="Editar Nombre"
                 >
                   <FaEdit />
                 </button>
                 <button
-                  onClick={(e) => handleDeleteCrop(e, c.id, c.name)}
+                  onClick={(e) => handleDeleteCrop(e, crop.id, crop.name)}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#718096', padding: '0.25rem', display: 'flex' }}
                   title="Eliminar Spot"
                 >
@@ -527,27 +635,27 @@ const Crops: React.FC = () => {
             </CardHeader>
             <CardBody>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Badge variant={statusVariant(c.status)}>{c.status}</Badge>
+                <Badge variant={statusVariant(crop.status)}>{crop.status}</Badge>
               </div>
 
 
 
-              {c.estimatedHarvestDate && (
+              {crop.estimatedHarvestDate && (
                 <InfoRow>
-                  <FaCalendarAlt /> Fin Previsto: {new Date(c.estimatedHarvestDate).toLocaleDateString('es-AR')}
+                  <FaCalendarAlt /> Fin Previsto: {new Date(crop.estimatedHarvestDate).toLocaleDateString('es-AR')}
                 </InfoRow>
               )}
               <InfoRow style={{ marginTop: '0.5rem', borderTop: '1px solid #edf2f7', paddingTop: '0.5rem' }}>
-                <FaClock /> Última actividad: {lastActivityMap[c.id] || '-'}
+                <FaClock /> Última actividad: {lastActivityMap[crop.id] || '-'}
               </InfoRow>
 
               {/* Rooms Summary */}
-              {c.rooms && c.rooms.length > 0 && (
+              {crop.rooms && crop.rooms.length > 0 && (
                 <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #edf2f7', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                   {(() => {
-                    const vegeCount = c.rooms.filter(r => r.type === 'vegetation').length;
-                    const floraCount = c.rooms.filter(r => r.type === 'flowering').length;
-                    const dryingCount = c.rooms.filter(r => r.type === 'drying').length;
+                    const vegeCount = crop.rooms.filter(r => r.type === 'vegetation').length;
+                    const floraCount = crop.rooms.filter(r => r.type === 'flowering').length;
+                    const dryingCount = crop.rooms.filter(r => r.type === 'drying').length;
                     // Using filter directly on type
 
                     return (
@@ -576,93 +684,71 @@ const Crops: React.FC = () => {
           </Card>
         ))}
         {/* Add New Crop Card */}
-        <div
-          onClick={() => setIsModalOpen(true)}
-          style={{
-            background: '#f7fafc',
-            borderRadius: '1.25rem',
-            border: '2px dashed #cbd5e0',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            minHeight: '250px', // Match typical card height
-            gap: '1rem',
-            transition: 'all 0.2s ease',
-            opacity: 0.8
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.borderColor = '#48bb78';
-            e.currentTarget.style.color = '#48bb78';
-            e.currentTarget.style.background = '#f0fff4';
-            e.currentTarget.style.opacity = '1';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = '#cbd5e0';
-            e.currentTarget.style.color = '#a0aec0';
-            e.currentTarget.style.background = '#f7fafc';
-            e.currentTarget.style.opacity = '0.8';
-          }}
-        >
-          <div style={{
-            width: '60px',
-            height: '60px',
-            borderRadius: '50%',
-            border: '2px dashed currentColor',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '1.5rem',
-            color: 'inherit'
-          }}>
+        <CreateCard onClick={() => setIsModalOpen(true)}>
+          <DashedCircle>
             <FaPlus />
-          </div>
-          <span style={{ fontWeight: 600, fontSize: '1rem', color: '#718096', textAlign: 'center', padding: '0 1rem' }}>Haz click aquí para crear un nuevo cultivo</span>
-        </div>
+          </DashedCircle>
+          <span style={{ fontWeight: 600, fontSize: '1rem', color: 'inherit', textAlign: 'center', padding: '0 1rem' }}>Haz click aquí para crear un nuevo cultivo</span>
+        </CreateCard>
+
+
       </Grid>
 
       {/* Create Modal */}
-      {isModalOpen && (
-        <ModalOverlay>
-          <ModalContent>
+      {(isModalOpen || isClosingCreate) && (
+        <ModalOverlay
+          isClosing={isClosingCreate}
+          onAnimationEnd={() => {
+            if (isClosingCreate) {
+              setIsClosingCreate(false);
+              setIsModalOpen(false);
+            }
+          }}
+        >
+          <ModalContent isClosing={isClosingCreate}>
             <h2>Nuevo Cultivo</h2>
 
             <FormGroup>
               <label>Nombre del Cultivo</label>
               <input
                 type="text"
-                placeholder="Ej: Carpa Indoor 120x120"
+                placeholder="Complete el nombre de su cultivo (Ej: Locación)"
                 value={formData.name}
                 onChange={e => setFormData({ ...formData, name: e.target.value })}
               />
+              <p style={{ fontSize: '0.8rem', color: '#718096', marginTop: '0.5rem', lineHeight: '1.4' }}>
+                Aquí deberás listar tu cultivo como locación de cultivo, por ejemplo: <strong>Cultivo casa</strong>
+              </p>
             </FormGroup>
 
             <ModalActions>
-              <Button variant="secondary" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
-              <Button onClick={handleCreate}>Crear Cultivo</Button>
+              <Button variant="secondary" onClick={() => setIsClosingCreate(true)}>Cancelar</Button>
+              <Button onClick={handleCreate} disabled={isCreating}>
+                {isCreating ? 'Creando...' : 'Crear Cultivo'}
+              </Button>
             </ModalActions>
           </ModalContent>
         </ModalOverlay>
-      )
-      }
+      )}
       {/* Prompt Modal for Renaming */}
       <PromptModal
         isOpen={isEditOpen}
         title="Renombrar Cultivo"
-        initialValue={editingCrop?.name || ''}
-        placeholder="Nuevo nombre..."
+        initialValue={editingCrop?.name}
+        placeholder="Nombre del Cultivo"
         onClose={() => setIsEditOpen(false)}
         onConfirm={handleSaveCropName}
+        confirmButtonColor="green"
       />
 
       {/* Confirm Delete Modal (Protected) */}
       <DeleteProtectionModal
         isOpen={confirmOpen}
-        itemType="Cultivo/Spot"
+        itemType="Cultivo"
         itemName={cropToDelete?.name || ''}
         onClose={() => setConfirmOpen(false)}
         onConfirm={handleConfirmDelete}
+        isLoading={isDeleting}
       />
 
       {/* Color Picker Modal */}
@@ -681,6 +767,7 @@ const Crops: React.FC = () => {
         message={toastMessage}
         type={toastType}
         onClose={() => setToastOpen(false)}
+        animateOverlay={toastAnimate}
       />
     </Container >
   );

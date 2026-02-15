@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import styled, { createGlobalStyle } from 'styled-components';
+import styled, { createGlobalStyle, keyframes } from 'styled-components';
 import {
     FaHistory, FaBarcode, FaExchangeAlt, FaMinusCircle, FaEdit, FaTrash,
     FaCut, FaTimes, FaLevelUpAlt, FaPlus, FaAngleRight, FaAngleDown,
@@ -17,12 +17,17 @@ import { Room } from '../types/rooms';
 import QRCode from 'react-qr-code';
 import { TuyaManager } from '../components/TuyaManager';
 
+const fadeIn = keyframes`
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+`;
 
 const Container = styled.div`
   padding: 2rem;
   padding-top: 5rem;
   max-width: 1400px;
   margin: 0 auto;
+  animation: ${fadeIn} 0.5s ease-in-out;
 `;
 
 // --- New Environment Components ---

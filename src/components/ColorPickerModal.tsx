@@ -1,7 +1,27 @@
 import React from 'react';
-import styled from 'styled-components';
+import styled, { keyframes } from 'styled-components';
 
-const Overlay = styled.div`
+const fadeIn = keyframes`
+  from { opacity: 0; }
+  to { opacity: 1; }
+`;
+
+const fadeOut = keyframes`
+  from { opacity: 1; }
+  to { opacity: 0; }
+`;
+
+const scaleIn = keyframes`
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+`;
+
+const scaleOut = keyframes`
+  from { transform: scale(1); opacity: 1; }
+  to { transform: scale(0.95); opacity: 0; }
+`;
+
+const Overlay = styled.div<{ isClosing: boolean }>`
   position: fixed;
   top: 0;
   left: 0;
@@ -13,27 +33,17 @@ const Overlay = styled.div`
   justify-content: center;
   z-index: 2000;
   backdrop-filter: blur(4px);
-  animation: fadeIn 0.2s ease-out;
-
-  @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
+  animation: ${p => p.isClosing ? fadeOut : fadeIn} 0.2s ease-in-out forwards;
 `;
 
-const Content = styled.div`
+const Content = styled.div<{ isClosing: boolean }>`
   background: white;
   padding: 1.5rem;
   border-radius: 1rem;
   width: 90%;
   max-width: 320px;
   box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-  animation: scaleIn 0.2s ease-out;
-
-  @keyframes scaleIn {
-    from { transform: scale(0.95); opacity: 0; }
-    to { transform: scale(1); opacity: 1; }
-  }
+  animation: ${p => p.isClosing ? scaleOut : scaleIn} 0.2s ease-in-out forwards;
 `;
 
 const Header = styled.div`
@@ -82,48 +92,70 @@ const ColorButton = styled.button<{ color: string; isSelected: boolean }>`
 `;
 
 interface ColorPickerModalProps {
-    isOpen: boolean;
-    title?: string;
-    colors: string[];
-    selectedColor?: string;
-    onSelectColor: (color: string) => void;
-    onClose: () => void;
-    getColorHex: (colorName: string) => string;
+  isOpen: boolean;
+  title?: string;
+  colors: string[];
+  selectedColor?: string;
+  onSelectColor: (color: string) => void;
+  onClose: () => void;
+  getColorHex: (colorName: string) => string;
 }
 
 export const ColorPickerModal: React.FC<ColorPickerModalProps> = ({
-    isOpen,
-    title = "Elegir Color",
-    colors,
-    selectedColor,
-    onSelectColor,
-    onClose,
-    getColorHex
+  isOpen,
+  title = "Elegir Color",
+  colors,
+  selectedColor,
+  onSelectColor,
+  onClose,
+  getColorHex
 }) => {
-    if (!isOpen) return null;
+  const [isVisible, setIsVisible] = React.useState(false);
+  const [isClosing, setIsClosing] = React.useState(false);
 
-    return (
-        <Overlay>
-            <Content>
-                <Header>
-                    <h3>{title}</h3>
-                    <button onClick={onClose}>&times;</button>
-                </Header>
-                <ColorGrid>
-                    {colors.map(color => (
-                        <ColorButton
-                            key={color}
-                            color={getColorHex(color)}
-                            isSelected={selectedColor === color}
-                            onClick={() => {
-                                onSelectColor(color);
-                                onClose();
-                            }}
-                            title={color}
-                        />
-                    ))}
-                </ColorGrid>
-            </Content>
-        </Overlay>
-    );
+  React.useEffect(() => {
+    if (isOpen) {
+      setIsVisible(true);
+      setIsClosing(false);
+    } else {
+      setIsClosing(true);
+      const timer = setTimeout(() => {
+        setIsVisible(false);
+        setIsClosing(false);
+      }, 200); // Match animation duration
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen]);
+
+  if (!isVisible && !isOpen) return null;
+
+  const handleClose = () => {
+    setIsClosing(true);
+    setTimeout(onClose, 200);
+  };
+
+  return (
+    <Overlay isClosing={isClosing}>
+      <Content isClosing={isClosing}>
+        <Header>
+          <h3>{title}</h3>
+          <button onClick={handleClose}>&times;</button>
+        </Header>
+        <ColorGrid>
+          {colors.map(color => (
+            <ColorButton
+              key={color}
+              color={getColorHex(color)}
+              isSelected={selectedColor === color}
+              onClick={() => {
+                onSelectColor(color);
+                handleClose();
+              }}
+              title={color}
+            />
+          ))}
+        </ColorGrid>
+      </Content>
+    </Overlay>
+  );
 };

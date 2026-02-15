@@ -31,22 +31,14 @@ import './App.css';
 import Sidebar from './components/Sidebar';
 
 import { ChatWidget } from './components/AI/ChatWidget';
-
-const MainContent = styled.main`
-  margin-left: 260px;
-  padding: 2rem;
-  min-height: 100vh;
-  background-color: #f8fafc;
-  
-  @media (max-width: 768px) {
-    margin-left: 0;
-    padding: 1rem;
-    padding-top: 5rem; /* Space for MobileHeader */
-  }
-`;
+import PageTransition from './components/PageTransition';
+import { LoadingSpinner } from './components/LoadingSpinner';
+import { MainContent } from './components/MainContent';
 
 const RequireAuth: React.FC<{ children: React.ReactElement }> = ({ children }) => {
   const { user, isLoading } = useAuth();
+  const location = useLocation();
+
   useEffect(() => {
     // Init Notifications
     const initNotifications = async () => {
@@ -55,9 +47,14 @@ const RequireAuth: React.FC<{ children: React.ReactElement }> = ({ children }) =
     initNotifications();
   }, []);
 
-  if (isLoading) return null;
+  if (isLoading) return <LoadingSpinner fullScreen text="Iniciando..." duration={3000} />;
   if (!user) return <Navigate to="/login" replace />;
-  return children;
+
+  return (
+    <PageTransition key={location.key}>
+      {children}
+    </PageTransition>
+  );
 };
 
 function App() {

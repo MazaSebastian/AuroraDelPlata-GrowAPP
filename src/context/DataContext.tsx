@@ -13,7 +13,7 @@ interface DataContextType {
     tasks: Task[];
     stickies: any[];
     isLoading: boolean;
-    refreshData: () => Promise<void>;
+    refreshData: (isInitial?: boolean) => Promise<void>;
     updateTasks: () => Promise<void>;
     updateCrops: () => Promise<void>;
     updateRooms: () => Promise<void>;
@@ -78,14 +78,18 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
         }
     }, []);
 
-    const refreshData = useCallback(async () => {
-        // Should we set loading true here? Maybe not for silent refresh.
-        // For initial load, we want to know when it's done.
+    const refreshData = useCallback(async (isInitial = false) => {
+        // If initial load, ensure minimum time for branding animation (3s)
+        const minTimePromise = isInitial
+            ? new Promise(resolve => setTimeout(resolve, 3000))
+            : Promise.resolve();
+
         await Promise.all([
             fetchCrops(),
             fetchRooms(),
             fetchTasks(),
-            fetchStickies()
+            fetchStickies(),
+            minTimePromise
         ]);
     }, [fetchCrops, fetchRooms, fetchTasks, fetchStickies]);
 
@@ -93,7 +97,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
     useEffect(() => {
         if (user) {
             setIsLoading(true);
-            refreshData().finally(() => setIsLoading(false));
+            refreshData(true).finally(() => setIsLoading(false));
         } else {
             // If no user, maybe clear data or keep loading false
             setIsLoading(false);

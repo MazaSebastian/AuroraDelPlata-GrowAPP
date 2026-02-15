@@ -96,6 +96,7 @@ interface ConfirmModalProps {
   confirmText?: string;
   cancelText?: string;
   isDanger?: boolean;
+  isLoading?: boolean;
 }
 
 export const ConfirmModal: React.FC<ConfirmModalProps> = ({
@@ -106,17 +107,18 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   onConfirm,
   confirmText = 'Confirmar',
   cancelText = 'Cancelar',
-  isDanger = false
+  isDanger = false,
+  isLoading = false
 }) => {
 
   // Close on Escape key
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape' && !isLoading) onClose();
     };
     if (isOpen) window.addEventListener('keydown', handleEsc);
     return () => window.removeEventListener('keydown', handleEsc);
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, isLoading]);
 
   if (!isOpen) return null;
 
@@ -129,11 +131,16 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
         <h3>{title}</h3>
         <p>{message}</p>
         <ButtonGroup>
-          <Button onClick={onClose} variant="secondary">
+          <Button onClick={onClose} variant="secondary" disabled={isLoading}>
             {cancelText}
           </Button>
-          <Button onClick={onConfirm} variant={isDanger ? 'danger' : 'primary'}>
-            {confirmText}
+          <Button
+            onClick={onConfirm}
+            variant={isDanger ? 'danger' : 'primary'}
+            disabled={isLoading}
+            style={{ opacity: isLoading ? 0.7 : 1, cursor: isLoading ? 'wait' : 'pointer' }}
+          >
+            {isLoading ? 'Procesando...' : confirmText}
           </Button>
         </ButtonGroup>
       </Content>

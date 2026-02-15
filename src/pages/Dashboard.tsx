@@ -31,6 +31,11 @@ import { LoadingSpinner } from '../components/LoadingSpinner';
 
 // --- Styled Components (Premium Eco-Tech Theme) ---
 
+const fadeIn = keyframes`
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+`;
+
 const Container = styled.div`
   padding: 2rem;
   max-width: 1400px;
@@ -38,6 +43,7 @@ const Container = styled.div`
   min-height: 100vh;
   padding-top: 5rem; // Space for TopNav
   background-color: #f8fafc;
+  animation: ${fadeIn} 0.5s ease-in-out;
 `;
 
 const WelcomeHeader = styled.div`
@@ -549,7 +555,7 @@ const Dashboard: React.FC = () => {
 
 
   if (isLoading) {
-    return <LoadingSpinner text="Cargando panel..." fullScreen />;
+    return <LoadingSpinner text="Cargando panel..." fullScreen duration={3000} />;
   }
 
   return (

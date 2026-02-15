@@ -104,35 +104,119 @@ const BatchItemStyled = styled.div<{ cellSize: number }>`
   &:active { transform: scale(0.98); }
 `;
 
+// --- Tooltip Component ---
+const TooltipContainer = styled.div<{ visible: boolean; x: number; y: number }>`
+  position: fixed;
+  top: ${p => p.y}px;
+  left: ${p => p.x}px;
+  transform: translate(-50%, -100%);
+  background: white;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  padding: 0.5rem;
+  border-radius: 0.375rem;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: ${p => p.visible ? 1 : 0};
+  transition: opacity 0.2s ease-in-out;
+  margin-top: -8px;
+  min-width: 150px;
+  text-align: center;
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -5px;
+    border-width: 5px;
+    border-style: solid;
+    border-color: white transparent transparent transparent;
+  }
+`;
+
 const BatchItem = ({ batch, onClick, cellSize }: { batch: Batch; onClick?: (e: React.MouseEvent<HTMLDivElement>) => void; cellSize: number }) => {
+    const [tooltip, setTooltip] = React.useState<{ visible: boolean; x: number; y: number } | null>(null);
+    const timeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
+    const handleMouseEnter = (e: React.MouseEvent) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const x = rect.left + rect.width / 2;
+        const y = rect.top;
+
+        // Clear any pending hide
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+
+        setTooltip({ visible: true, x, y });
+    };
+
+    const handleMouseLeave = () => {
+        setTooltip(prev => prev ? { ...prev, visible: false } : null);
+        timeoutRef.current = setTimeout(() => {
+            setTooltip(null);
+        }, 200);
+    };
+
     // Hide details if too small
     if (cellSize < 50) {
         return (
-            <BatchItemStyled cellSize={cellSize} onClick={onClick} title={`${batch.tracking_code} - ${batch.genetic?.name}`}>
-                <div style={{ width: '80%', height: '80%', background: getGeneticColor(batch.genetic?.name || '').bg, borderRadius: '50%' }} />
-            </BatchItemStyled>
+            <>
+                <BatchItemStyled
+                    cellSize={cellSize}
+                    onClick={onClick}
+                    onMouseEnter={handleMouseEnter}
+                    onMouseLeave={handleMouseLeave}
+                >
+                    <div style={{ width: '80%', height: '80%', background: getGeneticColor(batch.genetic?.name || '').bg, borderRadius: '50%' }} />
+                </BatchItemStyled>
+                {tooltip && (
+                    <TooltipContainer visible={tooltip.visible} x={tooltip.x} y={tooltip.y}>
+                        <div style={{ fontWeight: 'bold', color: '#2f855a' }}>{batch.tracking_code}</div>
+                        <div style={{ fontSize: '0.8rem', color: '#718096' }}>{batch.genetic?.name}</div>
+                    </TooltipContainer>
+                )}
+            </>
         );
     }
 
     return (
-        <BatchItemStyled
-            cellSize={cellSize}
-            onClick={(e) => {
-                console.log("BatchItem Clicked", batch.tracking_code);
-                onClick?.(e);
-            }}
-            style={{ touchAction: 'manipulation' }}
-        >
-            <FaLeaf style={{ fontSize: cellSize < 70 ? '0.9rem' : '1.2rem', color: '#004c00', marginBottom: '0.2rem' }} />
-            <span style={{ fontSize: cellSize < 70 ? '0.6rem' : '0.7rem', fontWeight: 'bold', textAlign: 'center', lineHeight: 1.1 }}>
-                {batch.tracking_code || batch.name}
-            </span>
-            {batch.tracking_code && cellSize >= 70 && (
-                <span style={{ fontSize: '0.6rem', color: '#4a5568', background: 'rgba(255,255,255,0.7)', borderRadius: '4px', padding: '0 2px', marginTop: '2px' }}>
-                    {batch.genetic?.name?.substring(0, 10)}
+        <>
+            <BatchItemStyled
+                cellSize={cellSize}
+                onClick={(e) => {
+                    console.log("BatchItem Clicked", batch.tracking_code);
+                    onClick?.(e);
+                }}
+                style={{ touchAction: 'manipulation' }}
+                onMouseEnter={handleMouseEnter}
+                onMouseLeave={handleMouseLeave}
+            >
+                <FaLeaf style={{ fontSize: cellSize < 70 ? '0.9rem' : '1.2rem', color: '#004c00', marginBottom: '0.2rem' }} />
+                <span style={{ fontSize: cellSize < 70 ? '0.6rem' : '0.7rem', fontWeight: 'bold', textAlign: 'center', lineHeight: 1.1 }}>
+                    {batch.tracking_code || batch.name}
                 </span>
+                {batch.tracking_code && cellSize >= 70 && (
+                    <span style={{ fontSize: '0.6rem', color: '#4a5568', background: 'rgba(255,255,255,0.7)', borderRadius: '4px', padding: '0 2px', marginTop: '2px' }}>
+                        {batch.genetic?.name?.substring(0, 10)}
+                    </span>
+                )}
+            </BatchItemStyled>
+            {tooltip && (
+                <div style={{ position: 'fixed', left: 0, top: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 9999 }}>
+                    <TooltipContainer visible={tooltip.visible} x={tooltip.x} y={tooltip.y}>
+                        <div style={{ fontWeight: 'bold', color: '#2f855a', marginBottom: '0.25rem' }}>{batch.tracking_code || batch.name}</div>
+                        <div style={{ fontSize: '0.8rem', color: '#4a5568', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem' }}>
+                            <FaLeaf size={10} color="#48bb78" /> {batch.genetic?.name}
+                        </div>
+                        {batch.start_date && (
+                            <div style={{ fontSize: '0.7rem', color: '#a0aec0', marginTop: '0.25rem' }}>
+                                {new Date(batch.start_date).toLocaleDateString()}
+                            </div>
+                        )}
+                    </TooltipContainer>
+                </div>
             )}
-        </BatchItemStyled>
+        </>
     );
 };
 

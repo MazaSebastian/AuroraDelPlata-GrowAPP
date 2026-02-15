@@ -9,6 +9,8 @@ export const GlobalStyles = createGlobalStyle`
 
   html {
     scroll-behavior: smooth;
+    overflow-y: scroll; /* Force scrollbar track to stay visible */
+    background-color: #f8fafc; /* Match app background */
   }
 
   body {
@@ -22,25 +24,14 @@ export const GlobalStyles = createGlobalStyle`
     line-height: 1.6;
   }
 
-  /* Scrollbar personalizada */
+  /* Ocultar barra de scroll pero permitir desplazamiento */
+  html {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE/Edge */
+  }
+  
   ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-  }
-
-  ::-webkit-scrollbar-track {
-    background: #f1f5f9;
-    border-radius: 4px;
-  }
-
-  ::-webkit-scrollbar-thumb {
-    background: linear-gradient(135deg, #cbd5e1, #94a3b8);
-    border-radius: 4px;
-    transition: background 0.3s ease;
-  }
-
-  ::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(135deg, #94a3b8, #64748b);
+    display: none; /* Chrome/Safari/Webkit */
   }
 
   /* Selección de texto */

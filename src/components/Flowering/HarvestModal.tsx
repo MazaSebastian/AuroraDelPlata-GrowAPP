@@ -1,10 +1,12 @@
 import React, { useState, useMemo } from 'react';
-import styled from 'styled-components';
+import styled, { keyframes, css } from 'styled-components';
 import { Batch, Room } from '../../types/rooms';
 import { FaTimes, FaCut, FaCheck } from 'react-icons/fa';
+import { CustomSelect } from '../CustomSelect';
 
 interface HarvestModalProps {
     isOpen: boolean;
+    isClosing?: boolean;
     onClose: () => void;
     batches: Batch[]; // Batches in the current room
     rooms: Room[]; // Available rooms to potentially move to (Drying)
@@ -12,18 +14,25 @@ interface HarvestModalProps {
     overrideGroupName?: string;
 }
 
-const Overlay = styled.div`
+const fadeIn = keyframes`from { opacity: 0; } to { opacity: 1; }`;
+const fadeOut = keyframes`from { opacity: 1; } to { opacity: 0; }`;
+const scaleIn = keyframes`from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; }`;
+const scaleOut = keyframes`from { transform: scale(1); opacity: 1; } to { transform: scale(0.95); opacity: 0; }`;
+
+const Overlay = styled.div<{ $isClosing?: boolean }>`
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
   background: rgba(0,0,0,0.5); z-index: 1000;
   display: flex; align-items: center; justify-content: center;
   backdrop-filter: blur(2px);
+  animation: ${p => p.$isClosing ? fadeOut : fadeIn} 0.3s forwards;
 `;
 
-const Content = styled.div`
+const Content = styled.div<{ $isClosing?: boolean }>`
   background: white; padding: 0; border-radius: 1rem;
   width: 90%; max-width: 600px; max-height: 85vh;
   display: flex; flex-direction: column;
   box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+  animation: ${p => p.$isClosing ? scaleOut : scaleIn} 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 `;
 
 const Header = styled.div`
@@ -113,18 +122,12 @@ const Checkbox = styled.div<{ $checked: boolean }>`
   color: white; font-size: 0.8rem;
 `;
 
-const Select = styled.select`
-  width: 100%; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 0.5rem;
-  margin-bottom: 1.5rem; font-size: 1rem;
-`;
-
-export const HarvestModal: React.FC<HarvestModalProps> = ({ isOpen, onClose, batches, rooms, onConfirm, overrideGroupName }) => {
+export const HarvestModal: React.FC<HarvestModalProps> = ({ isOpen, isClosing, onClose, batches, rooms, onConfirm, overrideGroupName }) => {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [targetRoomId, setTargetRoomId] = useState<string>('');
     const [loading, setLoading] = useState(false);
 
-    // Initial Selection (Select All by default?)
-    // Let's start with empty or all? Usually harvest is selective or full. Let's default to ALL.
+    // Initial Selection (Select All by default)
     React.useEffect(() => {
         if (isOpen && batches.length > 0) {
             setSelectedIds(new Set(batches.map(b => b.id)));
@@ -135,6 +138,14 @@ export const HarvestModal: React.FC<HarvestModalProps> = ({ isOpen, onClose, bat
     const dryingRooms = useMemo(() => {
         return rooms.filter(r => ['drying', 'secado'].includes((r.type || '').toLowerCase()));
     }, [rooms]);
+
+    // Prepare Options for CustomSelect
+    const roomOptions = useMemo(() => {
+        return [
+            { value: "", label: "-- Mantener en sala actual (Solo cambiar estado) --" },
+            ...dryingRooms.map(r => ({ value: r.id, label: `${r.name} (Capacidad: ${r.capacity})` }))
+        ];
+    }, [dryingRooms]);
 
     // Group batches by Lote (Parent Batch) -> Genetic
     const groupedBatches = useMemo(() => {
@@ -153,8 +164,6 @@ export const HarvestModal: React.FC<HarvestModalProps> = ({ isOpen, onClose, bat
 
             // 3. Use custom group name if available, otherwise parent_batch name, otherwise fallback to Genetic
             const loteName = customGroupName || b.parent_batch?.name || `Lote ${b.genetic?.name || 'Desconocido'}`;
-
-            // Key: Just the Lote Name (User wants to group by Lote, ignoring genetic split if same lote)
             const groupKey = loteName;
 
             if (!groups[groupKey]) groups[groupKey] = [];
@@ -173,7 +182,6 @@ export const HarvestModal: React.FC<HarvestModalProps> = ({ isOpen, onClose, bat
     };
 
     const toggleGroup = (batchIds: string[]) => {
-        // If all selected, deselect all. Otherwise select all.
         const allSelected = batchIds.every(id => selectedIds.has(id));
         setSelectedIds(prev => {
             const next = new Set(prev);
@@ -190,33 +198,38 @@ export const HarvestModal: React.FC<HarvestModalProps> = ({ isOpen, onClose, bat
         setLoading(true);
         try {
             await onConfirm(Array.from(selectedIds), targetRoomId || undefined);
-            onClose();
+            // Parent handles loading state if needed, but we close here implies success?
+            // Actually parent usually reloads. We should wait for promise.
+            // onConfirm is async props.
         } catch (err) {
             console.error(err);
         } finally {
             setLoading(false);
+            onClose();
         }
     };
 
-    if (!isOpen) return null;
+    if (!isOpen && !isClosing) return null;
 
     return (
-        <Overlay>
-            <Content>
+        <Overlay $isClosing={isClosing}>
+            <Content $isClosing={isClosing}>
                 <Header>
                     <Title><FaCut /> Cosechar Plantas</Title>
                     <CloseButton onClick={onClose}><FaTimes /></CloseButton>
                 </Header>
                 <Body>
                     <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '0.5rem', color: '#4a5568' }}>
-                        Sala de Destino (Secado) <span style={{ fontWeight: 'normal', color: '#718096' }}>(Opcional)</span>
+                        Sala de Destino (Secado)
                     </label>
-                    <Select value={targetRoomId} onChange={e => setTargetRoomId(e.target.value)}>
-                        <option value="">-- Mantener en sala actual (Solo cambiar estado) --</option>
-                        {dryingRooms.map(r => (
-                            <option key={r.id} value={r.id}>{r.name} (Capacidad: {r.capacity})</option>
-                        ))}
-                    </Select>
+                    <div style={{ marginBottom: '1.5rem' }}>
+                        <CustomSelect
+                            value={targetRoomId}
+                            onChange={setTargetRoomId}
+                            options={roomOptions}
+                            placeholder="Seleccionar sala de destino..."
+                        />
+                    </div>
 
                     <div style={{ marginBottom: '1rem', fontWeight: 'bold', color: '#2d3748' }}>
                         Seleccionadas: {selectedIds.size} de {batches.length}

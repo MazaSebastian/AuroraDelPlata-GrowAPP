@@ -1,6 +1,6 @@
 import React from 'react';
 import styled from 'styled-components';
-import { FaExclamationTriangle } from 'react-icons/fa';
+import { FaExclamationTriangle, FaCircleNotch } from 'react-icons/fa';
 
 interface ConfirmationModalProps {
     isOpen: boolean;
@@ -11,6 +11,9 @@ interface ConfirmationModalProps {
     confirmText?: string;
     cancelText?: string;
     isDestructive?: boolean;
+    variant?: 'primary' | 'danger' | 'success';
+    isClosing?: boolean;
+    isLoading?: boolean;
 }
 
 export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
@@ -21,21 +24,32 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
     onCancel,
     confirmText = "Confirmar",
     cancelText = "Cancelar",
-    isDestructive = false
+    isDestructive = false,
+    variant = isDestructive ? 'danger' : 'primary',
+    isClosing = false,
+    isLoading = false
 }) => {
-    if (!isOpen) return null;
+    if (!isOpen && !isClosing) return null;
 
     return (
-        <Overlay>
-            <ModalContainer onClick={(e) => e.stopPropagation()}>
-                <IconWrapper $isDestructive={isDestructive}>
+        <Overlay isClosing={isClosing}>
+            <ModalContainer onClick={(e) => e.stopPropagation()} isClosing={isClosing}>
+                <IconWrapper $variant={variant}>
                     <FaExclamationTriangle size={24} />
                 </IconWrapper>
                 <Title>{title}</Title>
                 <Message>{message}</Message>
                 <ButtonGroup>
-                    <CancelButton onClick={onCancel}>{cancelText}</CancelButton>
-                    <ConfirmButton onClick={onConfirm} $isDestructive={isDestructive}>
+                    <CancelButton onClick={onCancel} disabled={isLoading}>
+                        {cancelText}
+                    </CancelButton>
+                    <ConfirmButton
+                        onClick={onConfirm}
+                        $variant={variant}
+                        disabled={isLoading}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+                    >
+                        {isLoading && <FaCircleNotch className="spin" />}
                         {confirmText}
                     </ConfirmButton>
                 </ButtonGroup>
@@ -44,7 +58,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
     );
 };
 
-const Overlay = styled.div`
+const Overlay = styled.div<{ isClosing?: boolean }>`
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
     background: rgba(0, 0, 0, 0.5);
@@ -53,15 +67,20 @@ const Overlay = styled.div`
     align-items: center;
     z-index: 2000;
     backdrop-filter: blur(2px);
-    animation: fadeIn 0.2s ease-out;
+    animation: ${props => props.isClosing ? 'fadeOut' : 'fadeIn'} 0.2s ease-out forwards;
 
     @keyframes fadeIn {
         from { opacity: 0; }
         to { opacity: 1; }
     }
+
+    @keyframes fadeOut {
+        from { opacity: 1; }
+        to { opacity: 0; }
+    }
 `;
 
-const ModalContainer = styled.div`
+const ModalContainer = styled.div<{ isClosing?: boolean }>`
     background: white;
     padding: 2rem;
     border-radius: 1rem;
@@ -73,17 +92,22 @@ const ModalContainer = styled.div`
     align-items: center;
     text-align: center;
     transform: translateY(0);
-    animation: slideUp 0.2s ease-out;
+    animation: ${props => props.isClosing ? 'slideDown' : 'slideUp'} 0.2s ease-out forwards;
 
     @keyframes slideUp {
         from { transform: translateY(20px); opacity: 0; }
         to { transform: translateY(0); opacity: 1; }
     }
+
+    @keyframes slideDown {
+        from { transform: translateY(0); opacity: 1; }
+        to { transform: translateY(20px); opacity: 0; }
+    }
 `;
 
-const IconWrapper = styled.div<{ $isDestructive: boolean }>`
-    background: ${props => props.$isDestructive ? '#fed7d7' : '#feebc8'};
-    color: ${props => props.$isDestructive ? '#c53030' : '#d69e2e'};
+const IconWrapper = styled.div<{ $variant: 'primary' | 'danger' | 'success' }>`
+    background: ${props => props.$variant === 'danger' ? '#fed7d7' : props.$variant === 'success' ? '#c6f6d5' : '#feebc8'};
+    color: ${props => props.$variant === 'danger' ? '#c53030' : props.$variant === 'success' ? '#2f855a' : '#d69e2e'};
     width: 50px;
     height: 50px;
     border-radius: 50%;
@@ -129,9 +153,9 @@ const CancelButton = styled(Button)`
     &:hover { background: #f7fafc; }
 `;
 
-const ConfirmButton = styled(Button) <{ $isDestructive: boolean }>`
-    background: ${props => props.$isDestructive ? '#e53e3e' : '#3182ce'};
+const ConfirmButton = styled(Button) <{ $variant: 'primary' | 'danger' | 'success' }>`
+    background: ${props => props.$variant === 'danger' ? '#e53e3e' : props.$variant === 'success' ? '#48bb78' : '#3182ce'};
     border: none;
     color: white;
-    &:hover { background: ${props => props.$isDestructive ? '#c53030' : '#2b6cb0'}; }
+    &:hover { background: ${props => props.$variant === 'danger' ? '#c53030' : props.$variant === 'success' ? '#38a169' : '#2b6cb0'}; }
 `;

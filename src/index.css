@@ -1,5 +1,10 @@
 /* Global styles for Aurora Del Plata App */
 
+/* Prevent layout shift by forcing scrollbar presence */
+html {
+  overflow-y: scroll;
+}
+
 /* Calendar Hover Effect */
 .calendar-day-hover:hover {
   background: #f7fafc !important;

@@ -18,6 +18,7 @@ import es from 'date-fns/locale/es';
 import {
   FaArrowLeft,
   FaCalendarAlt,
+  FaCircleNotch,
   FaSeedling,
   FaMapMarkerAlt,
   FaTint,
@@ -47,6 +48,8 @@ import { cropsService } from '../services/cropsService';
 
 import { roomsService } from '../services/roomsService';
 
+import { CustomDatePicker } from '../components/CustomDatePicker';
+import { CustomSelect } from '../components/CustomSelect';
 import {
   DndContext,
   DragOverlay,
@@ -78,6 +81,70 @@ import { ToastModal } from '../components/ToastModal';
 
 
 
+const fadeIn = keyframes`
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+`;
+
+const rotate = keyframes`
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+`;
+
+const FadeInWrapper = styled.div`
+  animation: ${fadeIn} 0.5s ease-in-out;
+  width: 100%;
+`;
+
+const CreateCard = styled.div`
+  background: #f7fafc;
+  border-radius: 1.25rem;
+  border: 2px dashed #cbd5e0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  min-height: 250px;
+  gap: 1rem;
+  transition: all 0.2s ease;
+  opacity: 0.8;
+  color: #a0aec0;
+  width: 100%;
+
+  &:hover {
+    border-color: #48bb78;
+    color: #48bb78;
+    background: #f0fff4;
+    opacity: 1;
+  }
+`;
+
+const DashedCircle = styled.div`
+  width: 60px;
+  height: 60px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  color: inherit;
+  transition: all 0.5s ease;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    border-radius: 50%;
+    border: 2px dashed currentColor;
+    transition: all 0.5s ease;
+  }
+
+  ${CreateCard}:hover &::before {
+    animation: ${rotate} 10s linear infinite;
+  }
+`;
+
 const Container = styled.div`
   padding: 2rem;
   max-width: 1200px;
@@ -85,6 +152,7 @@ const Container = styled.div`
   min-height: 100vh;
   padding-top: 5rem;
   background-color: #f8fafc;
+  animation: ${fadeIn} 0.5s ease-in-out;
 
   @media (max-width: 768px) {
     padding: 1rem;
@@ -142,6 +210,19 @@ const CropTitle = styled.h1`
   svg { color: #38a169; }
 `;
 
+// Removing duplicate styled components if they exist here.
+// The previous multi_replace might have inserted them before `const Container`.
+// I need to be careful not to double delete or leave duplicates.
+// I will check the file content in `view_file` output.
+// It seems `fadeIn` etc were already defined around line 82?
+// Error says: "Cannot redeclare block-scoped variable 'fadeIn' ... at line 82 ... and line 206".
+// So I inserted them at line 150 (which pushed down to ~200) but they were already at 82.
+// I should remove the NEW definitions I added around line 203.
+
+// Wait, I can't easily validly remove a chunk without knowing EXACT content.
+// I will read the file to confirm locations of duplicates.
+
+
 
 const MetaGrid = styled.div`
   display: flex;
@@ -164,28 +245,54 @@ const MetaGrid = styled.div`
 
 
 
-const ModalOverlay = styled.div`
+const fadeOut = keyframes`
+  from { opacity: 1; }
+  to { opacity: 0; }
+`;
+
+const scaleIn = keyframes`
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+`;
+
+const scaleOut = keyframes`
+  from { transform: scale(1); opacity: 1; }
+  to { transform: scale(0.95); opacity: 0; }
+`;
+
+const ModalOverlay = styled.div<{ isClosing?: boolean }>`
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
   background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(4px);
   display: flex;
-  justify-content: center;
   align-items: center;
+  justify-content: center;
   z-index: 1000;
+  backdrop-filter: blur(4px);
+  animation: ${p => p.isClosing ? fadeOut : fadeIn} 0.2s ease-in-out forwards;
 `;
 
-const Modal = styled.div`
+const Modal = styled.div<{ isClosing?: boolean }>`
   background: white;
+  padding: 2rem;
+  border-radius: 1.5rem;
   width: 90%;
   max-width: 500px;
-  border-radius: 1.5rem;
-  padding: 2rem;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  animation: ${p => p.isClosing ? scaleOut : scaleIn} 0.2s ease-in-out forwards;
+  max-height: 90vh;
+  overflow-y: auto;
   position: relative;
+`;
+
+const ModalActions = styled.div`
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  margin-top: 2rem;
 `;
 
 const ModalHeader = styled.div`
@@ -786,28 +893,41 @@ const CropDetail: React.FC = () => {
   // eventsMap removed as unused
 
   const [rooms, setRooms] = useState<any[]>([]);
+  const [isLoadingRooms, setIsLoadingRooms] = useState(true);
+
 
   // New Room Form
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
+  const [isRoomModalClosing, setIsRoomModalClosing] = useState(false);
+
+  const handleCloseRoomModal = () => {
+    setIsRoomModalClosing(true);
+    setTimeout(() => {
+      setIsRoomModalOpen(false);
+      setIsRoomModalClosing(false);
+    }, 200); // Match animation duration
+  };
   const [roomForm, setRoomForm] = useState<{
     name: string;
-    type: 'vegetation' | 'flowering' | 'drying' | 'clones' | 'mother' | 'germination' | 'living_soil';
-    medium: 'maceta' | 'bandeja' | 'bunker';
-    totalMacetas: number;
-    macetaGeneticId: string;
-    startDate: string;
-    operationalDays?: number; // New field
-    tablesList: { id: number; plants: number; geneticId: string; originType?: 'seed' | 'clone' | 'mother'; originBatchId?: string }[];
+    type: 'vegetation' | 'flowering' | 'drying' | 'curing' | 'clones' | 'germination' | 'mother' | 'living_soil';
+    medium?: 'maceta' | 'bandeja' | 'bunker';
+    totalMacetas?: number;
+    macetaGeneticId?: string;
+    startDate?: string;
+    operationalDays?: number; // Optional: Only for alerts
+    tablesList?: { id: string; name: string }[]; // For Esquejera/Clones if complex
   }>({
     name: '',
     type: 'vegetation',
-    medium: 'maceta',
+    medium: 'maceta', // default
     totalMacetas: 0,
     macetaGeneticId: '',
-    startDate: new Date().toISOString().split('T')[0],
-    operationalDays: undefined, // Default empty
+    startDate: new Date().toISOString().split('T')[0], // Default today
+    operationalDays: undefined,
     tablesList: []
   });
+
+  const [isCreatingRoom, setIsCreatingRoom] = useState(false);
 
   const [genetics, setGenetics] = useState<any[]>([]);
 
@@ -936,15 +1056,7 @@ const CropDetail: React.FC = () => {
     fetchGenetics();
   }, []);
 
-  // Finish Crop Logic
-  const [isFinishModalOpen, setIsFinishModalOpen] = useState(false);
-  const [roomToFinish, setRoomToFinish] = useState<any | null>(null);
-  const [harvestForm, setHarvestForm] = useState<{
-    batchYields: Record<string, string>;
-    unit: 'g' | 'kg';
-    notes: string;
-  }>({ batchYields: {}, unit: 'g', notes: '' });
-  const [harvestPhoto, setHarvestPhoto] = useState<File | null>(null);
+
 
   // Expanded State for Room Batch Lists
   const [expandedRooms, setExpandedRooms] = useState<Record<string, boolean>>({});
@@ -971,35 +1083,74 @@ const CropDetail: React.FC = () => {
 
 
 
-  const loadRooms = React.useCallback(async (spotId: string) => {
+  const loadRooms = React.useCallback(async (spotId: string, minLoadingTime = 0) => {
+    setIsLoadingRooms(true);
+    const start = Date.now();
+
     const { roomsService } = await import('../services/roomsService');
     const data = await roomsService.getRooms(spotId);
+
+    // Calculate remaining time
+    const elapsed = Date.now() - start;
+    const remaining = Math.max(0, minLoadingTime - elapsed);
+
+    if (remaining > 0) {
+      await new Promise(resolve => setTimeout(resolve, remaining));
+    }
+
     setRooms(data);
+    setIsLoadingRooms(false);
   }, []);
 
-  const loadCrop = React.useCallback(async (cropId: string) => {
+  const loadCrop = React.useCallback(async (cropId: string, isInitial = false) => {
     try {
       console.log("Loading spot...", cropId);
-      const data = await cropsService.getCropById(cropId);
+
+      const loadPromise = async () => {
+        const data = await cropsService.getCropById(cropId);
+        if (!data) throw new Error("Spot not found");
+        return data;
+      };
+
+      const minTimePromise = isInitial
+        ? new Promise(resolve => setTimeout(resolve, 1500))
+        : Promise.resolve();
+
+      // Run fetching and timer in parallel
+      const [data] = await Promise.all([
+        loadPromise(),
+        // Load rooms in parallel too if we want, or sequentially?
+        // Previous logic: load rooms BEFORE setting crop.
+        // Let's keep loadRooms separate or inside?
+        // To ensure 3s *total* wait, we should include the timer in the main wait.
+        minTimePromise
+      ]);
+
       console.log("Crop data loaded:", data);
 
-      if (!data) {
-        console.warn("Spot not found, redirecting...");
-        navigate('/crops'); // Redirect if not found
-        return;
-      }
+      // Load rooms BEFORE setting crop to avoid double loading screens (Split flash)
+      await loadRooms(cropId);
       setCrop(data);
-      loadRooms(cropId);
     } catch (error) {
       console.error("Error loading spot:", error);
       navigate('/crops'); // Fallback redirect
     }
   }, [navigate, loadRooms]);
 
+  // ... skip until handleConfirmDeleteRoom
+
+  // ...
+
+  // ...
+
+
+
   const handleCreateRoom = async () => {
     console.log("handleCreateRoom called");
     console.log("Form Data:", roomForm);
     console.log("Crop ID:", id);
+
+    if (isCreatingRoom) return;
 
     if (!roomForm.name || !id || (!roomForm.operationalDays && roomForm.type !== 'living_soil')) {
       console.error("Missing name, ID, or operational days");
@@ -1007,41 +1158,51 @@ const CropDetail: React.FC = () => {
       return;
     }
 
-    // Validate Duplicate Name
-    const isDuplicate = rooms.some(r => r.name.toLowerCase().trim() === roomForm.name.toLowerCase().trim());
-    if (isDuplicate) {
-      showToast("Ya existe una sala con este nombre. Por favor, elige otro nombre.", 'error');
-      return;
-    }
+    try {
+      setIsCreatingRoom(true);
 
-    const { roomsService } = await import('../services/roomsService');
-    const newRoom = await roomsService.createRoom({
-      name: roomForm.name,
-      type: roomForm.type as any,
-      medium: 'maceta', // Default for now, irrelevant
-      capacity: 0,
-      spot_id: id,
-      start_date: roomForm.startDate,
-      operational_days: roomForm.operationalDays ? Number(roomForm.operationalDays) : undefined // Pass to service
-    });
+      // Validate Duplicate Name
+      const isDuplicate = rooms.some(r => r.name.toLowerCase().trim() === roomForm.name.toLowerCase().trim());
+      if (isDuplicate) {
+        showToast("Ya existe una sala con este nombre. Por favor, elige otro nombre.", 'error');
+        setIsCreatingRoom(false);
+        return;
+      }
 
-    if (newRoom) {
-      console.log("Room created successfully:", newRoom);
-      loadRooms(id);
-      setIsRoomModalOpen(false);
-      setRoomForm({
-        name: '',
-        type: 'vegetation',
-        medium: 'maceta',
-        totalMacetas: 0,
-        macetaGeneticId: '',
-        startDate: new Date().toISOString().split('T')[0],
-        operationalDays: undefined,
-        tablesList: []
+      const { roomsService } = await import('../services/roomsService');
+      const newRoom = await roomsService.createRoom({
+        name: roomForm.name,
+        type: roomForm.type as any,
+        medium: 'maceta', // Default for now, irrelevant
+        capacity: 0,
+        spot_id: id,
+        start_date: roomForm.startDate,
+        operational_days: roomForm.operationalDays ? Number(roomForm.operationalDays) : undefined // Pass to service
       });
-    } else {
-      console.error("Failed to create room");
-      showToast("Error al crear la sala.", 'error');
+
+      if (newRoom) {
+        console.log("Room created successfully:", newRoom);
+        handleCloseRoomModal(); // Close first!
+        await loadRooms(id, 2000); // Then load with delay
+        setRoomForm({
+          name: '',
+          type: 'vegetation',
+          medium: 'maceta',
+          totalMacetas: 0,
+          macetaGeneticId: '',
+          startDate: new Date().toISOString().split('T')[0],
+          operationalDays: undefined,
+          tablesList: []
+        });
+      } else {
+        console.error("Failed to create room");
+        showToast("Error al crear la sala.", 'error');
+      }
+    } catch (error) {
+      console.error("Error creating room:", error);
+      showToast("Ocurrió un error al crear la sala.", 'error');
+    } finally {
+      setIsCreatingRoom(false);
     }
   };
 
@@ -1051,14 +1212,21 @@ const CropDetail: React.FC = () => {
     setRoomToFinish(room);
 
     // Initialize yields for each batch
-    const initialYields: Record<string, string> = {};
+    const yields: Record<string, number> = {};
     if (room.batches) {
       room.batches.forEach((b: any) => {
-        initialYields[b.id] = '';
+        yields[b.id] = 0;
       });
     }
-
-    setHarvestForm({ batchYields: initialYields, unit: 'g', notes: '' });
+    setHarvestForm({
+      date: new Date().toISOString().split('T')[0],
+      totalWeight: 0,
+      notes: '',
+      dryingDays: 14,
+      dryingConditions: '20°C / 55% HR',
+      batchYields: yields,
+      unit: 'g'
+    });
     setHarvestPhoto(null);
     setIsFinishModalOpen(true);
   };
@@ -1066,80 +1234,106 @@ const CropDetail: React.FC = () => {
   const handleConfirmFinish = async () => {
     if (!roomToFinish || !crop) return;
 
-    // Validate all batches have values
-    const batches = roomToFinish.batches || [];
-    if (batches.length === 0) {
-      alert("No hay lotes en esta sala para finalizar.");
+    // Validate
+    if (Object.values(harvestForm.batchYields).some(v => v < 0)) {
+      alert("Los pesos no pueden ser negativos.");
       return;
     }
 
-    for (const batch of batches) {
-      if (!harvestForm.batchYields[batch.id]) {
-        alert(`Por favor ingresa el rendimiento para el lote ${batch.name}`);
-        return;
+    try {
+      setIsFinishing(true);
+      const { roomsService } = await import('../services/roomsService');
+      const { dispensaryService } = await import('../services/dispensaryService');
+      const { cropsService } = await import('../services/cropsService');
+
+      let uploadedPhotoUrl = undefined;
+      if (harvestPhoto) {
+        uploadedPhotoUrl = await dispensaryService.uploadHarvestPhoto(harvestPhoto);
       }
-    }
 
-    const { dispensaryService } = await import('../services/dispensaryService');
-    const { roomsService } = await import('../services/roomsService');
+      const batches = roomToFinish.batches || [];
 
-    // Upload photo first if exists
-    let uploadedPhotoUrl = null;
-    if (harvestPhoto) {
-      uploadedPhotoUrl = await dispensaryService.uploadHarvestPhoto(harvestPhoto);
-    }
+      // Process each batch
+      for (const batch of batches) {
+        const amount = harvestForm.batchYields[batch.id];
+        // Logic handles if amount is missing or invalid in loop
+        if (!amount || amount < 0) continue;
 
-    // Process each batch
-    for (const batch of batches) {
-      const amount = parseFloat(harvestForm.batchYields[batch.id]);
-      if (isNaN(amount) || amount < 0) continue;
+        // 1. Log Harvest
+        const harvestLogId = await cropsService.logHarvest({
+          cropId: crop.id,
+          roomName: roomToFinish.name,
+          amount: amount,
+          unit: harvestForm.unit || 'g',
+          notes: `${harvestForm.notes} - Lote: ${batch.name} (${batch.genetic?.name || 'Unknown'})`
+        });
 
-      // 1. Log Harvest (One per batch to keep track of mechanics/genetics)
-      const harvestLogId = await cropsService.logHarvest({
-        cropId: crop.id,
-        roomName: roomToFinish.name,
-        amount: amount,
-        unit: harvestForm.unit,
-        notes: `${harvestForm.notes} - Lote: ${batch.name} (${batch.genetic?.name || 'Unknown'})`
-      });
+        if (harvestLogId) {
+          // 2. Create Dispensary Batch
+          try {
+            await dispensaryService.createFromHarvest({
+              cropId: crop.id,
+              harvestLogId: harvestLogId,
+              strainName: batch.genetic?.name || batch.name || 'Unknown Strain',
+              amount: amount,
+              unit: harvestForm.unit || 'g',
+              originalBatchCode: batch.name,
+              photoUrl: uploadedPhotoUrl || undefined
+            });
 
-      if (harvestLogId) {
-        // 2. Create Dispensary Batch
-        try {
-          await dispensaryService.createFromHarvest({
-            cropId: crop.id,
-            harvestLogId: harvestLogId,
-            strainName: batch.genetic?.name || batch.name || 'Unknown Strain',
-            amount: amount,
-            unit: harvestForm.unit,
-            originalBatchCode: batch.name,
-            photoUrl: uploadedPhotoUrl || undefined // Use variable from outside
-          });
-
-          // 3. Delete the original Batch from Batches table (Clean up)
-          await roomsService.deleteBatch(batch.id);
-
-        } catch (err) {
-          console.error(`Error creating dispensary batch for ${batch.name}:`, err);
+            // 3. Delete Batch
+            await roomsService.deleteBatch(batch.id);
+          } catch (err) {
+            console.error(`Error creating dispensary batch for ${batch.name}:`, err);
+          }
         }
       }
-    }
 
-    // 3. Delete Room (Finish Cycle)
-    const deleteSuccess = await roomsService.deleteRoom(roomToFinish.id);
-    if (deleteSuccess) {
-      setIsFinishModalOpen(false);
-      if (id) loadRooms(id);
-      // Optional: Show summary alert
-      // alert(`✅ Cultivo finalizado. Total: ${totalAmount}${harvestForm.unit}`);
-    } else {
+      // Finish Room (Delete)
+      const success = await roomsService.deleteRoom(roomToFinish.id);
+
+      if (success) {
+        setRoomToFinish(null);
+        setIsFinishModalOpen(false); // Close first
+        if (id) await loadRooms(id, 2000); // Wait 2s
+      } else {
+        alert("Error al finalizar la sala.");
+      }
+
+    } catch (error) {
+      console.error("Error finishing room:", error);
       alert("Error al finalizar la sala.");
+    } finally {
+      setIsFinishing(false);
     }
   };
+
+  const [isFinishing, setIsFinishing] = useState(false);
+  const [roomToFinish, setRoomToFinish] = useState<any>(null);
+  const [isFinishModalOpen, setIsFinishModalOpen] = useState(false);
+  const [harvestPhoto, setHarvestPhoto] = useState<File | null>(null);
+  const [harvestForm, setHarvestForm] = useState<{
+    date: string;
+    totalWeight: number;
+    notes: string;
+    dryingDays: number;
+    dryingConditions: string;
+    batchYields: Record<string, number>;
+    unit: 'g' | 'kg';
+  }>({
+    date: '',
+    totalWeight: 0,
+    notes: '',
+    dryingDays: 14,
+    dryingConditions: '',
+    batchYields: {},
+    unit: 'g'
+  });
 
   // Confirm Modal State
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [roomToDelete, setRoomToDelete] = useState<{ id: string, name: string } | null>(null);
+  const [isDeletingRoom, setIsDeletingRoom] = useState(false);
 
   const handleDeleteRoom = (e: React.MouseEvent, roomId: string, roomName: string) => {
     e.stopPropagation();
@@ -1150,17 +1344,22 @@ const CropDetail: React.FC = () => {
   const handleConfirmDeleteRoom = async () => {
     if (!roomToDelete) return;
 
+    setIsDeletingRoom(true);
     const { roomsService } = await import('../services/roomsService');
     const success = await roomsService.deleteRoom(roomToDelete.id);
+    setIsDeletingRoom(false);
+
     if (success) {
-      if (id) loadRooms(id);
-      setConfirmOpen(false);
+      setConfirmOpen(false); // Close modal FIRST
       setRoomToDelete(null);
+      if (id) await loadRooms(id, 2000); // THEN trigger loading state with 2s delay
     } else {
       setErrorMessage("Error al eliminar la sala.");
       setIsErrorModalOpen(true);
     }
   };
+
+
 
   // Edit Modal State
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -1360,7 +1559,7 @@ const CropDetail: React.FC = () => {
 
   useEffect(() => {
     if (id) {
-      loadCrop(id);
+      loadCrop(id, true);
     }
   }, [id, loadCrop]);
 
@@ -1508,7 +1707,7 @@ const CropDetail: React.FC = () => {
 
 
   if (!crop) {
-    return <LoadingSpinner text="Cargando detalles del cultivo..." fullScreen />;
+    return <LoadingSpinner text="Cargando detalles del cultivo..." fullScreen duration={1500} />;
   }
 
 
@@ -1565,7 +1764,7 @@ const CropDetail: React.FC = () => {
       <div style={{ marginBottom: '3rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
           <h2 style={{ fontSize: '1.5rem', color: '#2d3748', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <FaMapMarkerAlt /> Salas
+            Salas de Cultivo Activas
           </h2>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
 
@@ -1573,426 +1772,446 @@ const CropDetail: React.FC = () => {
           </div>
         </div>
 
-        {rooms.length === 0 ? (
-          <div style={{ padding: '2rem', background: 'white', borderRadius: '1rem', border: '1px dashed #e2e8f0', textAlign: 'center', color: '#718096' }}>
-            <p>No hay salas creadas en este Spot.</p>
-            <button
-              onClick={() => setIsRoomModalOpen(true)}
-              style={{ color: '#3182ce', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', fontWeight: 600 }}
-            >
-              Crear la primera sala
-            </button>
+        {isLoadingRooms ? (
+          <div style={{ padding: '2rem', textAlign: 'center', color: '#718096' }}>
+            <LoadingSpinner text="Cargando salas..." />
           </div>
         ) : (
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-            <SortableContext items={rooms.map(r => r.id)} strategy={verticalListSortingStrategy}>
-              <MasonryContainer>
-                {rooms.map(room => {
-                  // Calculate logic
-                  let weekInfo = "";
-                  let startDateDisplay = "-";
-                  let daysToFlip = null;
+          <FadeInWrapper>
+            {rooms.length === 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%' }}>
 
-                  // Determine effective start date (Priority: Earliest Active Batch > Room Start Date)
-                  let effectiveStartDate = room.start_date;
-                  let activeBatches: any[] = [];
+                <div style={{
+                  padding: '2rem',
+                  background: '#fff',
+                  borderRadius: '1rem',
+                  border: '1px solid #e2e8f0',
+                  textAlign: 'center',
+                  color: '#718096',
+                  marginBottom: '1rem'
+                }}>
+                  <p style={{ fontSize: '1.1rem', fontWeight: 500, margin: 0 }}>No hay salas/cultivos activos</p>
+                </div>
 
-                  if (room.batches && room.batches.length > 0) {
-                    activeBatches = room.batches.filter((b: any) => b.stage === room.type);
-                    if (activeBatches.length > 0) {
-                      const earliestBatchDate = activeBatches.reduce((min: string, b: any) => b.start_date < min ? b.start_date : min, activeBatches[0].start_date);
-                      effectiveStartDate = earliestBatchDate;
-                    }
-                  }
+                <CreateCard onClick={() => setIsRoomModalOpen(true)}>
+                  <DashedCircle>
+                    <FaPlus />
+                  </DashedCircle>
+                  <span style={{ fontWeight: 600, fontSize: '1rem', color: 'inherit', textAlign: 'center', padding: '0 1rem' }}>
+                    Crear la primera sala
+                  </span>
+                </CreateCard>
+              </div>
+            ) : (
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+                <SortableContext items={rooms.map(r => r.id)} strategy={verticalListSortingStrategy}>
+                  <MasonryContainer>
+                    {rooms.map(room => {
+                      // Calculate logic
+                      let weekInfo = "";
+                      let startDateDisplay = "-";
+                      let daysToFlip = null;
 
-                  // --- OPERATIONAL DAYS LOGIC ---
-                  let daysRemainingString = null;
-                  let isPeriodOver = false;
-                  let alertLevel = 0; // 0: None, 1: Badge Red, 2: Border Red, 3: Heartbeat
+                      // Determine effective start date (Priority: Earliest Active Batch > Room Start Date)
+                      let effectiveStartDate = room.start_date;
+                      let activeBatches: any[] = [];
 
-                  if (room.operational_days && room.start_date) {
-                    const start = new Date(room.start_date);
-                    const now = new Date();
-                    const end = new Date(start);
-                    end.setDate(start.getDate() + room.operational_days);
-
-                    const diffDays = differenceInDays(end, now);
-
-                    if (diffDays <= 0) {
-                      isPeriodOver = true;
-                      daysRemainingString = "Periodo finalizado";
-                      alertLevel = 3; // Finished = Critical
-                    } else {
-                      daysRemainingString = `${diffDays} días restantes`;
-                      if (diffDays <= 3) alertLevel = 3;
-                      else if (diffDays <= 5) alertLevel = 2;
-                      else if (diffDays <= 7) alertLevel = 1;
-                    }
-                  }
-
-
-                  // --- ESQUEJERA LOGIC: Genetic Breakdown ---
-                  let geneticBreakdown: Record<string, number> | null = null;
-                  if (room.type === 'clones' && room.batches) {
-                    geneticBreakdown = {};
-                    room.batches.forEach((b: any) => {
-                      const gName = b.genetic?.name || 'Desconocida';
-                      geneticBreakdown![gName] = (geneticBreakdown![gName] || 0) + b.quantity;
-                    });
-                  }
-
-                  // Calculate Display Date & Weeks
-                  if (effectiveStartDate) {
-                    // Parse manually to avoid UTC conversion issues (e.g. 2026-01-30 becoming 29th in GMT-3)
-                    const [y, m, d] = effectiveStartDate.split('T')[0].split('-').map(Number);
-                    const dateObj = new Date(y, m - 1, d); // Local midnight
-
-                    startDateDisplay = format(dateObj, 'dd/MM/yyyy');
-                    const weeks = differenceInWeeks(new Date(), dateObj) + 1;
-                    weekInfo = `Semana ${weeks}`;
-                  }
-
-                  // Countdown Logic (Only for Vegetation with Genetics)
-                  if (room.type === 'vegetation' && activeBatches.length > 0) {
-                    const firstBatch = activeBatches[0];
-                    if (firstBatch && firstBatch.genetic_id) {
-                      const genetic = genetics.find(g => g.id === firstBatch.genetic_id);
-                      if (genetic && genetic.vegetative_weeks && effectiveStartDate) {
-                        const targetDate = addWeeks(new Date(effectiveStartDate), genetic.vegetative_weeks);
-                        daysToFlip = differenceInDays(targetDate, new Date());
+                      if (room.batches && room.batches.length > 0) {
+                        activeBatches = room.batches.filter((b: any) => b.stage === room.type);
+                        if (activeBatches.length > 0) {
+                          const earliestBatchDate = activeBatches.reduce((min: string, b: any) => b.start_date < min ? b.start_date : min, activeBatches[0].start_date);
+                          effectiveStartDate = earliestBatchDate;
+                        }
                       }
-                    }
-                  }
 
-                  // --- CYCLE CALCULATION FOR PROGRESS BAR ---
+                      // --- OPERATIONAL DAYS LOGIC ---
+                      let daysRemainingString = null;
+                      let isPeriodOver = false;
+                      let alertLevel = 0; // 0: None, 1: Badge Red, 2: Border Red, 3: Heartbeat
 
-                  let vegeWidth = 0;
-                  let floraWidth = 0;
-                  let currentStageProgress = 0; // % within the total bar
-                  let activeBatchForCycle = room.batches && room.batches.length > 0 ? room.batches.find((b: any) => b.stage === room.type) : null;
-                  let cycleGenetic = activeBatchForCycle ? genetics.find(g => g.id === activeBatchForCycle.genetic_id) : null;
+                      if (room.operational_days && room.start_date) {
+                        const start = new Date(room.start_date);
+                        const now = new Date();
+                        const end = new Date(start);
+                        end.setDate(start.getDate() + room.operational_days);
 
-                  if (activeBatchForCycle && cycleGenetic) {
-                    const startDate = new Date(activeBatchForCycle.start_date);
-                    const today = new Date();
-                    const weeksPassed = Math.max(0, differenceInWeeks(today, startDate));
+                        const diffDays = differenceInDays(end, now);
 
-                    // Default estima: 4 weeks vege, 9 weeks flora (if no genetics)
-                    const estVege = cycleGenetic.vegetative_weeks || 4;
-                    const estFlora = cycleGenetic.flowering_weeks || 9;
-                    const totalEstWeeks = estVege + estFlora;
-
-                    // Calculate widths relative to total
-                    vegeWidth = (estVege / totalEstWeeks) * 100;
-                    floraWidth = (estFlora / totalEstWeeks) * 100;
-
-                    // Find current position logic...
-                    // Simplified: use total weeks passed from start_date / total weeks
-                    const totalProgress = (weeksPassed / totalEstWeeks) * 100;
-                    currentStageProgress = Math.min(100, totalProgress);
-                  }
+                        if (diffDays <= 0) {
+                          isPeriodOver = true;
+                          daysRemainingString = "Periodo finalizado";
+                          alertLevel = 3; // Finished = Critical
+                        } else {
+                          daysRemainingString = `${diffDays} días restantes`;
+                          if (diffDays <= 3) alertLevel = 3;
+                          else if (diffDays <= 5) alertLevel = 2;
+                          else if (diffDays <= 7) alertLevel = 1;
+                        }
+                      }
 
 
+                      // --- ESQUEJERA LOGIC: Genetic Breakdown ---
+                      let geneticBreakdown: Record<string, number> | null = null;
+                      if (room.type === 'clones' && room.batches) {
+                        geneticBreakdown = {};
+                        room.batches.forEach((b: any) => {
+                          const gName = b.genetic?.name || 'Desconocida';
+                          geneticBreakdown![gName] = (geneticBreakdown![gName] || 0) + b.quantity;
+                        });
+                      }
 
+                      // Calculate Display Date & Weeks
+                      if (effectiveStartDate) {
+                        // Parse manually to avoid UTC conversion issues (e.g. 2026-01-30 becoming 29th in GMT-3)
+                        const [y, m, d] = effectiveStartDate.split('T')[0].split('-').map(Number);
+                        const dateObj = new Date(y, m - 1, d); // Local midnight
 
-                  return (
-                    <SortableRoomItem key={room.id} room={room}>
-                      <div
-                        onClick={() => navigate(`/rooms/${room.id}`)}
-                        style={{
-                          // Removed wrapping explicit div styles as they are now handled by RoomCard or moved
-                          cursor: 'pointer'
-                        }}
-                      >
-                        <div style={{
-                          position: 'absolute',
-                          top: 0,
-                          left: 0,
-                          right: 0,
-                          height: '4px',
-                          background: room.type === 'vegetation' ? '#48bb78' // Green
-                            : room.type === 'flowering' ? '#ed8936' // Orange
-                              : room.type === 'clones' ? '#63b3ed' // Blue
-                                : room.type === 'living_soil' ? '#319795' // Teal
-                                  : room.type === 'mother' ? '#d53f8c' // Pink
-                                    : room.type === 'germination' ? '#9ae6b4' // Light Green
-                                      : '#ecc94b' // Yellow (Default)
-                        }} />
+                        startDateDisplay = format(dateObj, 'dd/MM/yyyy');
+                        const weeks = differenceInWeeks(new Date(), dateObj) + 1;
+                        weekInfo = `Semana ${weeks}`;
+                      }
 
-                        <div style={{ display: 'flex', flexDirection: 'column', marginBottom: '1rem', marginTop: '3.5rem' }}>
-                          <h3 style={{ margin: 0, color: '#2d3748', fontSize: '1.25rem', fontWeight: 800, paddingRight: '140px', wordBreak: 'break-word' }}>{room.name}</h3>
+                      // Countdown Logic (Only for Vegetation with Genetics)
+                      if (room.type === 'vegetation' && activeBatches.length > 0) {
+                        const firstBatch = activeBatches[0];
+                        if (firstBatch && firstBatch.genetic_id) {
+                          const genetic = genetics.find(g => g.id === firstBatch.genetic_id);
+                          if (genetic && genetic.vegetative_weeks && effectiveStartDate) {
+                            const targetDate = addWeeks(new Date(effectiveStartDate), genetic.vegetative_weeks);
+                            daysToFlip = differenceInDays(targetDate, new Date());
+                          }
+                        }
+                      }
 
-                          {/* Visual Stage Badge - Replaces old small badge */}
-                          <VisualStageBadge $type={room.type}>
-                            {room.type === 'vegetation' ? <FaLeaf />
-                              : room.type === 'flowering' ? <span>🌸</span>
-                                : room.type === 'mother' ? <FaSeedling />
-                                  : room.type === 'clones' ? <span>🧬</span>
-                                    : room.type === 'germination' ? <span>🌱</span>
-                                      : room.type === 'living_soil' ? <span>🌍</span>
-                                        : <FaWarehouse />}
-                            <span>
-                              {room.type === 'vegetation' ? 'VEGETACIÓN'
-                                : room.type === 'flowering' ? 'FLORA'
-                                  : room.type === 'mother' ? 'MADRES'
-                                    : room.type === 'clones' ? 'ESQUEJERA'
-                                      : room.type === 'germination' ? 'GERMINACIÓN'
-                                        : room.type === 'living_soil' ? 'LIVING SOIL'
-                                          : 'SECADO'}
-                            </span>
-                          </VisualStageBadge>
-                        </div>
+                      // --- CYCLE CALCULATION FOR PROGRESS BAR ---
 
-                        {weekInfo && (
-                          <span style={{
-                            position: 'absolute',
-                            top: '3.5rem',
-                            right: '0.75rem',
-                            fontSize: '0.75rem',
-                            fontWeight: 700,
-                            padding: '0.25rem 0.6rem',
-                            borderRadius: '4px',
-                            background: '#ebf8ff',
-                            color: '#2b6cb0',
-                            width: 'fit-content',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.25rem',
-                            zIndex: 5
-                          }}>
-                            <FaRegCircle size={8} /> {weekInfo}
-                          </span>
-                        )}
+                      let vegeWidth = 0;
+                      let floraWidth = 0;
+                      let currentStageProgress = 0; // % within the total bar
+                      let activeBatchForCycle = room.batches && room.batches.length > 0 ? room.batches.find((b: any) => b.stage === room.type) : null;
+                      let cycleGenetic = activeBatchForCycle ? genetics.find(g => g.id === activeBatchForCycle.genetic_id) : null;
+
+                      if (activeBatchForCycle && cycleGenetic) {
+                        const startDate = new Date(activeBatchForCycle.start_date);
+                        const today = new Date();
+                        const weeksPassed = Math.max(0, differenceInWeeks(today, startDate));
+
+                        // Default estima: 4 weeks vege, 9 weeks flora (if no genetics)
+                        const estVege = cycleGenetic.vegetative_weeks || 4;
+                        const estFlora = cycleGenetic.flowering_weeks || 9;
+                        const totalEstWeeks = estVege + estFlora;
+
+                        // Calculate widths relative to total
+                        vegeWidth = (estVege / totalEstWeeks) * 100;
+                        floraWidth = (estFlora / totalEstWeeks) * 100;
+
+                        // Find current position logic...
+                        // Simplified: use total weeks passed from start_date / total weeks
+                        const totalProgress = (weeksPassed / totalEstWeeks) * 100;
+                        currentStageProgress = Math.min(100, totalProgress);
+                      }
 
 
 
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                          {/* Start Date */}
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#4a5568', fontSize: '0.9rem' }}>
-                            <FaCalendarAlt size={14} color="#718096" />
-                            <span>Iniciado: <strong>{startDateDisplay}</strong></span>
-                          </div>
 
-                          {/* OPERATIONAL DAYS ALERT/COUNTDOWN */}
-                          {room.operational_days && daysRemainingString && (
+                      return (
+                        <SortableRoomItem key={room.id} room={room}>
+                          <div
+                            onClick={() => navigate(`/rooms/${room.id}`)}
+                            style={{
+                              // Removed wrapping explicit div styles as they are now handled by RoomCard or moved
+                              cursor: 'pointer'
+                            }}
+                          >
                             <div style={{
-                              marginTop: '0.5rem',
-                              padding: '0.5rem',
-                              borderRadius: '0.5rem',
-                              background: alertLevel >= 1 || isPeriodOver ? '#fed7d7' : '#e6fffa',
-                              color: alertLevel >= 1 || isPeriodOver ? '#c53030' : '#2c7a7b',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '0.5rem',
-                              fontWeight: 700,
-                              fontSize: '0.9rem',
-                              border: alertLevel >= 1 || isPeriodOver ? '1px solid #fc8181' : '1px solid #b2f5ea'
-                            }}>
-                              {alertLevel >= 1 || isPeriodOver ? <FaExclamationTriangle /> : <FaClock />}
-                              <span>{daysRemainingString}</span>
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              height: '4px',
+                              background: room.type === 'vegetation' ? '#48bb78' // Green
+                                : room.type === 'flowering' ? '#ed8936' // Orange
+                                  : room.type === 'clones' ? '#63b3ed' // Blue
+                                    : room.type === 'living_soil' ? '#319795' // Teal
+                                      : room.type === 'mother' ? '#d53f8c' // Pink
+                                        : room.type === 'germination' ? '#9ae6b4' // Light Green
+                                          : '#ecc94b' // Yellow (Default)
+                            }} />
+
+                            <div style={{ display: 'flex', flexDirection: 'column', marginBottom: '1rem', marginTop: '3.5rem' }}>
+                              <h3 style={{ margin: 0, color: '#2d3748', fontSize: '1.25rem', fontWeight: 800, paddingRight: '140px', wordBreak: 'break-word' }}>{room.name}</h3>
+
+                              {/* Visual Stage Badge - Replaces old small badge */}
+                              <VisualStageBadge $type={room.type}>
+                                {room.type === 'vegetation' ? <FaLeaf />
+                                  : room.type === 'flowering' ? <span>🌸</span>
+                                    : room.type === 'mother' ? <FaSeedling />
+                                      : room.type === 'clones' ? <span>🧬</span>
+                                        : room.type === 'germination' ? <span>🌱</span>
+                                          : room.type === 'living_soil' ? <span>🌍</span>
+                                            : <FaWarehouse />}
+                                <span>
+                                  {room.type === 'vegetation' ? 'VEGETACIÓN'
+                                    : room.type === 'flowering' ? 'FLORA'
+                                      : room.type === 'mother' ? 'MADRES'
+                                        : room.type === 'clones' ? 'ESQUEJERA'
+                                          : room.type === 'germination' ? 'GERMINACIÓN'
+                                            : room.type === 'living_soil' ? 'LIVING SOIL'
+                                              : 'SECADO'}
+                                </span>
+                              </VisualStageBadge>
                             </div>
-                          )}
 
-                          {/* ESQUEJERA SUMMARY */}
-                          {geneticBreakdown && (
-                            <div style={{ marginTop: '0.5rem', padding: '0.5rem', background: '#ebf8ff', borderRadius: '0.5rem', border: '1px solid #bee3f8' }}>
-                              <strong style={{ display: 'block', fontSize: '0.8rem', color: '#2b6cb0', marginBottom: '0.25rem' }}>Resumen por Genética:</strong>
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                                {Object.entries(geneticBreakdown as Record<string, number>).map(([name, count]) => (
-                                  <span key={name} style={{ fontSize: '0.8.5rem', background: 'white', padding: '0.1rem 0.4rem', borderRadius: '4px', border: '1px solid #e2e8f0', color: '#4a5568' }}>
-                                    <strong>{count}</strong> {name}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Assigned Batch Info - SMART GROUPING REPLACEMENT */}
-                          {room.batches && room.batches.length > 0 && (
-                            <div
-                              onClick={(e) => e.stopPropagation()} // Stop navigation when clicking in batch area
-                              style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.25rem', fontSize: '0.9rem', color: '#4a5568', background: '#f7fafc', padding: '0.5rem', borderRadius: '0.5rem' }}
-                            >
-                              {(() => {
-                                // Smart Grouping Logic
-                                const groupedBatches = groupBatchesByGeneticDateRoom(room.batches);
-                                const visibleGroups = expandedRooms[room.id] ? groupedBatches : groupedBatches.slice(0, 5);
-
-                                return (
-                                  <>
-                                    {visibleGroups.map((group: any) => (
-                                      <BatchGroupRow
-                                        key={group.root.id}
-                                        group={group}
-                                        expanded={expandedBatchGroups.has(group.root.id)}
-                                        onToggleExpand={() => toggleBatchGroupExpansion(group.root.id)}
-                                        childrenRender={(batch: any) => (
-                                          <DraggableBatchRow
-                                            key={batch.id}
-                                            batch={batch}
-                                            isSelected={selectedBatchIds.has(batch.id)}
-                                            onToggleSelect={toggleBatchSelection}
-                                          >
-                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px dashed #e2e8f0', paddingBottom: '0.25rem', marginBottom: '0.25rem' }}>
-                                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                <FaBarcode color="#4a5568" size={12} />
-                                                <span style={{ display: 'flex', alignItems: 'center', gap: '5px', minWidth: 0, flex: 1 }}>
-                                                  <strong style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{batch.name}</strong> <span style={{ color: '#718096', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>({batch.quantity}u)</span>
-                                                </span>
-                                              </div>
-                                              <div style={{ display: 'flex', gap: '5px' }}>
-                                                <Tooltip text="Editar Datos del Lote">
-                                                  <button
-                                                    onPointerDown={(e) => e.stopPropagation()} // Prevent Drag
-                                                    onClick={(e) => handleEditBatchClick(e, batch)}
-                                                    style={{
-                                                      background: 'white', border: '1px solid #e2e8f0', borderRadius: '4px',
-                                                      color: '#3182ce', cursor: 'pointer', fontSize: '0.8rem', padding: '0.2rem',
-                                                      display: 'flex', alignItems: 'center'
-                                                    }}
-                                                  >
-                                                    <FaEdit size={12} />
-                                                  </button>
-                                                </Tooltip>
-                                                <Tooltip text="Eliminar Lote">
-                                                  <button
-                                                    onPointerDown={(e) => e.stopPropagation()} // Prevent Drag
-                                                    onClick={(e) => handleDeleteBatchClick(e, batch)}
-                                                    style={{
-                                                      background: 'white', border: '1px solid #fed7d7', borderRadius: '4px',
-                                                      color: '#e53e3e', cursor: 'pointer', fontSize: '0.8rem', padding: '0.2rem',
-                                                      display: 'flex', alignItems: 'center'
-                                                    }}
-                                                  >
-                                                    <FaTrash size={12} />
-                                                  </button>
-                                                </Tooltip>
-                                                <Tooltip text="Ver Código QR / Pasaporte">
-                                                  <button
-                                                    onPointerDown={(e) => e.stopPropagation()} // Prevent Drag
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      const passportUrl = `${window.location.origin}/passport/${batch.id}`;
-                                                      setQrValue(passportUrl);
-                                                      setQrTitle(`QR: ${batch.name}`);
-                                                      setQrModalOpen(true);
-                                                    }}
-                                                    style={{
-                                                      background: 'white',
-                                                      border: '1px solid #e2e8f0',
-                                                      borderRadius: '4px',
-                                                      color: '#4a5568',
-                                                      cursor: 'pointer',
-                                                      fontSize: '0.7rem',
-                                                      padding: '0.1rem 0.4rem',
-                                                      fontWeight: 600
-                                                    }}
-                                                  >
-                                                    QR
-                                                  </button>
-                                                </Tooltip>
-                                              </div>
-                                            </div>
-                                          </DraggableBatchRow>
-                                        )}
-                                      />
-                                    ))}
-
-                                    {/* Show "Ver todos" based on GROUPS count, not batches */}
-                                    {groupedBatches.length > 5 && (
-                                      <button
-                                        onClick={(e) => toggleRoomExpansion(room.id, e)}
-                                        style={{
-                                          border: 'none',
-                                          background: 'none',
-                                          color: '#3182ce',
-                                          fontSize: '0.8rem',
-                                          fontWeight: 600,
-                                          cursor: 'pointer',
-                                          marginTop: '0.25rem',
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          justifyContent: 'center',
-                                          width: '100%',
-                                          padding: '0.25rem'
-                                        }}
-                                      >
-                                        {expandedRooms[room.id] ? 'Ver menos' : `Ver todos (${groupedBatches.length} lotes)`}
-                                      </button>
-                                    )}
-                                  </>
-                                );
-                              })()}
-                            </div>
-                          )}
-
-                          {/* Environmental Data (Placeholders for TUYA API) */}
-                          <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px dashed #e2e8f0', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#4a5568', fontSize: '0.85rem' }}>
-                              <FaTemperatureHigh size={12} color="#e53e3e" />
-                              <span>Temp. Actual <span style={{ float: 'right', fontWeight: 'bold' }}>--</span></span>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#4a5568', fontSize: '0.85rem' }}>
-                              <FaTint size={12} color="#3182ce" />
-                              <span>Humedad <span style={{ float: 'right', fontWeight: 'bold' }}>--</span></span>
-                            </div>
-                          </div>
-
-                          {/* Countdown To Flora */}
-                          {daysToFlip !== null && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#4a5568', fontSize: '0.9rem', marginTop: '0.25rem' }}>
-                              <FaClock size={14} color="#ed8936" />
-                              <span>
-                                {daysToFlip > 0
-                                  ? <span>Pasa a Flora en: <strong>{daysToFlip} días</strong></span>
-                                  : <span style={{ color: '#e53e3e', fontWeight: 600 }}>¡Listo para pasar a Flora!</span>
-                                }
+                            {weekInfo && (
+                              <span style={{
+                                position: 'absolute',
+                                top: '3.5rem',
+                                right: '0.75rem',
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                                padding: '0.25rem 0.6rem',
+                                borderRadius: '4px',
+                                background: '#ebf8ff',
+                                color: '#2b6cb0',
+                                width: 'fit-content',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.25rem',
+                                zIndex: 5
+                              }}>
+                                <FaRegCircle size={8} /> {weekInfo}
                               </span>
-                            </div>
-                          )}
-                          {/* We could add Sensor data here if available */}
+                            )}
 
-                          {/* LIFE CYCLE PROGRESS BAR */}
-                          {(room.type === 'vegetation' || room.type === 'flowering') && activeBatchForCycle && (
-                            <div style={{ marginTop: '0.5rem' }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: '#718096', marginBottom: '2px' }}>
-                                <span>Inicio</span>
-                                <span>Cosecha Est.</span>
-                              </div>
-                              <div style={{ position: 'relative', height: '10px', width: '100%', background: '#edf2f7', borderRadius: '5px', overflow: 'hidden' }}>
-                                {/* Vege Segment */}
-                                <div style={{
-                                  position: 'absolute', left: 0, top: 0, bottom: 0,
-                                  width: `${vegeWidth}%`, background: '#c6f6d5',
-                                  borderRight: '1px solid white'
-                                }} title="Fase Vegetativa Estimada" />
 
-                                {/* Flora Segment */}
-                                <div style={{
-                                  position: 'absolute', left: `${vegeWidth}%`, top: 0, bottom: 0,
-                                  width: `${floraWidth}%`, background: '#fbd38d'
-                                }} title="Fase de Floración Estimada" />
 
-                                {/* Current Progress Indicator */}
-                                <div style={{
-                                  position: 'absolute',
-                                  left: 0, top: 0, bottom: 0,
-                                  width: `${currentStageProgress}%`,
-                                  background: 'rgba(0,0,0,0.15)', // Shadow overlay to show progress
-                                  borderRight: '2px solid #2d3748',
-                                  transition: 'width 0.5s ease-out'
-                                }} />
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                              {/* Start Date */}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#4a5568', fontSize: '0.9rem' }}>
+                                <FaCalendarAlt size={14} color="#718096" />
+                                <span>Iniciado: <strong>{startDateDisplay}</strong></span>
                               </div>
 
-                            </div>
-                          )}
+                              {/* OPERATIONAL DAYS ALERT/COUNTDOWN */}
+                              {room.operational_days && daysRemainingString && (
+                                <div style={{
+                                  marginTop: '0.5rem',
+                                  padding: '0.5rem',
+                                  borderRadius: '0.5rem',
+                                  background: alertLevel >= 1 || isPeriodOver ? '#fed7d7' : '#e6fffa',
+                                  color: alertLevel >= 1 || isPeriodOver ? '#c53030' : '#2c7a7b',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '0.5rem',
+                                  fontWeight: 700,
+                                  fontSize: '0.9rem',
+                                  border: alertLevel >= 1 || isPeriodOver ? '1px solid #fc8181' : '1px solid #b2f5ea'
+                                }}>
+                                  {alertLevel >= 1 || isPeriodOver ? <FaExclamationTriangle /> : <FaClock />}
+                                  <span>{daysRemainingString}</span>
+                                </div>
+                              )}
 
-                          {/* Footer Actions: Stage Controls + Utility Buttons */}
-                          <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px dashed #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+                              {/* ESQUEJERA SUMMARY */}
+                              {geneticBreakdown && (
+                                <div style={{ marginTop: '0.5rem', padding: '0.5rem', background: '#ebf8ff', borderRadius: '0.5rem', border: '1px solid #bee3f8' }}>
+                                  <strong style={{ display: 'block', fontSize: '0.8rem', color: '#2b6cb0', marginBottom: '0.25rem' }}>Resumen por Genética:</strong>
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                    {Object.entries(geneticBreakdown as Record<string, number>).map(([name, count]) => (
+                                      <span key={name} style={{ fontSize: '0.8.5rem', background: 'white', padding: '0.1rem 0.4rem', borderRadius: '4px', border: '1px solid #e2e8f0', color: '#4a5568' }}>
+                                        <strong>{count}</strong> {name}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
 
-                            {/* Left: Stage Action (or empty spacer if none) */}
-                            <div style={{ flex: 1 }}>
-                              {/* {room.type === 'vegetation' && (
+                              {/* Assigned Batch Info - SMART GROUPING REPLACEMENT */}
+                              {room.batches && room.batches.length > 0 && (
+                                <div
+                                  onClick={(e) => e.stopPropagation()} // Stop navigation when clicking in batch area
+                                  style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.25rem', fontSize: '0.9rem', color: '#4a5568', background: '#f7fafc', padding: '0.5rem', borderRadius: '0.5rem' }}
+                                >
+                                  {(() => {
+                                    // Smart Grouping Logic
+                                    const groupedBatches = groupBatchesByGeneticDateRoom(room.batches);
+                                    const visibleGroups = expandedRooms[room.id] ? groupedBatches : groupedBatches.slice(0, 5);
+
+                                    return (
+                                      <>
+                                        {visibleGroups.map((group: any) => (
+                                          <BatchGroupRow
+                                            key={group.root.id}
+                                            group={group}
+                                            expanded={expandedBatchGroups.has(group.root.id)}
+                                            onToggleExpand={() => toggleBatchGroupExpansion(group.root.id)}
+                                            childrenRender={(batch: any) => (
+                                              <DraggableBatchRow
+                                                key={batch.id}
+                                                batch={batch}
+                                                isSelected={selectedBatchIds.has(batch.id)}
+                                                onToggleSelect={toggleBatchSelection}
+                                              >
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px dashed #e2e8f0', paddingBottom: '0.25rem', marginBottom: '0.25rem' }}>
+                                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                    <FaBarcode color="#4a5568" size={12} />
+                                                    <span style={{ display: 'flex', alignItems: 'center', gap: '5px', minWidth: 0, flex: 1 }}>
+                                                      <strong style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{batch.name}</strong> <span style={{ color: '#718096', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>({batch.quantity}u)</span>
+                                                    </span>
+                                                  </div>
+                                                  <div style={{ display: 'flex', gap: '5px' }}>
+                                                    <Tooltip text="Editar Datos del Lote">
+                                                      <button
+                                                        onPointerDown={(e) => e.stopPropagation()} // Prevent Drag
+                                                        onClick={(e) => handleEditBatchClick(e, batch)}
+                                                        style={{
+                                                          background: 'white', border: '1px solid #e2e8f0', borderRadius: '4px',
+                                                          color: '#3182ce', cursor: 'pointer', fontSize: '0.8rem', padding: '0.2rem',
+                                                          display: 'flex', alignItems: 'center'
+                                                        }}
+                                                      >
+                                                        <FaEdit size={12} />
+                                                      </button>
+                                                    </Tooltip>
+                                                    <Tooltip text="Eliminar Lote">
+                                                      <button
+                                                        onPointerDown={(e) => e.stopPropagation()} // Prevent Drag
+                                                        onClick={(e) => handleDeleteBatchClick(e, batch)}
+                                                        style={{
+                                                          background: 'white', border: '1px solid #fed7d7', borderRadius: '4px',
+                                                          color: '#e53e3e', cursor: 'pointer', fontSize: '0.8rem', padding: '0.2rem',
+                                                          display: 'flex', alignItems: 'center'
+                                                        }}
+                                                      >
+                                                        <FaTrash size={12} />
+                                                      </button>
+                                                    </Tooltip>
+                                                    <Tooltip text="Ver Código QR / Pasaporte">
+                                                      <button
+                                                        onPointerDown={(e) => e.stopPropagation()} // Prevent Drag
+                                                        onClick={(e) => {
+                                                          e.stopPropagation();
+                                                          const passportUrl = `${window.location.origin}/passport/${batch.id}`;
+                                                          setQrValue(passportUrl);
+                                                          setQrTitle(`QR: ${batch.name}`);
+                                                          setQrModalOpen(true);
+                                                        }}
+                                                        style={{
+                                                          background: 'white',
+                                                          border: '1px solid #e2e8f0',
+                                                          borderRadius: '4px',
+                                                          color: '#4a5568',
+                                                          cursor: 'pointer',
+                                                          fontSize: '0.7rem',
+                                                          padding: '0.1rem 0.4rem',
+                                                          fontWeight: 600
+                                                        }}
+                                                      >
+                                                        QR
+                                                      </button>
+                                                    </Tooltip>
+                                                  </div>
+                                                </div>
+                                              </DraggableBatchRow>
+                                            )}
+                                          />
+                                        ))}
+
+                                        {/* Show "Ver todos" based on GROUPS count, not batches */}
+                                        {groupedBatches.length > 5 && (
+                                          <button
+                                            onClick={(e) => toggleRoomExpansion(room.id, e)}
+                                            style={{
+                                              border: 'none',
+                                              background: 'none',
+                                              color: '#3182ce',
+                                              fontSize: '0.8rem',
+                                              fontWeight: 600,
+                                              cursor: 'pointer',
+                                              marginTop: '0.25rem',
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              justifyContent: 'center',
+                                              width: '100%',
+                                              padding: '0.25rem'
+                                            }}
+                                          >
+                                            {expandedRooms[room.id] ? 'Ver menos' : `Ver todos (${groupedBatches.length} lotes)`}
+                                          </button>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
+                                </div>
+                              )}
+
+                              {/* Environmental Data (Placeholders for TUYA API) */}
+                              <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px dashed #e2e8f0', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#4a5568', fontSize: '0.85rem' }}>
+                                  <FaTemperatureHigh size={12} color="#e53e3e" />
+                                  <span>Temp. Actual <span style={{ float: 'right', fontWeight: 'bold' }}>--</span></span>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#4a5568', fontSize: '0.85rem' }}>
+                                  <FaTint size={12} color="#3182ce" />
+                                  <span>Humedad <span style={{ float: 'right', fontWeight: 'bold' }}>--</span></span>
+                                </div>
+                              </div>
+
+                              {/* Countdown To Flora */}
+                              {daysToFlip !== null && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#4a5568', fontSize: '0.9rem', marginTop: '0.25rem' }}>
+                                  <FaClock size={14} color="#ed8936" />
+                                  <span>
+                                    {daysToFlip > 0
+                                      ? <span>Pasa a Flora en: <strong>{daysToFlip} días</strong></span>
+                                      : <span style={{ color: '#e53e3e', fontWeight: 600 }}>¡Listo para pasar a Flora!</span>
+                                    }
+                                  </span>
+                                </div>
+                              )}
+                              {/* We could add Sensor data here if available */}
+
+                              {/* LIFE CYCLE PROGRESS BAR */}
+                              {(room.type === 'vegetation' || room.type === 'flowering') && activeBatchForCycle && (
+                                <div style={{ marginTop: '0.5rem' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: '#718096', marginBottom: '2px' }}>
+                                    <span>Inicio</span>
+                                    <span>Cosecha Est.</span>
+                                  </div>
+                                  <div style={{ position: 'relative', height: '10px', width: '100%', background: '#edf2f7', borderRadius: '5px', overflow: 'hidden' }}>
+                                    {/* Vege Segment */}
+                                    <div style={{
+                                      position: 'absolute', left: 0, top: 0, bottom: 0,
+                                      width: `${vegeWidth}%`, background: '#c6f6d5',
+                                      borderRight: '1px solid white'
+                                    }} title="Fase Vegetativa Estimada" />
+
+                                    {/* Flora Segment */}
+                                    <div style={{
+                                      position: 'absolute', left: `${vegeWidth}%`, top: 0, bottom: 0,
+                                      width: `${floraWidth}%`, background: '#fbd38d'
+                                    }} title="Fase de Floración Estimada" />
+
+                                    {/* Current Progress Indicator */}
+                                    <div style={{
+                                      position: 'absolute',
+                                      left: 0, top: 0, bottom: 0,
+                                      width: `${currentStageProgress}%`,
+                                      background: 'rgba(0,0,0,0.15)', // Shadow overlay to show progress
+                                      borderRight: '2px solid #2d3748',
+                                      transition: 'width 0.5s ease-out'
+                                    }} />
+                                  </div>
+
+                                </div>
+                              )}
+
+                              {/* Footer Actions: Stage Controls + Utility Buttons */}
+                              <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px dashed #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+
+                                {/* Left: Stage Action (or empty spacer if none) */}
+                                <div style={{ flex: 1 }}>
+                                  {/* {room.type === 'vegetation' && (
                                 <button
                                   onClick={(e) => handleForceStage(e, room, 'flowering')}
                                   style={{
@@ -2017,62 +2236,16 @@ const CropDetail: React.FC = () => {
                                 </button>
                               )} */}
 
-                              {room.type === 'flowering' && (
-                                <button
-                                  onClick={(e) => handleForceStage(e, room, 'drying')}
-                                  style={{
-                                    width: '100%',
-                                    background: '#e6fffa',
-                                    color: '#2c7a7b',
-                                    border: '1px solid #81e6d9',
-                                    padding: '0.5rem',
-                                    borderRadius: '0.5rem',
-                                    cursor: 'pointer',
-                                    fontSize: '0.9rem',
-                                    fontWeight: 700,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    gap: '0.5rem',
-                                    boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-                                    transition: 'all 0.2s'
-                                  }}
-                                >
-                                  <span>✂️</span> Cosechar
-                                </button>
-                              )}
 
-                              {room.type === 'drying' && (
-                                <button
-                                  onClick={(e) => handleOpenFinishModal(e, room)}
-                                  style={{
-                                    width: '100%',
-                                    background: '#c6f6d5', // Green for success/finish
-                                    color: '#2f855a',
-                                    border: '1px solid #9ae6b4',
-                                    padding: '0.5rem',
-                                    borderRadius: '0.5rem',
-                                    cursor: 'pointer',
-                                    fontSize: '0.9rem',
-                                    fontWeight: 700,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    gap: '0.5rem',
-                                    boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-                                    transition: 'all 0.2s'
-                                  }}
-                                >
-                                  <span>✅</span> Finalizar Cultivo
-                                </button>
-                              )}
-                            </div>
 
-                            {/* Right: Utility Buttons (Moved from Absolute Position) */}
-                            <div style={{ display: 'flex', gap: '5px' }}>
-                              {/* Removed "Asignar Nuevo Lote" button as per request, since it is handled in the map */}
-                              {/* Removed Transplant Button as per request */}
-                              {/* <Tooltip text="Transplantar">
+
+                                </div>
+
+                                {/* Right: Utility Buttons (Moved from Absolute Position) */}
+                                <div style={{ display: 'flex', gap: '5px' }}>
+                                  {/* Removed "Asignar Nuevo Lote" button as per request, since it is handled in the map */}
+                                  {/* Removed Transplant Button as per request */}
+                                  {/* <Tooltip text="Transplantar">
                                 <button
                                   onClick={(e) => handleOpenTransplant(e, room)}
                                   style={{
@@ -2084,113 +2257,63 @@ const CropDetail: React.FC = () => {
                                   <FaExchangeAlt size={14} />
                                 </button>
                               </Tooltip> */}
-                              <Tooltip text="Editar Nombre de Sala">
-                                <button
-                                  onClick={(e) => handleEditRoomName(e, room)}
-                                  style={{
-                                    background: 'white', border: '1px solid #e2e8f0', cursor: 'pointer', color: '#718096', padding: '8px', borderRadius: '6px', display: 'flex', alignItems: 'center', transition: 'all 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-                                  }}
-                                  onMouseEnter={(e) => { e.currentTarget.style.color = '#3182ce'; e.currentTarget.style.borderColor = '#3182ce'; }}
-                                  onMouseLeave={(e) => { e.currentTarget.style.color = '#718096'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
-                                >
-                                  <FaEdit size={14} />
-                                </button>
-                              </Tooltip>
-                              <Tooltip text="Eliminar Sala">
-                                <button
-                                  onClick={(e) => handleDeleteRoom(e, room.id, room.name)}
-                                  style={{
-                                    background: 'white', border: '1px solid #e2e8f0', cursor: 'pointer', color: '#718096', padding: '8px', borderRadius: '6px', display: 'flex', alignItems: 'center', transition: 'all 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-                                  }}
-                                  onMouseEnter={(e) => { e.currentTarget.style.color = '#e53e3e'; e.currentTarget.style.borderColor = '#e53e3e'; }}
-                                  onMouseLeave={(e) => { e.currentTarget.style.color = '#718096'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
-                                >
-                                  <FaTrash size={14} />
-                                </button>
-                              </Tooltip>
+                                  <Tooltip text="Editar Nombre de Sala">
+                                    <button
+                                      onClick={(e) => handleEditRoomName(e, room)}
+                                      style={{
+                                        background: 'white', border: '1px solid #e2e8f0', cursor: 'pointer', color: '#718096', padding: '8px', borderRadius: '6px', display: 'flex', alignItems: 'center', transition: 'all 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                                      }}
+                                      onMouseEnter={(e) => { e.currentTarget.style.color = '#3182ce'; e.currentTarget.style.borderColor = '#3182ce'; }}
+                                      onMouseLeave={(e) => { e.currentTarget.style.color = '#718096'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
+                                    >
+                                      <FaEdit size={14} />
+                                    </button>
+                                  </Tooltip>
+                                  <Tooltip text="Eliminar Sala">
+                                    <button
+                                      onClick={(e) => handleDeleteRoom(e, room.id, room.name)}
+                                      style={{
+                                        background: 'white', border: '1px solid #e2e8f0', cursor: 'pointer', color: '#718096', padding: '8px', borderRadius: '6px', display: 'flex', alignItems: 'center', transition: 'all 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                                      }}
+                                      onMouseEnter={(e) => { e.currentTarget.style.color = '#e53e3e'; e.currentTarget.style.borderColor = '#e53e3e'; }}
+                                      onMouseLeave={(e) => { e.currentTarget.style.color = '#718096'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
+                                    >
+                                      <FaTrash size={14} />
+                                    </button>
+                                  </Tooltip>
+                                </div>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </div>
-                    </SortableRoomItem>
-                  )
-                })}
+                        </SortableRoomItem>
+                      )
+                    })}
 
-                {/* Add New Room Card */}
-                <div
-                  onClick={() => setIsRoomModalOpen(true)}
-                  style={{
-                    padding: '1.5rem',
-                    borderRadius: '0.5rem',
-                    border: '2px dashed #cbd5e0',
-                    textAlign: 'center',
-                    color: '#a0aec0',
-                    cursor: 'pointer',
-                    background: '#f7fafc',
-                    transition: 'all 0.2s ease',
-                    marginTop: '1.5rem', // Separation from Masonry flow if needed, or part of it? 
-                    // Since MasonryContainer has column flow, appending a div AFTER it puts it at the bottom of the container wrapper.
-                    // Wait, if it's outside MasonryContainer, it spans full width below. That might be better for a "footer" add button 
-                    // than getting lost in a column. 
-                    // Let's try appending it INSIDE first as a card, but if Masonry is column-count, order is top-to-bottom.
-                    // Actually, let's put it INSIDE MasonryContainer to be just another card.
-                    // BUT, Masonry order is weird. 
-                    // User said "junto a la ultima tarjeta". If I put it in Masonry, it might go to top of next column.
-                    // Let's try putting it inside.
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '1rem',
-                    minHeight: '200px', // Match typical card height
-                    opacity: 0.8,
-                    breakInside: 'avoid',
-                    marginBottom: '1.5rem'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = '#48bb78';
-                    e.currentTarget.style.color = '#48bb78';
-                    e.currentTarget.style.background = '#f0fff4';
-                    e.currentTarget.style.opacity = '1';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = '#cbd5e0';
-                    e.currentTarget.style.color = '#a0aec0';
-                    e.currentTarget.style.background = '#f7fafc';
-                    e.currentTarget.style.opacity = '0.8';
-                  }}
-                >
-                  <div style={{
-                    width: '50px',
-                    height: '50px',
-                    borderRadius: '50%',
-                    border: '2px dashed currentColor',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '1.5rem'
-                  }}>
-                    <FaPlus />
-                  </div>
-                  <span style={{ fontWeight: 600, fontSize: '1rem', color: '#718096' }}>Haz click aquí para crear una nueva sala</span>
-                </div>
-              </MasonryContainer>
-            </SortableContext>
-            <DragOverlay>
-              {activeDragBatch ? (
-                <div style={{
-                  padding: '0.5rem', background: 'white', border: '1px solid #3182ce',
-                  borderRadius: '0.5rem', boxShadow: '0 5px 10px rgba(0,0,0,0.2)',
-                  width: '250px', display: 'flex', alignItems: 'center', gap: '0.5rem'
-                }}>
-                  <span style={{ fontWeight: 'bold' }}>{activeDragBatch.name}</span>
-                  <span style={{ fontSize: '0.8rem' }}>({activeDragBatch.quantity}u)</span>
-                </div>
-              ) : null}
-            </DragOverlay>
-          </DndContext>
-        )
-        }
+                    {/* Add New Room Card */}
+                    <CreateCard onClick={() => setIsRoomModalOpen(true)}>
+                      <DashedCircle>
+                        <FaPlus />
+                      </DashedCircle>
+                      <span style={{ fontWeight: 600, fontSize: '1rem', color: 'inherit' }}>Haz click aquí para crear una nueva sala</span>
+                    </CreateCard>
+                  </MasonryContainer>
+                </SortableContext>
+                <DragOverlay>
+                  {activeDragBatch ? (
+                    <div style={{
+                      padding: '0.5rem', background: 'white', border: '1px solid #3182ce',
+                      borderRadius: '0.5rem', boxShadow: '0 5px 10px rgba(0,0,0,0.2)',
+                      width: '250px', display: 'flex', alignItems: 'center', gap: '0.5rem'
+                    }}>
+                      <span style={{ fontWeight: 'bold' }}>{activeDragBatch.name}</span>
+                      <span style={{ fontSize: '0.8rem' }}>({activeDragBatch.quantity}u)</span>
+                    </div>
+                  ) : null}
+                </DragOverlay>
+              </DndContext>
+            )}
+          </FadeInWrapper>
+        )}
       </div >
 
       {/* Move Confirmation Modal */}
@@ -2344,14 +2467,20 @@ const CropDetail: React.FC = () => {
         )
       }
 
+      {/* Modal Nueva Sala */}
       {
-        isRoomModalOpen && (
-          <ModalOverlay>
-            <Modal onClick={e => e.stopPropagation()}>
-              <ModalHeader>
-                <h3>Nueva Sala</h3>
-                <CloseButton onClick={() => setIsRoomModalOpen(false)}>&times;</CloseButton>
-              </ModalHeader>
+        (isRoomModalOpen || isRoomModalClosing) && (
+          <ModalOverlay isClosing={isRoomModalClosing}>
+            <Modal isClosing={isRoomModalClosing}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 600, color: '#2d3748' }}>Nueva Sala</h3>
+                <button
+                  onClick={handleCloseRoomModal}
+                  style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#a0aec0' }}
+                >
+                  &times;
+                </button>
+              </div>
 
               <FormGroup>
                 <label>Nombre de la Sala</label>
@@ -2360,17 +2489,20 @@ const CropDetail: React.FC = () => {
                   type="text"
                   placeholder="Ej: Sala Vege 1"
                   value={roomForm.name}
-                  onChange={e => setRoomForm({ ...roomForm, name: e.target.value })}
+                  onChange={(e) => setRoomForm({ ...roomForm, name: e.target.value })}
                 />
               </FormGroup>
 
+              {/* --- Date Logic --- */}
               <FormGroup>
                 <label>Fecha de Inicio del Cultivo</label>
-                <input
-                  type="date"
-                  value={roomForm.startDate}
-                  onChange={e => setRoomForm({ ...roomForm, startDate: e.target.value })}
-                  style={{ width: '100%', padding: '0.4rem', borderRadius: '0.25rem', border: '1px solid #e2e8f0' }}
+                <CustomDatePicker
+                  selected={roomForm.startDate ? new Date(roomForm.startDate + 'T12:00:00') : new Date()}
+                  onChange={(date) => {
+                    const dateStr = date ? date.toISOString().split('T')[0] : '';
+                    setRoomForm({ ...roomForm, startDate: dateStr });
+                  }}
+                  dateFormat="dd/MM/yyyy"
                 />
               </FormGroup>
 
@@ -2382,35 +2514,36 @@ const CropDetail: React.FC = () => {
                     placeholder="Ej: 30"
                     value={roomForm.operationalDays || ''}
                     onChange={e => setRoomForm({ ...roomForm, operationalDays: e.target.value ? Number(e.target.value) : undefined })}
-                    style={{ width: '100%', padding: '0.4rem', borderRadius: '0.25rem', border: '1px solid #e2e8f0' }}
                   />
-                  <small style={{ color: '#718096' }}>Definir la duración del ciclo para activar las alertas.</small>
+                  <small style={{ display: 'block', marginTop: '0.25rem', color: '#718096' }}>
+                    Definir la duración del ciclo para activar las alertas.
+                  </small>
                 </FormGroup>
               )}
 
               <FormGroup>
                 <label>Fase de Cultivo</label>
-                <select
+                <CustomSelect
                   value={roomForm.type}
-                  onChange={e => setRoomForm({ ...roomForm, type: e.target.value as any })}
-                  style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0' }}
-                >
-                  <option value="vegetation">Vegetación</option>
-                  <option value="flowering">Floración</option>
-                  <option value="drying">Secado</option>
-                  <option value="curing">Curado</option>
-                  <option value="clones">Esquejera</option>
-                  <option value="germination">Germinación</option>
-                  <option value="mother">Sala de Madres</option>
-                  <option value="living_soil">Agro/Living Soil</option>
-                </select>
+                  onChange={(value) => setRoomForm({ ...roomForm, type: value as any })}
+                  options={[
+                    { value: "vegetation", label: "Vegetación" },
+                    { value: "flowering", label: "Floración" },
+
+                    { value: "curing", label: "Curado" },
+                    { value: "clones", label: "Esquejera/Clones" },
+                    { value: "living_soil", label: "Agro/Living Soil" }
+                  ]}
+                />
               </FormGroup>
 
-              <PrimaryButton onClick={handleCreateRoom}>Crear Sala</PrimaryButton>
+              <ModalActions>
+                <Button $variant="secondary" onClick={handleCloseRoomModal}>Cancelar</Button>
+                <Button onClick={handleCreateRoom} disabled={isCreatingRoom} $variant="primary">{isCreatingRoom ? 'Creando...' : 'Crear Sala'}</Button>
+              </ModalActions>
             </Modal>
-          </ModalOverlay >
-        )
-      }
+          </ModalOverlay>
+        )}
 
       {/* Color Picker Modal */}
       {
@@ -2783,6 +2916,7 @@ const CropDetail: React.FC = () => {
         placeholder="Nuevo nombre..."
         onClose={() => setEditModalOpen(false)}
         onConfirm={handleConfirmEditName}
+        confirmButtonColor="green"
       />
 
       {
@@ -2813,6 +2947,7 @@ const CropDetail: React.FC = () => {
         onConfirm={handleConfirmDeleteRoom}
         confirmText="Eliminar"
         isDanger
+        isLoading={isDeletingRoom}
       />
 
       {/* Confirm Delete Batch Modal */}

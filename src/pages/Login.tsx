@@ -3,6 +3,7 @@ import styled from 'styled-components';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
+import ParticleBackground from '../components/ParticleBackground';
 
 // ... (skipping styled components that don't need change, wait, replace_file_content replaces chunks)
 // I should only replace the necessary parts. 
@@ -237,17 +238,14 @@ const Login: React.FC = () => {
 
   return (
     <LoginContainer>
-      {/* Background Decorations */}
-      <BackgroundCircle size="300px" top="-50px" left="-50px" color="#22c55e" />
-      <BackgroundCircle size="400px" bottom="-100px" right="-100px" color="#3b82f6" />
+      <ParticleBackground />
 
       <LoginCard>
         <Logo>
           <div className="icon-wrapper">
             <img src="/LOGO APIDC.png" alt="Aurora Del Plata Logo" />
           </div>
-          <h1>Bienvenido/a a Aurora Del Plata</h1>
-          <p>Gestión de Cultivos</p>
+          <h1>Bienvenido/a a APIDC</h1>
         </Logo>
 
 

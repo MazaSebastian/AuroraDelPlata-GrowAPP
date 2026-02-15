@@ -1,17 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import styled from 'styled-components';
+import styled, { keyframes } from 'styled-components';
 import { useNavigate } from 'react-router-dom';
 import { FaWarehouse, FaPlus, FaThermometerHalf, FaTint, FaEdit, FaTrash, FaMapMarkedAlt } from 'react-icons/fa';
 import { roomsService } from '../services/roomsService';
 import { Room } from '../types/rooms';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ConfirmModal } from '../components/ConfirmModal';
+import { ToastModal } from '../components/ToastModal';
+
+const fadeIn = keyframes`
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+`;
 
 const Container = styled.div`
   padding: 2rem;
   padding-top: 5rem;
   max-width: 1400px;
   margin: 0 auto;
+  animation: ${fadeIn} 0.5s ease-in-out;
 `;
 
 const Header = styled.div`
@@ -181,6 +188,59 @@ const ActionButton = styled.button<{ color: string }>`
 `;
 
 
+const rotate = keyframes`
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+`;
+
+const CreateCard = styled.div`
+  background: #f7fafc;
+  border-radius: 1.25rem;
+  border: 2px dashed #cbd5e0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  min-height: 250px;
+  gap: 1rem;
+  transition: all 0.2s ease;
+  opacity: 0.8;
+  color: #a0aec0;
+
+  &:hover {
+    border-color: #3182ce;
+    color: #3182ce;
+    background: #ebf8ff;
+    opacity: 1;
+  }
+`;
+
+const DashedCircle = styled.div`
+  width: 60px;
+  height: 60px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  color: inherit;
+  transition: all 0.5s ease;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    border-radius: 50%;
+    border: 2px dashed currentColor;
+    transition: all 0.5s ease;
+  }
+
+  ${CreateCard}:hover &::before {
+    animation: ${rotate} 10s linear infinite;
+  }
+`;
+
 const Rooms: React.FC = () => {
     const navigate = useNavigate();
     const [rooms, setRooms] = useState<Room[]>([]);
@@ -190,14 +250,33 @@ const Rooms: React.FC = () => {
     const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
     const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
     const [roomToDelete, setRoomToDelete] = useState<string | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [toastAnimate, setToastAnimate] = useState(true);
+    const [toastOpen, setToastOpen] = useState(false);
+    const [toastMessage, setToastMessage] = useState('');
+    const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('info');
 
     useEffect(() => {
-        loadRooms();
+        loadRooms(true);
     }, []);
 
-    const loadRooms = async () => {
+    const loadRooms = async (isInitial = false) => {
         setLoading(true);
-        const data = await roomsService.getRooms();
+
+        const fetchPromise = async () => {
+            const data = await roomsService.getRooms();
+            return data;
+        };
+
+        const minTimePromise = isInitial
+            ? new Promise(resolve => setTimeout(resolve, 1500))
+            : Promise.resolve();
+
+        const [data] = await Promise.all([
+            fetchPromise(),
+            minTimePromise
+        ]);
+
         setRooms(data);
         setLoading(false);
     };
@@ -249,9 +328,22 @@ const Rooms: React.FC = () => {
     const handleConfirmDelete = async () => {
         if (!roomToDelete) return;
 
+        setIsDeleting(true);
         const success = await roomsService.deleteRoom(roomToDelete);
+        setIsDeleting(false);
+
         if (success) {
             setRooms(rooms.filter(r => r.id !== roomToDelete));
+            // Show Success Toast
+            setToastMessage(`La sala ha sido eliminada correctamente.`);
+            setToastType('success');
+            setToastAnimate(false);
+            setToastOpen(true);
+        } else {
+            setToastMessage("Error al eliminar la Sala. Inténtalo de nuevo.");
+            setToastType('error');
+            setToastAnimate(true);
+            setToastOpen(true);
         }
         setIsConfirmDeleteOpen(false);
         setRoomToDelete(null);
@@ -263,7 +355,7 @@ const Rooms: React.FC = () => {
         setNewRoom({ name: '', type: 'vegetation', capacity: 0 });
     };
 
-    if (loading) return <LoadingSpinner text="Cargando salas..." fullScreen />;
+    if (loading) return <LoadingSpinner text="Cargando salas..." fullScreen duration={1500} />;
 
     return (
         <Container>
@@ -310,6 +402,12 @@ const Rooms: React.FC = () => {
                         </RoomBody>
                     </RoomCard>
                 ))}
+                <CreateCard onClick={() => setIsModalOpen(true)}>
+                    <DashedCircle>
+                        <FaPlus />
+                    </DashedCircle>
+                    <span style={{ fontWeight: 600, fontSize: '1rem', color: 'inherit', textAlign: 'center', padding: '0 1rem' }}>Haz click aquí para crear una nueva sala</span>
+                </CreateCard>
             </Grid>
 
             {isModalOpen && (
@@ -387,6 +485,7 @@ const Rooms: React.FC = () => {
                 onConfirm={handleConfirmDelete}
                 confirmText="Eliminar"
                 isDanger
+                isLoading={isDeleting}
             />
         </Container >
     );

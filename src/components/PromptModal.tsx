@@ -1,7 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import styled from 'styled-components';
+import styled, { keyframes } from 'styled-components';
 
-const Overlay = styled.div`
+const fadeIn = keyframes`
+  from { opacity: 0; }
+  to { opacity: 1; }
+`;
+
+const fadeOut = keyframes`
+  from { opacity: 1; }
+  to { opacity: 0; }
+`;
+
+const scaleIn = keyframes`
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+`;
+
+const scaleOut = keyframes`
+  from { transform: scale(1); opacity: 1; }
+  to { transform: scale(0.95); opacity: 0; }
+`;
+
+const Overlay = styled.div<{ isClosing: boolean }>`
   position: fixed;
   top: 0;
   left: 0;
@@ -13,27 +33,17 @@ const Overlay = styled.div`
   justify-content: center;
   z-index: 2000;
   backdrop-filter: blur(4px);
-  animation: fadeIn 0.2s ease-out;
-
-  @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
+  animation: ${p => p.isClosing ? fadeOut : fadeIn} 0.2s ease-in-out forwards;
 `;
 
-const Content = styled.div`
+const Content = styled.div<{ isClosing: boolean }>`
   background: white;
   padding: 2rem;
   border-radius: 1rem;
   width: 90%;
   max-width: 400px;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-  animation: scaleIn 0.2s ease-out;
-
-  @keyframes scaleIn {
-    from { transform: scale(0.95); opacity: 0; }
-    to { transform: scale(1); opacity: 1; }
-  }
+  animation: ${p => p.isClosing ? scaleOut : scaleIn} 0.2s ease-in-out forwards;
 
   h3 {
     margin-top: 0;
@@ -54,8 +64,8 @@ const Input = styled.input`
 
   &:focus {
     outline: none;
-    border-color: #3182ce;
-    box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.1);
+    border-color: #38b2ac;
+    box-shadow: 0 0 0 3px rgba(56, 178, 172, 0.1);
   }
 `;
 
@@ -65,18 +75,26 @@ const ButtonGroup = styled.div`
   gap: 0.75rem;
 `;
 
-const Button = styled.button<{ variant?: 'primary' | 'secondary' }>`
+const Button = styled.button<{ variant?: 'primary' | 'secondary' | 'green' }>`
   padding: 0.5rem 1rem;
   border-radius: 0.5rem;
   border: 1px solid ${p => p.variant === 'secondary' ? '#e2e8f0' : 'transparent'};
-  background: ${p => p.variant === 'secondary' ? 'white' : '#3182ce'};
+  background: ${p => {
+    if (p.variant === 'secondary') return 'white';
+    if (p.variant === 'green') return '#38a169';
+    return '#3182ce';
+  }};
   color: ${p => p.variant === 'secondary' ? '#4a5568' : 'white'};
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
 
   &:hover {
-    background: ${p => p.variant === 'secondary' ? '#f7fafc' : '#2b6cb0'};
+    background: ${p => {
+    if (p.variant === 'secondary') return '#f7fafc';
+    if (p.variant === 'green') return '#2f855a';
+    return '#2b6cb0';
+  }};
   }
 `;
 
@@ -87,6 +105,7 @@ interface PromptModalProps {
   placeholder?: string;
   onClose: () => void;
   onConfirm: (value: string) => void;
+  confirmButtonColor?: 'primary' | 'green';
 }
 
 export const PromptModal: React.FC<PromptModalProps> = ({
@@ -95,27 +114,44 @@ export const PromptModal: React.FC<PromptModalProps> = ({
   initialValue = '',
   placeholder = '',
   onClose,
-  onConfirm
+  onConfirm,
+  confirmButtonColor = 'primary'
 }) => {
   const [value, setValue] = useState(initialValue);
+  const [isVisible, setIsVisible] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
 
-  // Update value when modal opens or initialValue changes
   useEffect(() => {
     if (isOpen) {
       setValue(initialValue);
+      setIsVisible(true);
+      setIsClosing(false);
+    } else {
+      setIsClosing(true);
+      const timer = setTimeout(() => {
+        setIsVisible(false);
+        setIsClosing(false);
+      }, 200);
+      return () => clearTimeout(timer);
     }
   }, [isOpen, initialValue]);
 
-  if (!isOpen) return null;
+  if (!isVisible && !isOpen) return null;
+
+  const handleClose = () => {
+    setIsClosing(true);
+    setTimeout(onClose, 200);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onConfirm(value);
+    handleClose(); // Close with animation on confirm too
   };
 
   return (
-    <Overlay>
-      <Content>
+    <Overlay isClosing={isClosing}>
+      <Content isClosing={isClosing}>
         <h3>{title}</h3>
         <form onSubmit={handleSubmit}>
           <Input
@@ -126,8 +162,8 @@ export const PromptModal: React.FC<PromptModalProps> = ({
             placeholder={placeholder}
           />
           <ButtonGroup>
-            <Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button>
-            <Button type="submit">Guardar</Button>
+            <Button type="button" variant="secondary" onClick={handleClose}>Cancelar</Button>
+            <Button type="submit" variant={confirmButtonColor}>Guardar</Button>
           </ButtonGroup>
         </form>
       </Content>

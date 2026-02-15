@@ -2,9 +2,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import styled from 'styled-components';
+import styled, { keyframes } from 'styled-components';
 import { useAuth } from '../context/AuthContext';
-import { FaArrowLeft, FaThermometerHalf, FaPlus, FaCalendarAlt, FaSeedling, FaMapMarkedAlt, FaExchangeAlt, FaExpandArrowsAlt, FaStickyNote, FaTrash, FaHistory, FaDna, FaClock, FaCheck, FaExclamationTriangle, FaPrint, FaCut, FaPen, FaEdit, FaChevronDown, FaTasks, FaTimes } from 'react-icons/fa';
+import { FaArrowLeft, FaThermometerHalf, FaPlus, FaCalendarAlt, FaSeedling, FaMapMarkedAlt, FaExchangeAlt, FaExpandArrowsAlt, FaStickyNote, FaTrash, FaHistory, FaDna, FaClock, FaCheck, FaExclamationTriangle, FaPrint, FaCut, FaPen, FaEdit, FaChevronDown, FaTasks, FaTimes, FaSpinner, FaChevronLeft, FaChevronRight, FaCircleNotch } from 'react-icons/fa';
 // FaExclamationTriangle, FaTint, FaCut, FaSkull, FaLeaf, FaFlask, FaBroom
 import {
     format, startOfWeek, endOfWeek, startOfMonth, endOfMonth,
@@ -36,6 +36,8 @@ import { ConfirmationModal } from '../components/ConfirmationModal';
 import { TransplantModal } from '../components/Esquejera/TransplantModal';
 import { HarvestModal } from '../components/Flowering/HarvestModal';
 import { ToastModal } from '../components/ToastModal';
+import { CustomDatePicker } from '../components/CustomDatePicker';
+import { CustomSelect } from '../components/CustomSelect';
 
 import { createGlobalStyle } from 'styled-components';
 
@@ -189,11 +191,137 @@ const GlobalPrintStyles = createGlobalStyle`
 }
 `;
 
+const fadeIn = keyframes`
+  from { opacity: 0; }
+  to { opacity: 1; }
+`;
+
+const fadeOut = keyframes`
+  from { opacity: 1; }
+  to { opacity: 0; }
+`;
+
+const scaleIn = keyframes`
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+`;
+
+const scaleOut = keyframes`
+  from { transform: scale(1); opacity: 1; }
+  to { transform: scale(0.95); opacity: 0; }
+`;
+
 const Container = styled.div`
-  padding: 2rem;
-  padding-top: 5rem;
-  max-width: 1200px;
-  margin: 0 auto;
+padding: 2rem;
+padding-top: 5rem;
+max-width: 1200px;
+margin: 0 auto;
+animation: ${fadeIn} 0.5s ease-in-out;
+`;
+
+const rotate = keyframes`
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+`;
+
+const SpinningIcon = styled(FaSpinner)`
+  animation: ${rotate} 1s linear infinite;
+`;
+
+const CreateCard = styled.div`
+  background: #f7fafc;
+  border-radius: 1.25rem;
+  border: 2px dashed #cbd5e0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  min-height: 250px;
+  gap: 1rem;
+  transition: all 0.2s ease;
+  opacity: 0.8;
+  color: #a0aec0;
+  width: 100%;
+
+  &:hover {
+    border-color: #48bb78;
+    color: #48bb78;
+    background: #f0fff4;
+    opacity: 1;
+  }
+`;
+
+const DashedCircle = styled.div`
+  width: 60px;
+  height: 60px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  color: inherit;
+  transition: all 0.5s ease;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    border-radius: 50%;
+    border: 2px dashed currentColor;
+    transition: all 0.5s ease;
+  }
+
+  ${CreateCard}:hover &::before {
+    animation: ${rotate} 10s linear infinite;
+  }
+`;
+
+const EmptyStickyState = styled.div`
+background: #f7fafc;
+border-radius: 0.75rem;
+border: 2px dashed #cbd5e0;
+display: flex;
+align-items: center;
+justify-content: center;
+cursor: pointer;
+padding: 1.5rem;
+gap: 1.5rem;
+transition: all 0.2s ease;
+color: #a0aec0;
+width: 100%;
+margin-top: 1rem;
+
+  &:hover {
+    border-color: #ecc94b; /* Yellow/Gold */
+    color: #d69e2e;
+    background: #fffff0;
+}
+`;
+
+const DashedStickyCircle = styled.div`
+width: 50px;
+height: 50px;
+position: relative;
+display: flex;
+align-items: center;
+justify-content: center;
+font-size: 1.25rem; /* Icon size */
+color: inherit;
+transition: all 0.5s ease;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    border-radius: 50%;
+    border: 2px dashed currentColor;
+    transition: all 0.5s ease;
+}
+
+  ${EmptyStickyState}: hover &::before {
+    animation: ${rotate} 10s linear infinite;
+}
 `;
 
 // Helper for colors
@@ -218,14 +346,14 @@ const getTaskStyles = (type: string) => {
 
 // Badges
 const Badge = styled.span<{ stage?: string, taskType?: string }>`
-  padding: 2px 8px;
-  border-radius: 9999px;
-  font-size: 0.7rem;
-  font-weight: 600;
-  text-transform: capitalize;
-  display: inline-flex;
-  align-items: center;
-  border: 1px solid transparent; 
+padding: 2px 8px;
+border-radius: 9999px;
+font-size: 0.7rem;
+font-weight: 600;
+text-transform: capitalize;
+display: inline-flex;
+align-items: center;
+border: 1px solid transparent; 
   
   ${p => {
         if (p.stage) {
@@ -240,46 +368,89 @@ const Badge = styled.span<{ stage?: string, taskType?: string }>`
             return `background: ${s.bg}; color: ${s.color};`;
         }
         return `background: #f7fafc; color: #718096; border-color: #e2e8f0;`;
-    }}
+    }
+    }
 `;
 
 
-const Title = styled.h1` font-size: 1.8rem; color: #2d3748; margin: 1rem 0 0.5rem; display: flex; align-items: center; gap: 0.75rem; `;
+const Title = styled.h1` font-size: 1.8rem; color: #2d3748; margin: 1rem 0 0.5rem; display: flex; align-items: center; gap: 0.75rem; `; // Repair corrupted title
 
+const StyledActionButton = styled.button<{ $variant?: 'primary' | 'secondary' | 'gold' | 'success' | 'danger' }>`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  border: ${p => p.$variant === 'secondary' ? '1px solid #e2e8f0' : 'none'};
+  background: ${p => {
+        switch (p.$variant) {
+            case 'gold': return '#d69e2e';
+            case 'primary': return '#48bb78';
+            case 'success': return '#48bb78'; // Map success to green
+            case 'danger': return '#e53e3e';
+            default: return 'white';
+        }
+    }};
+  color: ${p => p.$variant === 'secondary' ? '#4a5568' : 'white'};
 
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    filter: brightness(1.05);
+    background: ${p => p.$variant === 'secondary' ? '#f7fafc' : undefined};
+  }
+  
+  &:active {
+    transform: translateY(0);
+    box-shadow: none;
+  }
+  
+  &:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+`;
 
 // Modal Utils
-const ModalOverlay = styled.div`
-  position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); z-index: 10001;
-  display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px);
+const ModalOverlay = styled.div<{ isClosing?: boolean }>`
+position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); z-index: 10001;
+display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px);
+animation: ${p => p.isClosing ? fadeOut : fadeIn} 0.2s ease-in-out forwards;
 `;
 
-const PortalModalOverlay = ({ children }: { children: React.ReactNode }) => {
+const PortalModalOverlay = ({ children, isClosing }: { children: React.ReactNode, isClosing?: boolean }) => {
     return createPortal(
-        <ModalOverlay onClick={(e) => e.stopPropagation()}>
+        <ModalOverlay onClick={(e) => e.stopPropagation()} isClosing={isClosing}>
             {children}
         </ModalOverlay>,
         document.body
     );
 };
-const ModalContent = styled.div`
-  background: white; padding: 2rem; border-radius: 1rem; width: 90%; max-width: 500px; max-height: 90vh; overflow-y: auto;
+const ModalContent = styled.div<{ isClosing?: boolean }>`
+background: white; padding: 2rem; border-radius: 1rem; width: 90%; max-width: 500px; max-height: 90vh; overflow-y: auto;
+animation: ${p => p.isClosing ? scaleOut : scaleIn} 0.2s ease-in-out forwards;
 `;
 
-const TaskModalContent = styled.div`
-  background: white; 
-  padding: 2rem; 
-  border-radius: 1.5rem; 
-  width: 95%; 
-  max-width: 1000px; /* Wider for 2 columns */
-  max-height: 90vh; 
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
+const TaskModalContent = styled.div<{ isClosing?: boolean }>`
+  animation: ${p => p.isClosing ? scaleOut : scaleIn} 0.2s ease-in-out forwards;
+background: white;
+padding: 2rem;
+border-radius: 1.5rem;
+width: 95%;
+max-width: 1000px; /* Wider for 2 columns */
+max-height: 90vh;
+overflow-y: auto;
+display: flex;
+flex-direction: column;
 
-  @media (max-width: 768px) {
+@media(max-width: 768px) {
     padding: 1rem;
-  }
+}
 `;
 
 
@@ -318,7 +489,7 @@ const CreateMapDropZone = ({ children }: { children: React.ReactNode }) => {
 
 const DroppableMapCard = ({ map, children, onClick }: { map: CloneMap, children: React.ReactNode, onClick: () => void }) => {
     const { setNodeRef, isOver } = useDroppable({
-        id: `map-${map.id}`,
+        id: `map - ${map.id} `,
         data: { type: 'map', map }
     });
 
@@ -345,70 +516,70 @@ const DroppableMapCard = ({ map, children, onClick }: { map: CloneMap, children:
 
 
 const CancelButton = styled.button`
-  flex: 1; 
-  padding: 0.6rem; 
-  border: 1px solid #e2e8f0; 
-  border-radius: 0.5rem;
-  background: white; 
-  color: #4a5568; 
-  cursor: pointer; 
-  font-weight: 600;
-  transition: all 0.2s;
+flex: 1;
+padding: 0.6rem;
+border: 1px solid #e2e8f0;
+border-radius: 0.5rem;
+background: white;
+color: #4a5568;
+cursor: pointer;
+font-weight: 600;
+transition: all 0.2s;
   &:hover { background: #f7fafc; }
   &:disabled { opacity: 0.6; cursor: not-allowed; }
 `;
 
 const ActionButton = styled.button<{ $variant?: 'primary' | 'danger' | 'success' }>`
- 
-  padding: 0.75rem 1rem; 
-  border: none; 
-  border-radius: 0.5rem;
-  background: ${p => p.$variant === 'danger' ? '#fc8181' : p.$variant === 'success' ? '#48bb78' : '#3182ce'};
-  color: white; 
-  cursor: pointer; 
-  font-weight: 600;
-  font-size: 0.9rem;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
 
-  &:hover { 
-    filter: brightness(1.1); 
+padding: 0.75rem 1rem;
+border: none;
+border-radius: 0.5rem;
+background: ${p => p.$variant === 'danger' ? '#fc8181' : p.$variant === 'success' ? '#48bb78' : '#3182ce'};
+color: white;
+cursor: pointer;
+font-weight: 600;
+font-size: 0.9rem;
+box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+transition: all 0.2s;
+display: flex;
+align-items: center;
+justify-content: center;
+gap: 0.5rem;
+
+  &:hover {
+    filter: brightness(1.1);
     transform: translateY(-1px);
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-  }
-  &:disabled { 
-    background: #a0aec0; 
-    cursor: not-allowed; 
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+  &:disabled {
+    background: #a0aec0;
+    cursor: not-allowed;
     transform: none;
     box-shadow: none;
-  }
+}
 `;
 
 
 
 const BackButton = styled.button`
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 0.5rem;
-  color: #4a5568;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 0.5rem 1rem;
-  font-size: 0.95rem;
-  transition: all 0.2s;
+display: flex;
+align-items: center;
+gap: 0.5rem;
+background: white;
+border: 1px solid #e2e8f0;
+border-radius: 0.5rem;
+color: #4a5568;
+font-weight: 600;
+cursor: pointer;
+padding: 0.5rem 1rem;
+font-size: 0.95rem;
+transition: all 0.2s;
 
   &:hover {
     background: #f7fafc;
     color: #2d3748;
     border-color: #cbd5e0;
-  }
+}
 `;
 
 const FormGroup = styled.div`
@@ -421,7 +592,7 @@ margin-bottom: 1.5rem;
     font-size: 0.9rem;
 }
 input, select, textarea {
-    width: 100 %;
+    width: 100%;
     padding: 0.75rem;
     border: 1px solid #e2e8f0;
     border-radius: 0.5rem;
@@ -467,7 +638,7 @@ transition: transform 0.2s, box-shadow 0.2s;
 
   &:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 6px-1px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 6px - 1px rgba(0, 0, 0, 0.1);
 }
   
   h3 {
@@ -499,7 +670,7 @@ transition: transform 0.2s, box-shadow 0.2s;
 
 const DraggableStockBatch = ({ batch, onClick }: { batch: Batch, onClick?: () => void }) => {
     const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-        id: `stock-${batch.id} `,
+        id: `stock - ${batch.id} `,
         data: { type: 'batch', batch, fromStock: true }
     });
 
@@ -521,7 +692,8 @@ const DraggableStockBatch = ({ batch, onClick }: { batch: Batch, onClick?: () =>
                 borderLeft: `4px solid ${colors.border} `,
                 cursor: 'grab',
                 boxShadow: '0 1px 1px rgba(0,0,0,0.05)',
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                gap: '1rem'
             }}
         >
             <div>
@@ -540,7 +712,7 @@ const DraggableStockBatch = ({ batch, onClick }: { batch: Batch, onClick?: () =>
 
 const DraggableGenetic = ({ genetic }: { genetic: Genetic }) => {
     const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-        id: `genetic-${genetic.id} `,
+        id: `genetic - ${genetic.id} `,
         data: { type: 'genetic', genetic, fromSidebar: true }
     });
 
@@ -611,7 +783,7 @@ const groupBatchesByGeneticDate = (batches: Batch[]) => {
         if (groupMatch) {
             // Priority Grouping by "Grupo: X"
             const groupName = groupMatch[1].trim();
-            const key = `GROUP|${groupName}`;
+            const key = `GROUP | ${groupName} `;
             if (!groupMap.has(key)) {
                 groupMap.set(key, []);
             }
@@ -620,7 +792,7 @@ const groupBatchesByGeneticDate = (batches: Batch[]) => {
             // Default Grouping
             const dateKey = new Date(root.start_date || root.created_at).toLocaleDateString();
             // Key: GeneticID | Date
-            const key = `${root.genetic_id || 'unk'}|${dateKey}`;
+            const key = `${root.genetic_id || 'unk'}| ${dateKey} `;
 
             if (!groupMap.has(key)) {
                 groupMap.set(key, []);
@@ -659,8 +831,8 @@ const groupBatchesByGeneticDate = (batches: Batch[]) => {
             // But valid for this render cycle.
 
             // Let's create a proxy root for the group?
-            // Currently `SidebarBatchGroup` takes `{ root, children }`.
-            // We can pass `{ root: { ...primary.root, _virtualGroupName: groupName }, children: mergedChildren }`
+            // Currently `SidebarBatchGroup` takes `{ root, children } `.
+            // We can pass `{ root: { ...primary.root, _virtualGroupName: groupName }, children: mergedChildren } `
 
             smartGroups.push({
                 root: { ...primary.root, _virtualGroupName: groupName },
@@ -711,12 +883,12 @@ const SidebarBatchGroup = ({ group, expanded, onToggleExpand, childrenRender, on
         if (true) { // Default Smart Naming
             const geneticName = root.genetic?.name || root.name || 'Desconocida';
             const prefix = geneticName.substring(0, 6).toUpperCase();
-            displayName = `Lote ${prefix}-${displayDate}`;
+            displayName = `Lote ${prefix} ${displayDate} `;
         }
     }
 
     const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-        id: `group-${root.id}`,
+        id: `group - ${root.id} `,
         data: { type: 'batch-group', group, fromSidebar: true }
     });
 
@@ -751,7 +923,8 @@ const SidebarBatchGroup = ({ group, expanded, onToggleExpand, childrenRender, on
                     justifyContent: 'space-between',
                     alignItems: 'center',
                     background: expanded ? '#ebf8ff' : 'white',
-                    borderBottom: expanded ? '1px solid #bee3f8' : 'none'
+                    borderBottom: expanded ? '1px solid #bee3f8' : 'none',
+                    gap: '1rem'
                 }}
             >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -778,25 +951,29 @@ const SidebarBatchGroup = ({ group, expanded, onToggleExpand, childrenRender, on
             </div>
 
             {/* Content with internal scroll */}
-            {expanded && (
-                <div
-                    onPointerDown={(e) => e.stopPropagation()}
-                    style={{
-                        padding: '0.25rem',
-                        background: '#f7fafc',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '0.25rem',
-                        maxHeight: '350px', // Limit height for internal scrolling
-                        overflowY: 'auto',
-                        cursor: 'default'
-                    }}
-                >
-                    {childrenRender(root)}
-                    {children.map((child: any) => childrenRender(child))}
-                </div>
-            )}
-        </div>
+            {/* Content with internal scroll */}
+            <ExpandableContainer $expanded={expanded}>
+                <ExpandableInner>
+                    <div
+                        onPointerDown={(e) => e.stopPropagation()}
+                        style={{
+                            padding: '0.25rem',
+                            background: '#f7fafc',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '0.25rem',
+                            maxHeight: '350px', // Limit height for internal scrolling
+                            overflowY: 'auto',
+                            cursor: 'default'
+                        }}
+                    >
+                        {childrenRender(root)}
+                        {children.map((child: any) => childrenRender(child))}
+                    </div>
+                </ExpandableInner>
+            </ExpandableContainer>
+
+        </div >
     );
 };
 
@@ -933,6 +1110,16 @@ const RoomDetail: React.FC = () => {
 
     // Create Batch Modal State
     const [isCreateBatchModalOpen, setIsCreateBatchModalOpen] = useState(false);
+    const [isClosingCreateBatch, setIsClosingCreateBatch] = useState(false);
+    const [isCreatingBatch, setIsCreatingBatch] = useState(false);
+
+    const closeCreateBatchModal = () => {
+        setIsClosingCreateBatch(true);
+        setTimeout(() => {
+            setIsCreateBatchModalOpen(false);
+            setIsClosingCreateBatch(false);
+        }, 200);
+    };
     const [newBatch, setNewBatch] = useState({
         geneticId: '',
         quantity: '',
@@ -961,7 +1148,17 @@ const RoomDetail: React.FC = () => {
     const [isDaySummaryOpen, setIsDaySummaryOpen] = useState(false);
     const [selectedDayForSummary, setSelectedDayForSummary] = useState<Date | null>(null);
 
-    // Projection Alert State
+    // Sticky Modal State
+    const [isStickyModalOpen, setIsStickyModalOpen] = useState(false);
+    const [isStickyModalClosing, setIsStickyModalClosing] = useState(false);
+
+    const handleCloseStickyModal = () => {
+        setIsStickyModalClosing(true);
+        setTimeout(() => {
+            setIsStickyModalOpen(false);
+            setIsStickyModalClosing(false);
+        }, 200);
+    };
     const [isProjectionAlertOpen, setIsProjectionAlertOpen] = useState(false);
 
     // Recurrence State
@@ -973,16 +1170,39 @@ const RoomDetail: React.FC = () => {
         daysOfWeek: []
     });
 
-    // Sticky Modal State
-    const [isStickyModalOpen, setIsStickyModalOpen] = useState(false);
+
     const [stickyContent, setStickyContent] = useState('');
     const [stickyColor, setStickyColor] = useState<StickyNote['color']>('yellow');
     const [selectedSticky] = useState<StickyNote | null>(null);
+    const [isSavingSticky, setIsSavingSticky] = useState(false);
+
+    const [stickyToDelete, setStickyToDelete] = useState<string | null>(null);
+    const [isDeletingSticky, setIsDeletingSticky] = useState(false);
+    const [isStickyDeleteModalClosing, setIsStickyDeleteModalClosing] = useState(false);
+
+    const handleCloseStickyDeleteModal = () => {
+        setIsStickyDeleteModalClosing(true);
+        setTimeout(() => {
+            setStickyToDelete(null);
+            setIsStickyDeleteModalClosing(false);
+        }, 200);
+    };
 
 
     // Interactive Calendar State
     const { user } = useAuth();
+    // Task Modal State
     const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+    const [isClosingTaskModal, setIsClosingTaskModal] = useState(false);
+    const [isSavingTask, setIsSavingTask] = useState(false);
+
+    const closeTaskModal = () => {
+        setIsClosingTaskModal(true);
+        setTimeout(() => {
+            setIsTaskModalOpen(false);
+            setIsClosingTaskModal(false);
+        }, 200);
+    };
     const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
     const [selectedTask, setSelectedTask] = useState<Task | null>(null);
     const [taskForm, setTaskForm] = useState({ title: '', type: 'info', due_date: '', description: '', assigned_to: '' });
@@ -1024,6 +1244,16 @@ const RoomDetail: React.FC = () => {
 
     // Room Edit State
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [isClosingEditRoom, setIsClosingEditRoom] = useState(false);
+    const [isUpdatingRoom, setIsUpdatingRoom] = useState(false);
+
+    const closeEditRoomModal = () => {
+        setIsClosingEditRoom(true);
+        setTimeout(() => {
+            setIsEditModalOpen(false);
+            setIsClosingEditRoom(false);
+        }, 200);
+    };
     const [editRoomName, setEditRoomName] = useState('');
     const [editRoomType, setEditRoomType] = useState('');
     const [editRoomStartDate, setEditRoomStartDate] = useState('');
@@ -1037,16 +1267,36 @@ const RoomDetail: React.FC = () => {
     }, [isEditModalOpen, room]);
 
     const [isMapModalOpen, setIsMapModalOpen] = useState(false);
+    const [isClosingMapModal, setIsClosingMapModal] = useState(false);
+    const [isCreatingMap, setIsCreatingMap] = useState(false);
+
+    const closeMapModal = () => {
+        setIsClosingMapModal(true);
+        setTimeout(() => {
+            setIsMapModalOpen(false);
+            setIsClosingMapModal(false);
+        }, 200);
+    };
     const [newMapName, setNewMapName] = useState('');
     const [newMapRows, setNewMapRows] = useState<number | string>('');
     const [newMapCols, setNewMapCols] = useState<number | string>('');
 
     // Edit Map Modal State
     const [isEditMapModalOpen, setIsEditMapModalOpen] = useState(false);
+    const [isClosingEditMap, setIsClosingEditMap] = useState(false);
     const [editingMapId, setEditingMapId] = useState<string | null>(null);
     // const [targetMapId, setTargetMapId] = useState<string | null>(null);
     const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState(false);
     const [bulkEditForm, setBulkEditForm] = useState({ stage: '', notes: '' });
+    const [isUpdatingMap, setIsUpdatingMap] = useState(false);
+
+    const closeEditMapModal = () => {
+        setIsClosingEditMap(true);
+        setTimeout(() => {
+            setIsEditMapModalOpen(false);
+            setIsClosingEditMap(false);
+        }, 200);
+    };
 
     // --- Loading Data ---
     const [editMapName, setEditMapName] = useState('');
@@ -1056,10 +1306,29 @@ const RoomDetail: React.FC = () => {
 
     // Map Deletion Modal State
     const [isDeleteMapModalOpen, setIsDeleteMapModalOpen] = useState(false);
+    const [isClosingDeleteMap, setIsClosingDeleteMap] = useState(false);
+    const [isDeletingMap, setIsDeletingMap] = useState(false);
     const [mapIdToDelete, setMapIdToDelete] = useState<string | null>(null);
+
+    const closeDeleteMapModal = () => {
+        setIsClosingDeleteMap(true);
+        setTimeout(() => {
+            setIsDeleteMapModalOpen(false);
+            setIsClosingDeleteMap(false);
+        }, 200);
+    };
 
     // History Modal State
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+    const [isClosingHistory, setIsClosingHistory] = useState(false);
+
+    const closeHistoryModal = () => {
+        setIsClosingHistory(true);
+        setTimeout(() => {
+            setIsHistoryModalOpen(false);
+            setIsClosingHistory(false);
+        }, 200);
+    };
     const [historyLoading, setHistoryLoading] = useState(false);
     const [roomHistory, setRoomHistory] = useState<any[]>([]);
 
@@ -1074,11 +1343,31 @@ const RoomDetail: React.FC = () => {
     // Create Map from Group Confirmation State
     const [isCreateMapFromGroupConfirmOpen, setIsCreateMapFromGroupConfirmOpen] = useState(false);
     const [pendingMapGroup, setPendingMapGroup] = useState<any | null>(null);
+    const [isClosingCreateMapFromGroup, setIsClosingCreateMapFromGroup] = useState(false);
+    const [isCreatingMapFromGroup, setIsCreatingMapFromGroup] = useState(false);
+
+    const closeCreateMapFromGroupModal = () => {
+        setIsClosingCreateMapFromGroup(true);
+        setTimeout(() => {
+            setIsCreateMapFromGroupConfirmOpen(false);
+            setIsClosingCreateMapFromGroup(false);
+        }, 200);
+    };
 
     const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; batch: Batch | null }>({
         isOpen: false,
         batch: null
     });
+    const [isDeletingBatch, setIsDeletingBatch] = useState(false);
+    const [isClosingDeleteConfirm, setIsClosingDeleteConfirm] = useState(false);
+
+    const closeDeleteConfirm = () => {
+        setIsClosingDeleteConfirm(true);
+        setTimeout(() => {
+            setDeleteConfirm({ isOpen: false, batch: null });
+            setIsClosingDeleteConfirm(false);
+        }, 200);
+    };
 
     const [moveConfirm, setMoveConfirm] = useState<{ isOpen: boolean; position: string | null }>({
         isOpen: false,
@@ -1111,9 +1400,20 @@ const RoomDetail: React.FC = () => {
 
     // Edit Batch Modal State
     const [isEditBatchModalOpen, setIsEditBatchModalOpen] = useState(false);
-    const [editBatchForm, setEditBatchForm] = useState<{ id: string, name: string, quantity: number, notes: string }>({
-        id: '', name: '', quantity: 1, notes: ''
+    const [editBatchForm, setEditBatchForm] = useState<{ id: string, name: string, quantity: number | string, notes: string }>({
+        id: '', name: '', quantity: '', notes: ''
     });
+    const [isUpdatingBatch, setIsUpdatingBatch] = useState(false);
+
+    const [isClosingEditBatch, setIsClosingEditBatch] = useState(false);
+
+    const closeEditBatchModal = () => {
+        setIsClosingEditBatch(true);
+        setTimeout(() => {
+            setIsEditBatchModalOpen(false);
+            setIsClosingEditBatch(false);
+        }, 200);
+    };
 
     // --- SIDEBAR GROUP EXPANSION STATE ---
     const [expandedSidebarGroups, setExpandedSidebarGroups] = useState<Set<string>>(new Set());
@@ -1141,7 +1441,7 @@ const RoomDetail: React.FC = () => {
         setEditBatchForm({
             id: batch.id,
             name: batch.name,
-            quantity: batch.quantity,
+            quantity: '', // Start empty per user request
             notes: batch.notes || ''
         });
         setIsEditBatchModalOpen(true);
@@ -1153,6 +1453,17 @@ const RoomDetail: React.FC = () => {
 
     // Transplant Modal State
     const [isTransplantModalOpen, setIsTransplantModalOpen] = useState(false);
+    const [isClosingTransplant, setIsClosingTransplant] = useState(false);
+    const [isClosingDistribution, setIsClosingDistribution] = useState(false);
+    const [isClosingSingleDistribution, setIsClosingSingleDistribution] = useState(false);
+
+    const closeTransplantModal = () => {
+        setIsClosingTransplant(true);
+        setTimeout(() => {
+            setIsTransplantModalOpen(false);
+            setIsClosingTransplant(false);
+        }, 200);
+    };
 
     const [isSingleDistributeConfirmOpen, setIsSingleDistributeConfirmOpen] = useState(false);
     const [singleDistributionData, setSingleDistributionData] = useState<{ batchId: string, position: string, quantity: number, mapId: string } | null>(null);
@@ -1160,6 +1471,15 @@ const RoomDetail: React.FC = () => {
     const [transplantForm, setTransplantForm] = useState<{ batchId: string, quantity: number }>({ batchId: '', quantity: 1 });
 
     const [isHarvestModalOpen, setIsHarvestModalOpen] = useState(false);
+    const [isClosingHarvestModal, setIsClosingHarvestModal] = useState(false);
+
+    const closeHarvestModal = () => {
+        setIsClosingHarvestModal(true);
+        setTimeout(() => {
+            setIsHarvestModalOpen(false);
+            setIsClosingHarvestModal(false);
+        }, 300);
+    };
 
     // Toast State
     const [toastModal, setToastModal] = useState<{ isOpen: boolean; message: string; type: 'success' | 'error' | 'info' }>({
@@ -1267,14 +1587,14 @@ const RoomDetail: React.FC = () => {
                                     batchId,
                                     room.id,
                                     destinationRoomId,
-                                    `Transplante (Grupo: ${group.name})` // Add group context to history
+                                    `Transplante(Grupo: ${group.name})` // Add group context to history
                                 );
 
                                 // Update notes to persist the user's organization intent without destroying known ID.
                                 const currentNotes = batch.notes || '';
                                 // Avoid duplicate group notes if moved multiple times
                                 const newNoteLine = `[Grupo: ${group.name}]`;
-                                const newNotes = currentNotes.includes(newNoteLine) ? currentNotes : (currentNotes ? `${currentNotes}\n${newNoteLine}` : newNoteLine);
+                                const newNotes = currentNotes.includes(newNoteLine) ? currentNotes : (currentNotes ? `${currentNotes} \n${newNoteLine} ` : newNoteLine);
 
                                 await roomsService.updateBatch(batchId, {
                                     stage: 'vegetation',
@@ -1301,23 +1621,33 @@ const RoomDetail: React.FC = () => {
 
     const handleUpdateBatch = async () => {
         if (!editBatchForm.id) return;
+        setIsUpdatingBatch(true);
         try {
-            await roomsService.updateBatch(editBatchForm.id, {
-                name: editBatchForm.name,
-                quantity: Number(editBatchForm.quantity),
-                notes: editBatchForm.notes,
-                current_room_id: room?.id
-            }, user?.id, 'Edición Manual de Lote');
+            // Artificial delay for UX
+            const minDelay = new Promise(resolve => setTimeout(resolve, 800));
+
+            const [result] = await Promise.all([
+                roomsService.updateBatch(editBatchForm.id, {
+                    name: editBatchForm.name,
+                    quantity: Number(editBatchForm.quantity),
+                    notes: editBatchForm.notes,
+                    current_room_id: room?.id
+                }, user?.id, 'Edición Manual de Lote'),
+                minDelay
+            ]);
 
             // Refresh
             if (id) {
-                const updatedRoom = await roomsService.getRoomById(id);
-                if (updatedRoom) setRoom(updatedRoom);
+                // Silent refresh if possible, or just standard load
+                await loadData(id, false, false);
             }
-            setIsEditBatchModalOpen(false);
+            closeEditBatchModal();
+            showToast("Lote actualizado correctamente", 'success');
         } catch (error) {
             console.error("Error updating batch", error);
-            alert("Error al actualizar el lote");
+            showToast("Error al actualizar el lote", 'error');
+        } finally {
+            setIsUpdatingBatch(false);
         }
     };
 
@@ -1326,20 +1656,23 @@ const RoomDetail: React.FC = () => {
     // Room Update Handler
     const handleUpdateRoom = async () => {
         if (!room || !editRoomName || !editRoomType) return;
-        setLoading(true);
+        setIsUpdatingRoom(true); // Local loading state
         try {
             await roomsService.updateRoom(room.id, {
                 name: editRoomName,
                 type: editRoomType as any,
                 start_date: editRoomStartDate ? new Date(editRoomStartDate).toISOString() : undefined
             });
+            // Reload data without triggering global loading screen if possible, or accept short delay.
+            // The flicker happened because setLoading(true) unmounted the modal/page content.
             if (id) await loadData(id);
-            setIsEditModalOpen(false);
+
+            closeEditRoomModal();
         } catch (error) {
-            console.error("Error updating room", error);
+            console.error("Error updating room:", error);
             alert("Error al actualizar la sala");
         } finally {
-            setLoading(false);
+            setIsUpdatingRoom(false);
         }
     };
 
@@ -1352,8 +1685,11 @@ const RoomDetail: React.FC = () => {
             return;
         }
 
+        setIsCreatingMap(true); // Local loading
         try {
-            setLoading(true);
+            // Artificial delay for smoother UX
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
             const newMap = await roomsService.createCloneMap({
                 room_id: room?.id || '',
                 name: newMapName,
@@ -1363,18 +1699,19 @@ const RoomDetail: React.FC = () => {
 
             if (newMap) {
                 setCloneMaps(prev => [...prev, newMap]);
-                setIsMapModalOpen(false);
+                closeMapModal();
                 setNewMapName('');
                 setNewMapRows('');
                 setNewMapCols('');
             }
         } catch (error) {
             console.error("Error creating map", error);
-            alert("Error al crear la mesa.");
+            alert("Error al crear el mapa.");
         } finally {
-            setLoading(false);
+            setIsCreatingMap(false);
         }
     };
+
 
     const handleEditMapClick = (e: React.MouseEvent, map: CloneMap) => {
         e.stopPropagation();
@@ -1395,6 +1732,7 @@ const RoomDetail: React.FC = () => {
             return;
         }
 
+        setIsUpdatingMap(true); // Local loading
         try {
             const updatedMap = await roomsService.updateCloneMap(editingMapId, {
                 name: editMapName,
@@ -1404,29 +1742,46 @@ const RoomDetail: React.FC = () => {
 
             if (updatedMap) {
                 setCloneMaps(prev => prev.map(m => m.id === editingMapId ? updatedMap : m));
-                setIsEditMapModalOpen(false);
+                closeEditMapModal();
                 setEditingMapId(null);
             }
         } catch (error) {
             console.error("Error updating map:", error);
             alert("Error al actualizar el mapa.");
+        } finally {
+            setIsUpdatingMap(false);
         }
 
     };
 
-    const loadData = React.useCallback(async (roomId: string) => {
-        setLoading(true);
+    const loadData = React.useCallback(async (roomId: string, isInitial = false, showLoading = true) => {
+        if (showLoading) setLoading(true);
         try {
             const { usersService } = await import('../services/usersService');
 
-            const [roomData, tasksData, usersData, stickiesData, mapsData, metricsResult] = await Promise.all([
-                roomsService.getRoomById(roomId),
-                tasksService.getTasksByRoomId(roomId),
-                usersService.getUsers(),
-                stickiesService.getStickies(roomId),
-                roomsService.getCloneMaps(roomId),
-                roomsService.getCloneSuccessMetrics(roomId)
+            const loadPromise = async () => {
+                const [roomData, tasksData, usersData, stickiesData, mapsData, metricsResult, geneticsData] = await Promise.all([
+                    roomsService.getRoomById(roomId),
+                    tasksService.getTasksByRoomId(roomId),
+                    usersService.getUsers(),
+                    stickiesService.getStickies(roomId),
+                    roomsService.getCloneMaps(roomId),
+                    roomsService.getCloneSuccessMetrics(roomId),
+                    roomsService.getGenetics() // Always fetch genetics to be safe or keep conditional?
+                ]);
+                return { roomData, tasksData, usersData, stickiesData, mapsData, metricsResult, geneticsData };
+            };
+
+            const minTimePromise = isInitial
+                ? new Promise(resolve => setTimeout(resolve, 1500))
+                : Promise.resolve();
+
+            const [results] = await Promise.all([
+                loadPromise(),
+                minTimePromise
             ]);
+
+            const { roomData, tasksData, usersData, stickiesData, mapsData, metricsResult, geneticsData } = results;
 
             setRoom(roomData);
             setTasks(tasksData);
@@ -1435,21 +1790,22 @@ const RoomDetail: React.FC = () => {
             setCloneMaps(mapsData);
             setMetricsData(metricsResult);
 
-            // Load Genetics only if needed (Esquejera/Germinacion/LivingSoil)
+            // Conditional genetics set-reusing the fetched data if needed
             if (['clones', 'esquejes', 'esquejera', 'germinacion', 'germinación', 'germination', 'semillero', 'living_soil'].includes((roomData?.type as string)?.toLowerCase())) {
-                const geneticsData = await roomsService.getGenetics();
                 setGenetics(geneticsData);
             }
 
         } catch (error) {
             console.error("Error loading room data", error);
         } finally {
-            setLoading(false);
+            if (showLoading) setLoading(false);
         }
     }, []);
 
     const confirmDeleteMap = async () => {
         if (!mapIdToDelete) return;
+
+        setIsDeletingMap(true); // Local loading
         try {
             await roomsService.deleteCloneMap(mapIdToDelete);
             if (id) {
@@ -1457,11 +1813,14 @@ const RoomDetail: React.FC = () => {
                 setCloneMaps(maps);
             }
             if (activeMapId === mapIdToDelete) setActiveMapId(null);
+
+            closeDeleteMapModal();
+            setMapIdToDelete(null);
         } catch (error) {
             console.error("Error deleting map", error);
+            alert("Error al eliminar el mapa.");
         } finally {
-            setIsDeleteMapModalOpen(false);
-            setMapIdToDelete(null);
+            setIsDeletingMap(false);
         }
     };
 
@@ -1650,7 +2009,7 @@ const RoomDetail: React.FC = () => {
             // Ideally we'd have `roomsService.sowBatch(...)`.
 
             await roomsService.createBatch({
-                name: `${prefix}-${sowingPosition}`, // Temporary name until better logic
+                name: `${prefix} -${sowingPosition} `, // Temporary name until better logic
                 quantity: 1,
                 stage: 'seedling', // Start as Seedling
                 genetic_id: newSowingBatch.genetic_id,
@@ -1692,7 +2051,7 @@ const RoomDetail: React.FC = () => {
         try {
             await roomsService.updateBatchStage(batch.id, newStage, user?.id);
             if (id) await loadData(id);
-            showToast(`Etapa actualizada a ${newStage}`, 'success');
+            showToast(`Etapa actualizada a ${newStage} `, 'success');
             // Update the modal's internal batch if possible, or close it.
             setPlantDetailModal({ isOpen: false, batch: null });
         } catch (error) {
@@ -1759,16 +2118,26 @@ const RoomDetail: React.FC = () => {
         const { batch } = deleteConfirm;
         if (!batch) return;
 
+        setIsDeletingBatch(true);
         try {
-            await roomsService.deleteBatch(batch.id);
-            setDeleteConfirm({ isOpen: false, batch: null });
+            // Artificial delay for UX
+            const minDelay = new Promise(resolve => setTimeout(resolve, 800));
+
+            const [result] = await Promise.all([
+                roomsService.deleteBatch(batch.id),
+                minDelay
+            ]);
+
+            closeDeleteConfirm();
             if (id) {
-                const updatedRoom = await roomsService.getRoomById(id);
-                if (updatedRoom) setRoom(updatedRoom);
+                // Silent refresh if possible
+                await loadData(id, false, false);
             }
         } catch (error) {
             console.error("Error deleting single plant", error);
             alert("Error al eliminar la planta");
+        } finally {
+            setIsDeletingBatch(false);
         }
     };
 
@@ -1827,7 +2196,7 @@ const RoomDetail: React.FC = () => {
             for (let c = 0; c < map.grid_columns; c++) {
                 if (assignedCount >= qty) break;
                 const rowLabel = String.fromCharCode(65 + r);
-                const pos = `${rowLabel}${c + 1}`; // Fixed space trimming
+                const pos = `${rowLabel}${c + 1} `; // Fixed space trimming
 
                 if (!occupiedPositions.has(pos)) {
                     targetPositions.push(pos);
@@ -1837,7 +2206,7 @@ const RoomDetail: React.FC = () => {
         }
 
         if (targetPositions.length < qty) {
-            alert(`No hay suficiente espacio libre en el mapa. Se necesitan ${qty} espacios, hay ${targetPositions.length}.`);
+            alert(`No hay suficiente espacio libre en el mapa.Se necesitan ${qty} espacios, hay ${targetPositions.length}.`);
             return;
         }
 
@@ -1873,7 +2242,7 @@ const RoomDetail: React.FC = () => {
                 const totalAvailableUnits = availableBatches.reduce((sum, b) => sum + b.quantity, 0);
 
                 if (totalAvailableUnits < qty) {
-                    alert(`No se encontraron suficientes lotes disponibles. Solicitados: ${qty}, Disponibles: ${totalAvailableUnits}`);
+                    alert(`No se encontraron suficientes lotes disponibles.Solicitados: ${qty}, Disponibles: ${totalAvailableUnits} `);
                     setLoading(false);
                     return;
                 }
@@ -1965,6 +2334,11 @@ const RoomDetail: React.FC = () => {
     };
 
     const [activeItem, setActiveItem] = useState<any>(null);
+
+    // Memoized batches for LivingSoilGrid to prevent infinite loops
+    const livingSoilBatches = useMemo(() => {
+        return (room?.batches || []).filter(b => b.clone_map_id === activeMapId && b.quantity > 0);
+    }, [room?.batches, activeMapId]);
 
     const handleDragStart = (event: any) => {
         setActiveItem(event.active.data.current);
@@ -2069,7 +2443,7 @@ const RoomDetail: React.FC = () => {
                         break;
                     }
 
-                    const pos = `${getRowLabel(r)}${c}`;
+                    const pos = `${getRowLabel(r)}${c} `;
                     if (!occupiedSet.has(pos)) {
                         freeSlots++;
                     }
@@ -2244,7 +2618,7 @@ const RoomDetail: React.FC = () => {
             const rows = Math.ceil(total / cols);
 
             // 2. Create Map
-            const newMapName = `${pendingMapBatch.name}-${format(new Date(), 'dd/MM HH:mm')} `;
+            const newMapName = `${pendingMapBatch.name} -${format(new Date(), 'dd/MM HH:mm')} `;
 
             const { data: newMap, error: mapError } = await supabase
                 .from('clone_maps')
@@ -2291,7 +2665,7 @@ const RoomDetail: React.FC = () => {
     const handleConfirmCreateMapFromGroup = async () => {
         if (!pendingMapGroup || !room) return;
 
-        setLoading(true);
+        setIsCreatingMapFromGroup(true); // Local loading
         try {
             // 1. Calculate Total and Grid Size
             const { root, children } = pendingMapGroup;
@@ -2314,7 +2688,7 @@ const RoomDetail: React.FC = () => {
                 const geneticName = root.genetic?.name || root.name || 'Desconocida';
                 const prefix = geneticName.substring(0, 6).toUpperCase();
                 const displayDate = new Date(root.start_date || root.created_at).toLocaleDateString();
-                newMapName = `Lote ${prefix}-${displayDate}`;
+                newMapName = `Lote ${prefix} ${displayDate} `; // Consistent naming without hyphen
             }
 
             const { data: newMap, error: mapError } = await supabase
@@ -2343,13 +2717,13 @@ const RoomDetail: React.FC = () => {
 
             if (id) await loadData(id);
 
+            closeCreateMapFromGroupModal();
+            setPendingMapGroup(null);
+
         } catch (e) {
             console.error(e);
             alert("Error al crear el mapa desde el grupo.");
-        } finally {
-            setLoading(false);
-            setIsCreateMapFromGroupConfirmOpen(false);
-            setPendingMapGroup(null);
+            setIsCreatingMapFromGroup(false); // Stop loading on error
         }
     };
 
@@ -2362,24 +2736,33 @@ const RoomDetail: React.FC = () => {
 
     const handleSaveSticky = async () => {
         if (!id) return;
+        setIsSavingSticky(true);
 
         // No specific date-general room note
         const targetDate = undefined;
 
-        if (selectedSticky) {
-            // Update logic (if implemented in service/UI fully)
-            // For now we just create new ones or delete old ones manually
-        } else {
-            // Pass undefined or null for targetDate to make it general
-            await stickiesService.createSticky(stickyContent, stickyColor, id, targetDate);
-        }
+        try {
+            if (selectedSticky) {
+                // Update logic (if implemented in service/UI fully)
+                // For now we just create new ones or delete old ones manually
+            } else {
+                // Pass undefined or null for targetDate to make it general
+                await stickiesService.createSticky(stickyContent, stickyColor, id, targetDate);
+            }
 
-        const freshStickies = await stickiesService.getStickies(id);
-        setStickies(freshStickies);
-        setIsStickyModalOpen(false);
+            const freshStickies = await stickiesService.getStickies(id);
+            setStickies(freshStickies);
+            handleCloseStickyModal();
+            setStickyContent('');
+        } catch (error) {
+            console.error("Error saving sticky:", error);
+            alert("Error al guardar la nota. Intente nuevamente.");
+        } finally {
+            setIsSavingSticky(false);
+        }
     };
 
-    const [stickyToDelete, setStickyToDelete] = useState<string | null>(null);
+
 
     const handleDeleteSticky = (stickyId: string) => {
         setStickyToDelete(stickyId);
@@ -2387,12 +2770,20 @@ const RoomDetail: React.FC = () => {
 
     const confirmDeleteSticky = async () => {
         if (stickyToDelete) {
-            await stickiesService.deleteSticky(stickyToDelete);
-            if (id) {
-                const freshStickies = await stickiesService.getStickies(id);
-                setStickies(freshStickies);
+            setIsDeletingSticky(true);
+            try {
+                await stickiesService.deleteSticky(stickyToDelete);
+                if (id) {
+                    const freshStickies = await stickiesService.getStickies(id);
+                    setStickies(freshStickies);
+                }
+                handleCloseStickyDeleteModal();
+            } catch (error) {
+                console.error("Error deleting sticky:", error);
+                alert("Error al eliminar la nota.");
+            } finally {
+                setIsDeletingSticky(false);
             }
-            setStickyToDelete(null);
         }
     };
 
@@ -2407,12 +2798,12 @@ const RoomDetail: React.FC = () => {
     const handleRegisterObservation = async () => {
         if (!selectedBatchIds.size) return;
 
+        setLoading(true); // Add loading state
         try {
             const batchIds = Array.from(selectedBatchIds);
-
-            // 1. Update in Supabase
-            // Logic: If text exists, alert = true. If text is empty, alert = false.
             const hasContent = !!observationText?.trim();
+
+            console.log(`[Observation] Updating ${batchIds.length} batches.Notes: "${observationText}"`);
 
             // 1. Update via Service with Logging
             const updatePromises = batchIds.map(id =>
@@ -2420,16 +2811,15 @@ const RoomDetail: React.FC = () => {
                     id,
                     {
                         notes: observationText,
-                        has_alert: !!observationText?.trim(),
-                        current_room_id: room?.id // Ensure history log is linked to this room
+                        has_alert: hasContent,
+                        current_room_id: room?.id
                     },
                     user?.id,
                     'Observación Registrada'
                 )
             );
+
             await Promise.all(updatePromises);
-
-
 
             // 2. Update local state
             if (activeMapId && room?.batches) {
@@ -2444,15 +2834,19 @@ const RoomDetail: React.FC = () => {
             }
 
             showToast(`Observación registrada en ${selectedBatchIds.size} lotes.`, 'success');
-            setIsObservationModalOpen(false);
+
+            // Clear selection logic-intentionally kept after success
             setObservationText('');
             setIsBulkActionsOpen(false);
-            // Optional: Clear selection? For now, keep it to see changes.
             setSelectedBatchIds(new Set());
 
         } catch (error) {
             console.error('Error registering observation:', error);
             showToast('Error al registrar observación.', 'error');
+        } finally {
+            // Key Fix: Always close modal
+            setIsObservationModalOpen(false);
+            setLoading(false);
         }
     };
 
@@ -2467,11 +2861,13 @@ const RoomDetail: React.FC = () => {
             return;
         }
 
+        setIsCreatingBatch(true);
+
         const selectedGenetic = genetics.find(m => m.id === newBatch.geneticId);
         // Prefix logic
         const prefix = (selectedGenetic?.name || 'GEN').substring(0, 3).toUpperCase().replace(/[^A-Z]/g, '');
 
-        let batchName = `${prefix}-${format(new Date(), 'yyMMdd')}`;
+        let batchName = `${prefix} -${format(new Date(), 'yyMMdd')} `;
 
         // Determine Stage based on Room Type
         let stage: 'seedling' | 'vegetation' | 'flowering' | 'drying' | 'curing' = 'vegetation';
@@ -2479,7 +2875,7 @@ const RoomDetail: React.FC = () => {
         const rType = (room?.type || '').toLowerCase();
         if (['germinacion', 'germinación', 'germination', 'semillero'].includes(rType)) {
             stage = 'seedling';
-            batchName = `SEM-${prefix}-${format(new Date(), 'yyMMdd')}`;
+            batchName = `SEM - ${prefix} -${format(new Date(), 'yyMMdd')} `;
         } else if (['clones', 'esquejes', 'esquejera'].includes(rType)) {
             stage = 'vegetation';
         }
@@ -2494,19 +2890,41 @@ const RoomDetail: React.FC = () => {
             parent_batch_id: undefined
         };
 
-        const created = await roomsService.createBatch(batchData, user?.id);
+        try {
+            // Artificial delay for better UX (1 second)
+            const minDelay = new Promise(resolve => setTimeout(resolve, 1000));
 
-        if (created) {
-            if (id) await loadData(id);
-            setIsCreateBatchModalOpen(false);
-            setNewBatch({
-                geneticId: '',
-                quantity: '',
-                date: new Date().toISOString().split('T')[0]
-            });
-            showToast("Lote creado correctamente.", 'success');
-        } else {
+            const [created] = await Promise.all([
+                roomsService.createBatch(batchData, user?.id),
+                minDelay
+            ]);
+
+            if (created) {
+                // Silent reload (no full screen spinner)
+                if (id) await loadData(id, false, false);
+
+                // Close modal first
+                closeCreateBatchModal();
+                setNewBatch({
+                    geneticId: '',
+                    quantity: '',
+                    date: new Date().toISOString().split('T')[0]
+                });
+
+                // Small delay before showing success toast to avoid modal overlap/ghosting
+                setTimeout(() => {
+                    showToast("Lote creado correctamente.", 'success');
+                }, 300);
+            } else {
+                showToast("Error al crear el lote.", 'error');
+            }
+        } catch (error) {
+            console.error(error);
             showToast("Error al crear el lote.", 'error');
+        } finally {
+            // Ensure loading state is off. 
+            // If component unmounted, this might warn, but usually fine in this structure.
+            setIsCreatingBatch(false);
         }
     };
 
@@ -2548,31 +2966,37 @@ const RoomDetail: React.FC = () => {
 
     const handleSaveTask = async () => {
         if (!room) return;
+        setIsSavingTask(true);
+        try {
+            const taskData: any = {
+                title: taskForm.title,
+                type: taskForm.type as any,
+                due_date: taskForm.due_date,
+                description: taskForm.description,
+                room_id: room.id,
+                assigned_to: taskForm.assigned_to || null,
+                recurrence: recurrenceEnabled ? recurrenceConfig : undefined
+            };
 
-        const taskData: any = {
-            title: taskForm.title,
-            type: taskForm.type as any,
-            due_date: taskForm.due_date,
-            description: taskForm.description,
-            room_id: room.id,
-            assigned_to: taskForm.assigned_to || null,
-            recurrence: recurrenceEnabled ? recurrenceConfig : undefined
-        };
+            if (selectedTask) {
+                // Update
+                await tasksService.updateTask(selectedTask.id, taskData);
+            } else {
+                // Create
+                await tasksService.createTask(taskData);
+            }
 
-        if (selectedTask) {
-            // Update
-            await tasksService.updateTask(selectedTask.id, taskData);
-        } else {
-            // Create
-            await tasksService.createTask(taskData);
+            // Refresh tasks
+            if (id) {
+                const updatedTasks = await tasksService.getTasksByRoomId(id);
+                setTasks(updatedTasks);
+            }
+            closeTaskModal();
+        } catch (error) {
+            console.error("Error saving task", error);
+        } finally {
+            setIsSavingTask(false);
         }
-
-        // Refresh tasks
-        if (id) {
-            const updatedTasks = await tasksService.getTasksByRoomId(id);
-            setTasks(updatedTasks);
-        }
-        setIsTaskModalOpen(false);
     };
 
     const handleToggleTaskStatus = async (task: Task) => {
@@ -2620,7 +3044,7 @@ const RoomDetail: React.FC = () => {
 
     useEffect(() => {
         if (id) {
-            loadData(id);
+            loadData(id, true);
         }
     }, [id, loadData]);
 
@@ -2634,7 +3058,7 @@ const RoomDetail: React.FC = () => {
 
     // Tables calc removed
 
-    if (loading) return <LoadingSpinner fullScreen text="Cargando sala..." />;
+    if (loading) return <LoadingSpinner fullScreen text={activeMapId ? "Cargando Mapa..." : "Cargando sala..."} duration={1500} />
 
     return (
         <Container>
@@ -2671,7 +3095,7 @@ const RoomDetail: React.FC = () => {
                                     if (b.quantity > 0) {
                                         // Group by Genetic + Date (YYYY-MM-DD) to count logical batches
                                         const date = b.created_at ? new Date(b.created_at).toISOString().split('T')[0] : 'unknown';
-                                        const key = `${b.genetic_id || b.name}-${date}`;
+                                        const key = `${b.genetic_id || b.name} -${date} `;
                                         uniqueBatches.add(key);
                                     }
                                 });
@@ -2800,33 +3224,21 @@ const RoomDetail: React.FC = () => {
                     </div>
                 ) : (
 
-                    <div
+                    <EmptyStickyState
                         onClick={() => {
                             setStickyContent('');
                             setStickyColor('yellow');
                             setIsStickyModalOpen(true);
                         }}
-                        style={{
-                            padding: '1rem',
-                            border: '2px dashed #cbd5e0',
-                            borderRadius: '0.5rem',
-                            textAlign: 'center',
-                            color: '#a0aec0',
-                            cursor: 'pointer',
-                            background: '#f7fafc',
-                            transition: 'all 0.2s ease',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '1rem'
-                        }}
                     >
-                        <FaStickyNote style={{ fontSize: '1.5rem', opacity: 0.5 }} />
+                        <DashedStickyCircle>
+                            <FaPlus />
+                        </DashedStickyCircle>
                         <div style={{ textAlign: 'left' }}>
-                            <p style={{ fontSize: '0.95rem', fontWeight: 600, color: '#718096', margin: 0 }}>No hay notas fijadas.</p>
-                            <p style={{ color: '#a0aec0', fontSize: '0.85rem', margin: 0 }}>Toca aqui + para agregar una nota</p>
+                            <p style={{ fontSize: '1rem', fontWeight: 600, color: 'inherit', margin: 0 }}>No hay notas fijadas.</p>
+                            <p style={{ color: 'inherit', opacity: 0.8, fontSize: '0.85rem', margin: 0 }}>Toca aquí para agregar una nota</p>
                         </div>
-                    </div>
+                    </EmptyStickyState>
                 )}
             </div>
 
@@ -2834,36 +3246,25 @@ const RoomDetail: React.FC = () => {
             {
                 ['clones', 'esquejes', 'esquejera', 'vegetacion', 'vegetación', 'vegetation', 'flowering', 'floración', 'flora', 'germination', 'germinacion', 'germinación', 'semillero', 'living_soil'].includes((room?.type as string)?.toLowerCase()) ? (
                     <div style={{ padding: '2rem' }}>
-                        <div className="no-print" style={{ marginBottom: '2rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <div>
-                                <h2 style={{ fontSize: '1.8rem', color: '#2d3748', margin: 0 }}>{room?.name}</h2>
-                                <span style={{ color: '#718096' }}>{room?.type === 'living_soil' ? 'Agro/Living Soil' : (room?.type ? room.type.charAt(0).toUpperCase() + room.type.slice(1) : 'Sala')}</span>
-                            </div>
+                        <div className="no-print" style={{ marginBottom: '2rem', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+
                             <div style={{ display: 'flex', gap: '1rem' }}>
                                 {/* Hide "Nueva Tarea" for Clones/Esquejes/Germination rooms */}
                                 {!['clones', 'esquejes', 'esquejera', 'germination'].includes((room?.type as string)?.toLowerCase()) && (
-                                    <button
+                                    <StyledActionButton
                                         onClick={() => setIsTaskModalOpen(true)}
-                                        style={{
-                                            display: 'flex', alignItems: 'center', gap: '0.5rem',
-                                            background: 'white', color: '#4a5568', border: '1px solid #e2e8f0',
-                                            padding: '0.5rem 1rem', borderRadius: '0.5rem', fontWeight: 600, cursor: 'pointer'
-                                        }}
+                                        $variant="secondary"
                                     >
                                         <FaTasks /> Nueva Tarea
-                                    </button>
+                                    </StyledActionButton>
                                 )}
-                                <button
+                                <StyledActionButton
                                     onClick={() => setIsHistoryModalOpen(true)}
-                                    style={{
-                                        display: 'flex', alignItems: 'center', gap: '0.5rem',
-                                        background: 'white', color: '#4a5568', border: '1px solid #e2e8f0',
-                                        padding: '0.5rem 1rem', borderRadius: '0.5rem', fontWeight: 600, cursor: 'pointer'
-                                    }}
+                                    $variant="secondary"
                                 >
                                     <FaHistory /> Historial
-                                </button>
-                                <button
+                                </StyledActionButton>
+                                <StyledActionButton
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         if (room) {
@@ -2875,27 +3276,17 @@ const RoomDetail: React.FC = () => {
                                             }
                                         }
                                     }}
-                                    style={{
-                                        display: 'flex', alignItems: 'center', gap: '0.5rem',
-                                        background: room?.type === 'flowering' ? '#d69e2e' : '#48bb78', // Gold for Harvest, Green for Transplant
-                                        color: 'white', border: 'none',
-                                        padding: '0.5rem 1rem', borderRadius: '0.5rem', fontWeight: 600, cursor: 'pointer'
-                                    }}
+                                    $variant={room?.type === 'flowering' ? 'gold' : 'primary'}
                                 >
                                     {room?.type === 'flowering' ? <FaCut /> : <FaExchangeAlt />}
                                     {room?.type === 'flowering' ? 'Cosechar' : 'Transplantar'}
-                                </button>
-                                <button
+                                </StyledActionButton>
+                                <StyledActionButton
                                     onClick={() => setIsEditModalOpen(true)}
-                                    style={{
-                                        display: 'flex', alignItems: 'center', gap: '0.5rem',
-                                        background: 'white', color: '#4a5568', border: '1px solid #e2e8f0',
-                                        padding: '0.5rem 1rem', borderRadius: '0.5rem', fontWeight: 600, cursor: 'pointer'
-                                    }}
+                                    $variant="secondary"
                                 >
                                     <FaEdit /> Editar Sala
-                                </button>
-
+                                </StyledActionButton>
                             </div>
                         </div>
 
@@ -2915,28 +3306,42 @@ const RoomDetail: React.FC = () => {
                                                 marginBottom: '2rem'
                                             }}>
                                                 {cloneMaps.length === 0 ? (
-                                                    <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '3rem', background: '#f7fafc', borderRadius: '1rem', border: '2px dashed #e2e8f0' }}>
-                                                        <p style={{ color: '#a0aec0', marginBottom: '1rem' }}>
-                                                            {
-                                                                room?.type === 'germination' ? 'No hay semillas en germinación.' :
-                                                                    room?.type === 'flowering' ? 'No hay plantas en floracion actualmente' :
-                                                                        room?.type === 'living_soil' ? 'No hay camas/cultivos activos.' :
-                                                                            'No hay mesas de esquejes creadas.'
-                                                            }
-                                                        </p>
-                                                        <button
-                                                            onClick={() => setIsMapModalOpen(true)}
-                                                            style={{ background: '#3182ce', color: 'white', border: 'none', padding: '0.75rem 1.5rem', borderRadius: '0.5rem', fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
-                                                        >
-                                                            <FaPlus /> {
-                                                                room?.type === 'germination' ? 'Germinar Semillas' :
-                                                                    room?.type === 'flowering' ? 'Agregar plantas a floración' :
-                                                                        ['clones', 'esquejes', 'esquejera'].includes((room?.type || '').toLowerCase()) ? 'Crear Mesa de Esquejes' :
-                                                                            room?.type === 'living_soil' ? 'Nueva Cama/Cultivo' :
-                                                                                'Crear Primera Mesa'
-                                                            }
-                                                        </button>
-                                                    </div>
+                                                    (room?.type === 'vegetation') ? (
+                                                        <div style={{ gridColumn: '1/-1' }}>
+                                                            <CreateCard onClick={() => setIsMapModalOpen(true)}>
+                                                                <DashedCircle>
+                                                                    <FaPlus />
+                                                                </DashedCircle>
+                                                                <p style={{ fontWeight: 600, fontSize: '1.1rem' }}>+ Agregar cultivo a Vegetación</p>
+                                                                <p style={{ fontSize: '0.9rem', opacity: 0.8 }}>No hay cultivos en vegetacion actualmente</p>
+                                                            </CreateCard>
+                                                        </div>
+                                                    ) : (
+                                                        <div style={{ gridColumn: '1/-1' }}>
+                                                            <CreateCard onClick={() => setIsMapModalOpen(true)}>
+                                                                <DashedCircle>
+                                                                    <FaPlus size={20} color="#cbd5e0" />
+                                                                </DashedCircle>
+                                                                <p style={{ fontWeight: 600, fontSize: '1.1rem' }}>
+                                                                    {
+                                                                        room?.type === 'germination' ? 'Germinar Semillas' :
+                                                                            room?.type === 'flowering' ? 'Agregar plantas a floración' :
+                                                                                ['clones', 'esquejes', 'esquejera'].includes((room?.type || '').toLowerCase()) ? 'Crear Mesa de Esquejes' :
+                                                                                    room?.type === 'living_soil' ? 'Nueva Cama/Cultivo' :
+                                                                                        'Crear Primera Mesa'
+                                                                    }
+                                                                </p>
+                                                                <p style={{ fontSize: '0.9rem', opacity: 0.8 }}>
+                                                                    {
+                                                                        room?.type === 'germination' ? 'No hay semillas en germinación.' :
+                                                                            room?.type === 'flowering' ? 'No hay plantas en floracion actualmente' :
+                                                                                room?.type === 'living_soil' ? 'No hay camas/cultivos activos.' :
+                                                                                    'No hay mesas de esquejes creadas.'
+                                                                    }
+                                                                </p>
+                                                            </CreateCard>
+                                                        </div>
+                                                    )
                                                 ) : (
                                                     <>
                                                         {cloneMaps.map(map => {
@@ -2986,19 +3391,15 @@ const RoomDetail: React.FC = () => {
                                                                 </DroppableMapCard>
                                                             );
                                                         })}
-                                                        <div
+                                                        <CreateCard
                                                             onClick={() => setIsMapModalOpen(true)}
-                                                            style={{
-                                                                border: '2px dashed #cbd5e0', borderRadius: '1rem',
-                                                                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                                                                cursor: 'pointer', minHeight: '160px', color: '#a0aec0', transition: 'all 0.2s'
-                                                            }}
-                                                            onMouseEnter={e => { e.currentTarget.style.borderColor = '#3182ce'; e.currentTarget.style.color = '#3182ce'; }}
-                                                            onMouseLeave={e => { e.currentTarget.style.borderColor = '#cbd5e0'; e.currentTarget.style.color = '#a0aec0'; }}
+                                                            style={{ minHeight: '160px' }}
                                                         >
-                                                            <FaPlus size={24} style={{ marginBottom: '0.5rem' }} />
+                                                            <DashedCircle>
+                                                                <FaPlus />
+                                                            </DashedCircle>
                                                             <span style={{ fontWeight: 600 }}>{room?.type === 'living_soil' ? 'Nueva Cama/Cultivo' : 'Nueva Mesa'}</span>
-                                                        </div>
+                                                        </CreateCard>
                                                     </>
                                                 )}
                                             </div>
@@ -3015,51 +3416,7 @@ const RoomDetail: React.FC = () => {
                                             {/* Create Map Modal */}
 
 
-                                            {/* Edit Map Modal */}
-                                            {isEditMapModalOpen && (
-                                                <div style={{
-                                                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                                                    background: 'rgba(0,0,0,0.5)', zIndex: 1000,
-                                                    display: 'flex', alignItems: 'center', justifyContent: 'center'
-                                                }}>
-                                                    <div style={{ background: 'white', padding: '2rem', borderRadius: '1rem', width: '400px' }}>
-                                                        <h3 style={{ marginBottom: '1.5rem' }}>Editar Mesa</h3>
-                                                        <div style={{ marginBottom: '1rem' }}>
-                                                            <label style={{ display: 'block', marginBottom: '0.5rem' }}>Nombre</label>
-                                                            <input
-                                                                autoFocus
-                                                                value={editMapName}
-                                                                onChange={e => setEditMapName(e.target.value)}
-                                                                style={{ width: '100%', padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '0.5rem' }}
-                                                            />
-                                                        </div>
-                                                        <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
-                                                            <div>
-                                                                <label style={{ display: 'block', marginBottom: '0.5rem' }}>Filas</label>
-                                                                <input
-                                                                    type="number"
-                                                                    value={editMapRows}
-                                                                    onChange={e => setEditMapRows(e.target.value)}
-                                                                    style={{ width: '100%', padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '0.5rem' }}
-                                                                />
-                                                            </div>
-                                                            <div>
-                                                                <label style={{ display: 'block', marginBottom: '0.5rem' }}>Columnas</label>
-                                                                <input
-                                                                    type="number"
-                                                                    value={editMapCols}
-                                                                    onChange={e => setEditMapCols(e.target.value)}
-                                                                    style={{ width: '100%', padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '0.5rem' }}
-                                                                />
-                                                            </div>
-                                                        </div>
-                                                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
-                                                            <button onClick={() => setIsEditMapModalOpen(false)} style={{ background: 'white', border: '1px solid #e2e8f0', padding: '0.5rem 1rem', borderRadius: '0.5rem' }}>Cancelar</button>
-                                                            <button onClick={handleUpdateMap} style={{ background: '#3182ce', color: 'white', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.5rem' }}>Guardar Cambios</button>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            )}
+
 
                                         </div>
                                     ) : (
@@ -3101,11 +3458,10 @@ const RoomDetail: React.FC = () => {
                                                     }}>
                                                         {/* LEFT: Map Title & Info */}
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                                            <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#2d3748', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                                <FaMapMarkedAlt color="#4299e1" />
+                                                            <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#2d3748' }}>
                                                                 {activeMap.name}
                                                             </h3>
-                                                            <span style={{ background: '#ebf8ff', color: '#2b6cb0', padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 700 }}>
+                                                            <span style={{ background: '#c6f6d5', color: '#2f855a', padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 700 }}>
                                                                 {activeMap.grid_rows} x {activeMap.grid_columns}
                                                             </span>
                                                         </div>
@@ -3281,15 +3637,16 @@ const RoomDetail: React.FC = () => {
                                                     <div className="printable-map-grid">
                                                         <div className="printable-map-grid">
                                                             <LivingSoilGrid
-                                                                {...(() => {
+                                                                rows={(() => {
                                                                     const activeMap = cloneMaps.find(m => m.id === activeMapId);
-                                                                    return {
-                                                                        rows: activeMap?.grid_rows || 20,
-                                                                        cols: activeMap?.grid_columns || 10,
-                                                                        batches: (room?.batches || []).filter(b => b.clone_map_id === activeMapId && b.quantity > 0),
-                                                                        mapId: activeMapId || undefined
-                                                                    }
+                                                                    return activeMap?.grid_rows || 20;
                                                                 })()}
+                                                                cols={(() => {
+                                                                    const activeMap = cloneMaps.find(m => m.id === activeMapId);
+                                                                    return activeMap?.grid_columns || 10;
+                                                                })()}
+                                                                batches={livingSoilBatches}
+                                                                mapId={activeMapId || undefined}
                                                                 onBatchClick={handleBatchClick}
                                                                 selectedBatchIds={selectedBatchIds}
                                                                 isSelectionMode={isSelectionMode}
@@ -3393,7 +3750,7 @@ const RoomDetail: React.FC = () => {
                                 }}>
                                     <div style={{ flexShrink: 0 }}>
                                         <h4 style={{ margin: '0 0 1rem 0', color: '#4a5568', fontSize: '1rem' }}>Lotes Disponibles</h4>
-                                        <ActionButton onClick={() => setIsCreateBatchModalOpen(true)} style={{ width: '100%', marginBottom: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                                        <ActionButton onClick={() => setIsCreateBatchModalOpen(true)} $variant="success" style={{ width: '100%', marginBottom: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
                                             <FaPlus /> Nuevo Lote
                                         </ActionButton>
                                     </div>
@@ -3411,8 +3768,8 @@ const RoomDetail: React.FC = () => {
                                                     onBatchGroupClick={handleBatchClick}
                                                     renderHeaderActions={(b) => (
                                                         <>
-                                                            <button onClick={(e) => { e.stopPropagation(); handleEditBatchClick(e, b); }} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '4px', color: '#3182ce', cursor: 'pointer', padding: '4px', display: 'flex' }}><FaPen size={10} /></button>
-                                                            <button onClick={(e) => { e.stopPropagation(); handleDeleteBatchClick(e, b); }} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '4px', color: '#e53e3e', cursor: 'pointer', padding: '4px', display: 'flex' }}><FaTrash size={10} /></button>
+                                                            <BatchActionButton onClick={(e) => { e.stopPropagation(); handleEditBatchClick(e, b); }} title="Editar Lote"><FaPen size={12} /></BatchActionButton>
+                                                            <BatchActionButton $variant="delete" onClick={(e) => { e.stopPropagation(); handleDeleteBatchClick(e, b); }} title="Eliminar Lote"><FaTrash size={12} /></BatchActionButton>
                                                         </>
                                                     )}
                                                     childrenRender={(b) => (
@@ -3430,9 +3787,9 @@ const RoomDetail: React.FC = () => {
                                                             <div style={{ flex: 1 }}>
                                                                 <DraggableStockBatch batch={b} onClick={() => handleBatchClick(b)} />
                                                             </div>
-                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginLeft: '0.5rem' }}>
-                                                                <button onClick={(e) => { e.stopPropagation(); handleEditBatchClick(e, b); }} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '4px', color: '#3182ce', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Editar Lote"><FaPen size={10} /></button>
-                                                                <button onClick={(e) => { e.stopPropagation(); handleDeleteBatchClick(e, b); }} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '4px', color: '#e53e3e', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Eliminar Lote"><FaTrash size={10} /></button>
+                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginLeft: '0.5rem' }}>
+                                                                <BatchActionButton onClick={(e) => { e.stopPropagation(); handleEditBatchClick(e, b); }} title="Editar Lote"><FaPen size={12} /></BatchActionButton>
+                                                                <BatchActionButton $variant="delete" onClick={(e) => { e.stopPropagation(); handleDeleteBatchClick(e, b); }} title="Eliminar Lote"><FaTrash size={12} /></BatchActionButton>
                                                             </div>
                                                         </div>
                                                     )}
@@ -3480,9 +3837,9 @@ const RoomDetail: React.FC = () => {
                                     const geneticName = root.genetic?.name || root.name || 'Desconocida';
                                     const prefix = geneticName.substring(0, 6).toUpperCase();
                                     const dateStr = new Date(root.start_date || root.created_at).toLocaleDateString();
-                                    displayName = `Lote ${prefix}-${dateStr}`;
+                                    displayName = `Lote ${prefix} ${dateStr} `;
                                     // Override if name is simple
-                                    if (root.name && !root.name.includes('Lote')) displayName = `Lote ${root.name}`;
+                                    if (root.name && !root.name.includes('Lote')) displayName = `Lote ${root.name} `;
                                 }
 
                                 return (
@@ -3578,11 +3935,15 @@ const RoomDetail: React.FC = () => {
                     <div className="no-print" style={{ background: 'white', borderRadius: '1rem', padding: '1.5rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
                         {/* Calendar Header */}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                            <button onClick={() => setCurrentDate(subMonths(currentDate, 1))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#718096', fontSize: '1rem', padding: '0.5rem' }}>&lt; Anterior</button>
-                            <h2 style={{ fontSize: '1.5rem', color: '#2d3748', textTransform: 'capitalize' }}>
+                            <StyledActionButton onClick={() => setCurrentDate(subMonths(currentDate, 1))} $variant="secondary" style={{ padding: '0.5rem 1rem' }}>
+                                <FaChevronLeft /> Anterior
+                            </StyledActionButton>
+                            <h2 style={{ fontSize: '1.5rem', color: '#2d3748', textTransform: 'capitalize', margin: 0 }}>
                                 {format(currentDate, 'MMMM yyyy', { locale: es })}
                             </h2>
-                            <button onClick={() => setCurrentDate(addMonths(currentDate, 1))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#718096', fontSize: '1rem', padding: '0.5rem' }}>Siguiente &gt;</button>
+                            <StyledActionButton onClick={() => setCurrentDate(addMonths(currentDate, 1))} $variant="secondary" style={{ padding: '0.5rem 1rem' }}>
+                                Siguiente <FaChevronRight />
+                            </StyledActionButton>
                         </div>
 
                         {/* Calendar Grid */}
@@ -3619,7 +3980,7 @@ const RoomDetail: React.FC = () => {
 
                                         while (lastDate < monthEnd && safetyCounter < 50) {
                                             let nextDate: Date | null = null;
-                                            const interval = rec.interval || 1;
+                                            const interval = typeof rec.interval === 'string' ? parseInt(rec.interval) || 1 : rec.interval || 1;
 
                                             if (rec.type === 'custom' || rec.type === 'daily' || rec.type === 'weekly') {
                                                 if (rec.unit === 'day' || rec.type === 'daily') {
@@ -3637,7 +3998,7 @@ const RoomDetail: React.FC = () => {
                                                 // For now, simply trust the projection.
                                                 virtualTasks.push({
                                                     ...task,
-                                                    id: `virtual-${task.id} -${nextDate.getTime()} `,
+                                                    id: `virtual - ${task.id} -${nextDate.getTime()} `,
                                                     due_date: format(nextDate, 'yyyy-MM-dd'),
                                                     status: 'pending',
                                                     title: `${task.title} (Proyectada)`,
@@ -3818,7 +4179,7 @@ const RoomDetail: React.FC = () => {
                                 });
                             })()}
                         </div>
-                    </div>
+                    </div >
                 )
             }
 
@@ -3826,15 +4187,19 @@ const RoomDetail: React.FC = () => {
 
 
             {/* Task Modal-Interactive */}
+            {/* Task Modal-Interactive */}
             {
-                isTaskModalOpen && (
-                    <PortalModalOverlay>
-                        <TaskModalContent>
+                (isTaskModalOpen || isClosingTaskModal) && (
+                    <PortalModalOverlay isClosing={isClosingTaskModal}>
+                        <TaskModalContent isClosing={isClosingTaskModal}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
                                 <h3 style={{ fontSize: '1.5rem', margin: 0 }}>
                                     {selectedTask ? 'Detalle de Tarea' : 'Nueva Tarea'}
                                 </h3>
-                                <button onClick={() => setIsTaskModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.5rem', color: '#a0aec0', padding: '0.5rem' }}>
+                                <button
+                                    onClick={closeTaskModal}
+                                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.5rem', color: '#a0aec0', padding: '0.5rem' }}
+                                >
                                     ✕
                                 </button>
                             </div>
@@ -3846,10 +4211,10 @@ const RoomDetail: React.FC = () => {
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                                             <FormGroup>
                                                 <label style={{ color: '#4a5568', fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>Tipo de Tarea</label>
-                                                <select
+                                                <CustomSelect
                                                     value={taskForm.type}
-                                                    onChange={e => {
-                                                        const newType = e.target.value as any;
+                                                    onChange={(value) => {
+                                                        const newType = value as any;
                                                         let newTitle = 'Tarea';
                                                         switch (newType) {
                                                             case 'info': newTitle = 'Información'; break;
@@ -3866,60 +4231,66 @@ const RoomDetail: React.FC = () => {
                                                         }
                                                         setTaskForm({ ...taskForm, type: newType, title: newTitle });
                                                     }}
-                                                    style={{ padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0', width: '100%', fontSize: '0.95rem', background: '#fff' }}
-                                                >
-                                                    <option value="info">Info</option>
-                                                    <option value="riego">Riego</option>
-                                                    <option value="fertilizar">Fertilizar</option>
-                                                    <option value="defoliacion">Defoliación</option>
-                                                    <option value="poda_apical">Poda Apical</option>
-                                                    <option value="hst">HST</option>
-                                                    <option value="lst">LST</option>
-                                                    <option value="entrenamiento">Entrenamiento</option>
-                                                    <option value="esquejes">Esquejes</option>
-                                                    <option value="warning">Alerta</option>
-                                                </select>
+                                                    options={[
+                                                        { value: "info", label: "Info" },
+                                                        { value: "riego", label: "Riego" },
+                                                        { value: "fertilizar", label: "Fertilizar" },
+                                                        { value: "defoliacion", label: "Defoliación" },
+                                                        { value: "poda_apical", label: "Poda Apical" },
+                                                        { value: "hst", label: "HST" },
+                                                        { value: "lst", label: "LST" },
+                                                        { value: "entrenamiento", label: "Entrenamiento" },
+                                                        { value: "esquejes", label: "Esquejes" },
+                                                        { value: "warning", label: "Alerta" }
+                                                    ]}
+                                                    placeholder="Seleccionar Tipo"
+                                                />
                                             </FormGroup>
 
                                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                                                 <FormGroup>
                                                     <label style={{ color: '#4a5568', fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>Fecha</label>
-                                                    <input
-                                                        type="date"
-                                                        value={taskForm.due_date}
-                                                        onChange={e => setTaskForm({ ...taskForm, due_date: e.target.value })}
-                                                        style={{ padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0', width: '100%', fontSize: '0.95rem', fontFamily: 'inherit' }}
+                                                    <CustomDatePicker
+                                                        selected={taskForm.due_date ? new Date(taskForm.due_date) : new Date()}
+                                                        onChange={(date) => {
+                                                            if (date) {
+                                                                setTaskForm({ ...taskForm, due_date: format(date, 'yyyy-MM-dd') });
+                                                            }
+                                                        }}
                                                     />
                                                 </FormGroup>
                                                 <FormGroup>
                                                     <label style={{ color: '#4a5568', fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>Asignar a</label>
-                                                    <select
+                                                    <CustomSelect
                                                         value={taskForm.assigned_to}
-                                                        onChange={e => setTaskForm({ ...taskForm, assigned_to: e.target.value })}
-                                                        style={{ padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0', width: '100%', fontSize: '0.95rem', background: '#fff' }}
-                                                    >
-                                                        <option value="">-- Sin Asignar --</option>
-                                                        {users.map(u => (
-                                                            <option key={u.id} value={u.id}>{u.full_name || u.email || 'Usuario'}</option>
-                                                        ))}
-                                                    </select>
+                                                        onChange={(value) => setTaskForm({ ...taskForm, assigned_to: value })}
+                                                        options={[
+                                                            { value: "", label: "-- Sin Asignar --" },
+                                                            ...users.map(u => ({ value: u.id, label: u.full_name || u.email || 'Usuario' }))
+                                                        ]}
+                                                        placeholder="Asignar a..."
+                                                    />
                                                 </FormGroup>
                                             </div>
 
                                             {/* Recurrence Section */}
                                             <div style={{ padding: '1rem', background: '#f8fafc', borderRadius: '0.75rem', border: '1px solid #edf2f7' }}>
-                                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontWeight: 600, color: '#2d3748', cursor: 'pointer', marginBottom: recurrenceEnabled ? '1rem' : 0, fontSize: '0.95rem' }}>
+                                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontWeight: 600, color: '#2d3748', cursor: 'pointer', marginBottom: recurrenceEnabled ? '1rem' : 0, fontSize: '0.95rem', transition: 'margin-bottom 0.3s ease-out' }}>
                                                     <input
                                                         type="checkbox"
                                                         checked={recurrenceEnabled}
                                                         onChange={e => setRecurrenceEnabled(e.target.checked)}
-                                                        style={{ width: '1.25rem', height: '1.25rem', accentColor: '#3182ce' }}
+                                                        style={{ width: '1.25rem', height: '1.25rem', accentColor: '#48bb78' }}
                                                     />
                                                     Repetir Tarea (Periodicidad)
                                                 </label>
 
-                                                {recurrenceEnabled && (
-                                                    <div style={{ animation: 'fadeIn 0.2s ease-out' }}>
+                                                <div style={{
+                                                    display: 'grid',
+                                                    gridTemplateRows: recurrenceEnabled ? '1fr' : '0fr',
+                                                    transition: 'grid-template-rows 0.3s ease-out'
+                                                }}>
+                                                    <div style={{ overflow: 'hidden', minHeight: 0 }}>
                                                         <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
                                                             <div style={{ flex: 1 }}>
                                                                 <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.5rem', color: '#718096' }}>Repetir cada:</label>
@@ -3928,18 +4299,27 @@ const RoomDetail: React.FC = () => {
                                                                         type="number"
                                                                         min="1"
                                                                         value={recurrenceConfig.interval}
-                                                                        onChange={e => setRecurrenceConfig(prev => ({ ...prev, interval: parseInt(e.target.value) || 1 }))}
+                                                                        onChange={e => {
+                                                                            const val = e.target.value;
+                                                                            setRecurrenceConfig(prev => ({
+                                                                                ...prev,
+                                                                                interval: val === '' ? '' : Math.max(1, parseInt(val))
+                                                                            }));
+                                                                        }}
                                                                         style={{ width: '70px', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e0', fontSize: '0.9rem' }}
                                                                     />
-                                                                    <select
-                                                                        value={recurrenceConfig.unit}
-                                                                        onChange={e => setRecurrenceConfig(prev => ({ ...prev, unit: e.target.value as any, type: 'custom' }))}
-                                                                        style={{ flex: 1, padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e0', fontSize: '0.9rem', background: '#fff' }}
-                                                                    >
-                                                                        <option value="day">Días</option>
-                                                                        <option value="week">Semanas</option>
-                                                                        <option value="month">Meses</option>
-                                                                    </select>
+                                                                    <div style={{ flex: 1 }}>
+                                                                        <CustomSelect
+                                                                            value={recurrenceConfig.unit}
+                                                                            onChange={(value) => setRecurrenceConfig(prev => ({ ...prev, unit: value as any, type: 'custom' }))}
+                                                                            options={[
+                                                                                { value: "day", label: "Días" },
+                                                                                { value: "week", label: "Semanas" },
+                                                                                { value: "month", label: "Meses" }
+                                                                            ]}
+                                                                            placeholder="Unidad"
+                                                                        />
+                                                                    </div>
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -3978,7 +4358,7 @@ const RoomDetail: React.FC = () => {
                                                             </div>
                                                         )}
                                                     </div>
-                                                )}
+                                                </div>
                                             </div>
                                         </div>
 
@@ -4023,7 +4403,7 @@ const RoomDetail: React.FC = () => {
                                                         transition: 'all 0.2s',
                                                         fontWeight: 500
                                                     }}
-                                                    onMouseEnter={e => { e.currentTarget.style.borderColor = '#3182ce'; e.currentTarget.style.color = '#3182ce'; e.currentTarget.style.background = '#ebf8ff'; }}
+                                                    onMouseEnter={e => { e.currentTarget.style.borderColor = '#48bb78'; e.currentTarget.style.color = '#38a169'; e.currentTarget.style.background = '#f0fff4'; }}
                                                     onMouseLeave={e => { e.currentTarget.style.borderColor = '#cbd5e0'; e.currentTarget.style.color = '#718096'; e.currentTarget.style.background = 'white'; }}
                                                 >
                                                     <FaPlus /> Subir Foto / Archivo
@@ -4040,13 +4420,32 @@ const RoomDetail: React.FC = () => {
                                             </CancelButton>
                                         )}
                                         <button
-                                            onClick={() => setIsTaskModalOpen(false)}
+                                            onClick={closeTaskModal}
                                             style={{ padding: '0.75rem 1.5rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0', background: 'white', color: '#4a5568', fontWeight: 600, cursor: 'pointer' }}
                                         >
                                             Cancelar
                                         </button>
-                                        <ActionButton onClick={handleSaveTask} $variant="success" style={{ minWidth: '150px' }}>
-                                            {selectedTask ? 'Guardar Cambios' : 'Crear Tarea'}
+                                        <ActionButton
+                                            onClick={handleSaveTask}
+                                            $variant="success"
+                                            disabled={isSavingTask}
+                                            style={{
+                                                minWidth: '150px',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '0.5rem',
+                                                opacity: isSavingTask ? 0.7 : 1,
+                                                cursor: isSavingTask ? 'not-allowed' : 'pointer'
+                                            }}
+                                        >
+                                            {isSavingTask ? (
+                                                <>
+                                                    <SpinningIcon /> {selectedTask ? 'Guardando...' : 'Creando...'}
+                                                </>
+                                            ) : (
+                                                selectedTask ? 'Guardar Cambios' : 'Crear Tarea'
+                                            )}
                                         </ActionButton>
                                     </div>
                                 </>
@@ -4207,10 +4606,22 @@ const RoomDetail: React.FC = () => {
             {/* Sticky Note Modal */}
             {
                 isStickyModalOpen && (
-                    <PortalModalOverlay>
-                        <ModalContent style={{ background: 'white', borderTop: '8px solid #ecc94b' }}>
+                    <PortalModalOverlay isClosing={isStickyModalClosing}>
+                        <ModalContent isClosing={isStickyModalClosing} style={{
+                            background: 'white',
+                            borderTop: `8px solid ${stickyColor === 'yellow' ? '#ecc94b' :
+                                stickyColor === 'blue' ? '#4299e1' :
+                                    stickyColor === 'pink' ? '#ed64a6' :
+                                        '#48bb78' // green
+                                }`
+                        }}>
                             <h3 style={{ color: '#2d3748', marginBottom: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-                                <FaStickyNote color="#ecc94b" /> Nueva Nota
+                                <FaStickyNote color={
+                                    stickyColor === 'yellow' ? '#ecc94b' :
+                                        stickyColor === 'blue' ? '#4299e1' :
+                                            stickyColor === 'pink' ? '#ed64a6' :
+                                                '#48bb78'
+                                } /> Nueva Nota
                             </h3>
 
                             <FormGroup>
@@ -4220,14 +4631,16 @@ const RoomDetail: React.FC = () => {
                                     value={stickyContent}
                                     onChange={e => setStickyContent(e.target.value)}
                                     placeholder="Escribe tu nota aquí..."
+                                    disabled={isSavingSticky}
                                     style={{
                                         width: '100%',
-                                        background: '#fff',
+                                        background: isSavingSticky ? '#f7fafc' : '#fff',
                                         border: '1px solid #e2e8f0',
                                         minHeight: '120px',
                                         fontSize: '1rem',
                                         borderRadius: '0.5rem',
-                                        padding: '1rem'
+                                        padding: '1rem',
+                                        opacity: isSavingSticky ? 0.7 : 1
                                     }}
                                 />
                             </FormGroup>
@@ -4236,21 +4649,30 @@ const RoomDetail: React.FC = () => {
                                 {(['yellow', 'blue', 'pink', 'green'] as const).map(c => (
                                     <button
                                         key={c}
-                                        onClick={() => setStickyColor(c)}
+                                        onClick={() => !isSavingSticky && setStickyColor(c)}
+                                        disabled={isSavingSticky}
                                         style={{
                                             width: '30px', height: '30px', borderRadius: '50%',
                                             background: c === 'yellow' ? '#fefcbf' : c === 'blue' ? '#bee3f8' : c === 'pink' ? '#fed7d7' : '#c6f6d5',
                                             border: stickyColor === c ? '2px solid #4a5568' : '1px solid rgba(0,0,0,0.1)',
-                                            cursor: 'pointer'
+                                            cursor: isSavingSticky ? 'not-allowed' : 'pointer',
+                                            opacity: isSavingSticky ? 0.7 : 1
                                         }}
                                     />
                                 ))}
                             </div>
 
                             <div style={{ display: 'flex', gap: '1rem' }}>
-                                <CancelButton onClick={() => setIsStickyModalOpen(false)}>Cancelar</CancelButton>
-                                <ActionButton onClick={handleSaveSticky} $variant="success" style={{ background: '#d69e2e', color: 'white' }}>
-                                    Pegar Nota
+                                <CancelButton onClick={handleCloseStickyModal} disabled={isSavingSticky}>
+                                    Cancelar
+                                </CancelButton>
+                                <ActionButton
+                                    onClick={handleSaveSticky}
+                                    $variant="success"
+                                    disabled={isSavingSticky || !stickyContent.trim()}
+                                    style={{ background: '#d69e2e', color: 'white', opacity: (isSavingSticky || !stickyContent.trim()) ? 0.7 : 1 }}
+                                >
+                                    {isSavingSticky ? 'Guardando...' : 'Pegar Nota'}
                                 </ActionButton>
                             </div>
                         </ModalContent>
@@ -4261,8 +4683,8 @@ const RoomDetail: React.FC = () => {
             {/* Sticky Delete Confirmation Modal */}
             {
                 stickyToDelete && (
-                    <PortalModalOverlay>
-                        <ModalContent style={{ maxWidth: '400px', textAlign: 'center' }}>
+                    <PortalModalOverlay isClosing={isStickyDeleteModalClosing}>
+                        <ModalContent isClosing={isStickyDeleteModalClosing} style={{ maxWidth: '400px', textAlign: 'center' }}>
                             <div style={{ color: '#e53e3e', fontSize: '3rem', marginBottom: '1rem' }}>
                                 <FaExclamationTriangle />
                             </div>
@@ -4271,11 +4693,16 @@ const RoomDetail: React.FC = () => {
                                 Esta acción no se puede deshacer.
                             </p>
                             <div style={{ display: 'flex', gap: '1rem' }}>
-                                <CancelButton onClick={() => setStickyToDelete(null)}>
+                                <CancelButton onClick={() => setStickyToDelete(null)} disabled={isDeletingSticky}>
                                     Cancelar
                                 </CancelButton>
-                                <ActionButton onClick={confirmDeleteSticky} $variant="danger">
-                                    Eliminar
+                                <ActionButton
+                                    onClick={confirmDeleteSticky}
+                                    $variant="danger"
+                                    disabled={isDeletingSticky}
+                                    style={{ opacity: isDeletingSticky ? 0.7 : 1 }}
+                                >
+                                    {isDeletingSticky ? 'Eliminando...' : 'Eliminar'}
                                 </ActionButton>
                             </div>
                         </ModalContent>
@@ -4389,9 +4816,9 @@ const RoomDetail: React.FC = () => {
 
             {/* New Map Modal */}
             {
-                isMapModalOpen && (
-                    <PortalModalOverlay>
-                        <ModalContent style={{ maxWidth: '400px' }}>
+                (isMapModalOpen || isClosingMapModal) && (
+                    <PortalModalOverlay isClosing={isClosingMapModal}>
+                        <ModalContent style={{ maxWidth: '400px' }} isClosing={isClosingMapModal}>
                             <h3 style={{ marginBottom: '1.5rem' }}>{room?.type === 'living_soil' ? 'Nueva Cama/Cultivo' : 'Nuevo Mapa de Esquejes'}</h3>
                             <div style={{ marginBottom: '1rem' }}>
                                 <label style={{ display: 'block', marginBottom: '0.5rem' }}>{room?.type === 'living_soil' ? 'Nombre (ej: Cama 1)' : 'Nombre (ej: Bandeja 1)'}</label>
@@ -4428,8 +4855,16 @@ const RoomDetail: React.FC = () => {
                                 </div>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
-                                <CancelButton onClick={() => setIsMapModalOpen(false)}>Cancelar</CancelButton>
-                                <ActionButton onClick={handleCreateMap}>Crear Mapa</ActionButton>
+                                <CancelButton onClick={closeMapModal} disabled={isCreatingMap}>Cancelar</CancelButton>
+                                <ActionButton
+                                    onClick={handleCreateMap}
+                                    $variant="success"
+                                    disabled={isCreatingMap}
+                                    style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                                >
+                                    {isCreatingMap && <FaCircleNotch className="spin" />}
+                                    {isCreatingMap ? 'Creando...' : 'Crear Mapa'}
+                                </ActionButton>
                             </div>
                         </ModalContent>
                     </PortalModalOverlay>
@@ -4438,9 +4873,9 @@ const RoomDetail: React.FC = () => {
 
             {/* Edit Map Modal */}
             {
-                isEditMapModalOpen && (
-                    <PortalModalOverlay>
-                        <ModalContent>
+                (isEditMapModalOpen || isClosingEditMap) && (
+                    <PortalModalOverlay isClosing={isClosingEditMap}>
+                        <ModalContent onClick={e => e.stopPropagation()} isClosing={isClosingEditMap}>
                             <h3>Editar Mapa</h3>
                             <FormGroup>
                                 <label>Nombre</label>
@@ -4469,8 +4904,15 @@ const RoomDetail: React.FC = () => {
                                 </FormGroup>
                             </div>
                             <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-                                <CancelButton onClick={() => setIsEditMapModalOpen(false)}>Cancelar</CancelButton>
-                                <ActionButton onClick={handleUpdateMap}>Guardar Cambios</ActionButton>
+                                <CancelButton onClick={closeEditMapModal} disabled={isUpdatingMap}>Cancelar</CancelButton>
+                                <ActionButton
+                                    $variant="success"
+                                    onClick={handleUpdateMap}
+                                    disabled={isUpdatingMap}
+                                >
+                                    {isUpdatingMap && <FaCircleNotch className="spin" />}
+                                    {isUpdatingMap ? 'Guardando...' : 'Guardar Cambios'}
+                                </ActionButton>
                             </div>
                         </ModalContent>
                     </PortalModalOverlay>
@@ -4478,28 +4920,32 @@ const RoomDetail: React.FC = () => {
             }
 
             {
-                isTransplantModalOpen && room && (
+                (isTransplantModalOpen || isClosingTransplant) && room && (
                     <TransplantModal
                         isOpen={isTransplantModalOpen}
-                        onClose={() => setIsTransplantModalOpen(false)}
+                        onClose={closeTransplantModal}
                         currentRoom={room}
                         rooms={allRooms}
-                        cloneMaps={cloneMaps}
+                        cloneMaps={room.clone_maps || []}
                         onConfirm={handleTransplant}
                         initialMapId={activeMapId || undefined}
+                        initialSelectedBatchIds={memoizedTransplantBatchIds}
+                        isClosing={isClosingTransplant}
                     />
                 )
             }
 
             <ConfirmationModal
-                isOpen={isDeleteMapModalOpen}
+                isOpen={isDeleteMapModalOpen || isClosingDeleteMap}
                 title="Eliminar Mapa"
                 message="¿Estás seguro de que deseas eliminar este mapa? Los lotes asociados perderán su posición (no se eliminarán los lotes, solo el mapa)."
                 onConfirm={confirmDeleteMap}
-                onCancel={() => setIsDeleteMapModalOpen(false)}
-                confirmText="Eliminar"
+                onCancel={closeDeleteMapModal}
+                confirmText={isDeletingMap ? "Eliminando..." : "Eliminar"}
                 cancelText="Cancelar"
                 isDestructive={true}
+                isClosing={isClosingDeleteMap}
+                isLoading={isDeletingMap}
             />
 
             <ConfirmationModal
@@ -4724,22 +5170,24 @@ const RoomDetail: React.FC = () => {
             {/* Custom Delete Confirmation Modal */}
             {
                 <ConfirmationModal
-                    isOpen={deleteConfirm.isOpen && !!deleteConfirm.batch}
+                    isOpen={deleteConfirm.isOpen || isClosingDeleteConfirm}
+                    isClosing={isClosingDeleteConfirm}
                     title="¿Eliminar definitivamente?"
                     message={`Estás a punto de eliminar ${deleteConfirm.batch?.tracking_code || deleteConfirm.batch?.name}. Esta acción no se puede deshacer.`}
                     onConfirm={handleConfirmDelete}
-                    onCancel={() => setDeleteConfirm({ isOpen: false, batch: null })}
-                    confirmText="Eliminar"
+                    onCancel={closeDeleteConfirm}
+                    confirmText={isDeletingBatch ? "Eliminando..." : "Eliminar"}
                     cancelText="Cancelar"
                     isDestructive={true}
+                    isLoading={isDeletingBatch}
                 />
             }
 
             {/* Edit Batch Modal */}
             {
-                isEditBatchModalOpen && (
-                    <PortalModalOverlay>
-                        <ModalContent>
+                (isEditBatchModalOpen || isClosingEditBatch) && (
+                    <PortalModalOverlay isClosing={isClosingEditBatch}>
+                        <ModalContent isClosing={isClosingEditBatch}>
                             <h3>Editar Lote</h3>
                             <FormGroup>
                                 <label>Nombre / Identificador</label>
@@ -4754,7 +5202,7 @@ const RoomDetail: React.FC = () => {
                                     type="number"
                                     min="1"
                                     value={editBatchForm.quantity}
-                                    onChange={e => setEditBatchForm({ ...editBatchForm, quantity: Number(e.target.value) })}
+                                    onChange={e => setEditBatchForm({ ...editBatchForm, quantity: e.target.value })}
                                 />
                             </FormGroup>
                             <FormGroup>
@@ -4765,8 +5213,16 @@ const RoomDetail: React.FC = () => {
                                 />
                             </FormGroup>
                             <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-                                <CancelButton onClick={() => setIsEditBatchModalOpen(false)}>Cancelar</CancelButton>
-                                <ActionButton onClick={handleUpdateBatch}>Guardar Cambios</ActionButton>
+                                <CancelButton onClick={closeEditBatchModal} disabled={isUpdatingBatch}>Cancelar</CancelButton>
+                                <ActionButton
+                                    $variant="success"
+                                    onClick={handleUpdateBatch}
+                                    disabled={isUpdatingBatch}
+                                    style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                                >
+                                    {isUpdatingBatch && <FaCircleNotch className="spin" />}
+                                    {isUpdatingBatch ? 'Guardando...' : 'Guardar Cambios'}
+                                </ActionButton>
                             </div>
                         </ModalContent>
                     </PortalModalOverlay>
@@ -4818,20 +5274,20 @@ const RoomDetail: React.FC = () => {
                                 </button>
                             </div>
                         </ModalContent>
-                    </PortalModalOverlay>
+                    </PortalModalOverlay >
                 )
             }
 
             {/* History Modal */}
             {
-                isHistoryModalOpen && (
-                    <PortalModalOverlay>
-                        <ModalContent style={{ maxWidth: '1000px', width: '90%' }}>
+                (isHistoryModalOpen || isClosingHistory) && (
+                    <PortalModalOverlay isClosing={isClosingHistory}>
+                        <ModalContent style={{ maxWidth: '1000px', width: '90%' }} isClosing={isClosingHistory}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                                 <h2 style={{ fontSize: '1.5rem', margin: 0, color: '#2d3748', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                    <FaHistory color="#4299e1" /> Historial de Movimientos
+                                    <FaHistory color="#48bb78" /> Historial de Movimientos
                                 </h2>
-                                <button onClick={() => setIsHistoryModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.5rem', color: '#a0aec0' }}>
+                                <button onClick={closeHistoryModal} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.5rem', color: '#a0aec0' }}>
                                     ✕
                                 </button>
                             </div>
@@ -4859,7 +5315,7 @@ const RoomDetail: React.FC = () => {
                                                 const dateObj = move.moved_at ? new Date(move.moved_at) : null;
                                                 const dateStr = dateObj ? dateObj.toLocaleDateString('es-AR', { weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit' }) : '-';
                                                 const timeStr = dateObj ? dateObj.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: true }).toLowerCase() : '';
-                                                const fullDate = dateObj ? `${dateStr.charAt(0).toUpperCase() + dateStr.slice(1)} - ${timeStr}` : '-';
+                                                const fullDate = dateObj ? `${dateStr.charAt(0).toUpperCase() + dateStr.slice(1)} - ${timeStr} ` : '-';
 
                                                 // Color Coding Logic
                                                 let rowBg = 'transparent';
@@ -4887,7 +5343,7 @@ const RoomDetail: React.FC = () => {
                                                 }
 
                                                 return (
-                                                    <tr key={move.id} style={{ borderBottom: `1px solid ${borderColor}`, background: rowBg }}>
+                                                    <tr key={move.id} style={{ borderBottom: `1px solid ${borderColor} `, background: rowBg }}>
                                                         <td style={{ padding: '0.75rem', color: '#2d3748', fontSize: '0.9rem', whiteSpace: 'nowrap' }}>
                                                             {fullDate}
                                                         </td>
@@ -4908,7 +5364,7 @@ const RoomDetail: React.FC = () => {
                                 )}
                             </div>
                         </ModalContent>
-                    </PortalModalOverlay>
+                    </PortalModalOverlay >
                 )
             }
 
@@ -4925,14 +5381,15 @@ const RoomDetail: React.FC = () => {
                 cancelText="Cancelar"
             />
 
-            {/* Modals */}
+            {/* Harvest Modal */}
             {
-                isHarvestModalOpen && room && (
+                (isHarvestModalOpen || isClosingHarvestModal) && room && (
                     <HarvestModal
                         isOpen={isHarvestModalOpen}
+                        isClosing={isClosingHarvestModal}
                         onClose={() => {
-                            setIsHarvestModalOpen(false);
-                            setHarvestTargetMapId(null);
+                            closeHarvestModal();
+                            setTimeout(() => setHarvestTargetMapId(null), 300); // Clear target after animation
                         }}
                         batches={harvestTargetMapId
                             ? (room.batches?.filter(b => b.clone_map_id === harvestTargetMapId) || [])
@@ -4945,9 +5402,9 @@ const RoomDetail: React.FC = () => {
             }
             {/* Create Map From Group Confirmation Modal */}
             {
-                isCreateMapFromGroupConfirmOpen && pendingMapGroup && (
-                    <PortalModalOverlay>
-                        <ModalContent onClick={e => e.stopPropagation()}>
+                (isCreateMapFromGroupConfirmOpen || isClosingCreateMapFromGroup) && pendingMapGroup && (
+                    <PortalModalOverlay isClosing={isClosingCreateMapFromGroup}>
+                        <ModalContent onClick={e => e.stopPropagation()} isClosing={isClosingCreateMapFromGroup}>
                             <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '1rem' }}>Crear Mapa desde Grupo</h2>
                             {(() => {
                                 // PRIORITIZE VIRTUAL GROUP NAME
@@ -4962,7 +5419,7 @@ const RoomDetail: React.FC = () => {
                                 const geneticName = pendingMapGroup.root.genetic?.name || pendingMapGroup.root.name || 'Desconocida';
                                 const prefix = geneticName.substring(0, 6).toUpperCase();
                                 const displayDate = new Date(pendingMapGroup.root.start_date || pendingMapGroup.root.created_at).toLocaleDateString();
-                                const displayName = `Lote ${prefix}-${displayDate}`;
+                                const displayName = `Lote ${prefix} ${displayDate} `;
 
                                 return (
                                     <p style={{ marginBottom: '1rem', color: '#4a5568' }}>
@@ -4980,35 +5437,43 @@ const RoomDetail: React.FC = () => {
 
                             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
                                 <button
-                                    onClick={() => setIsCreateMapFromGroupConfirmOpen(false)}
+                                    onClick={closeCreateMapFromGroupModal}
+                                    disabled={isCreatingMapFromGroup}
                                     style={{
                                         padding: '0.5rem 1rem',
                                         borderRadius: '0.375rem',
                                         border: '1px solid #cbd5e0',
                                         background: 'white',
                                         color: '#4a5568',
-                                        cursor: 'pointer'
+                                        cursor: isCreatingMapFromGroup ? 'not-allowed' : 'pointer',
+                                        opacity: isCreatingMapFromGroup ? 0.7 : 1
                                     }}
                                 >
                                     Cancelar
                                 </button>
                                 <button
                                     onClick={handleConfirmCreateMapFromGroup}
+                                    disabled={isCreatingMapFromGroup}
                                     style={{
                                         padding: '0.5rem 1rem',
                                         borderRadius: '0.375rem',
                                         background: '#48bb78',
                                         color: 'white',
                                         border: 'none',
-                                        cursor: 'pointer',
-                                        fontWeight: 600
+                                        cursor: isCreatingMapFromGroup ? 'not-allowed' : 'pointer',
+                                        fontWeight: 600,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem',
+                                        opacity: isCreatingMapFromGroup ? 0.7 : 1
                                     }}
                                 >
-                                    Crear Mapa
+                                    {isCreatingMapFromGroup && <FaCircleNotch className="spin" />}
+                                    {isCreatingMapFromGroup ? 'Creando...' : 'Crear Mapa'}
                                 </button>
                             </div>
                         </ModalContent>
-                    </PortalModalOverlay>
+                    </PortalModalOverlay >
                 )
             }
 
@@ -5091,19 +5556,24 @@ const RoomDetail: React.FC = () => {
                                 </div>
                             )}
                         </ModalContent>
-                    </PortalModalOverlay>
+                    </PortalModalOverlay >
                 )
             }
             {/* EDIT ROOM MODAL */}
+            {/* EDIT ROOM MODAL */}
             {
-                isEditModalOpen && (
-                    <div style={{
-                        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                        background: 'rgba(0,0,0,0.5)', zIndex: 2000,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center'
-                    }}>
-                        <div style={{ background: 'white', padding: '2rem', borderRadius: '1rem', width: '90%', maxWidth: '500px' }}>
-                            <h2 style={{ marginBottom: '1.5rem', color: '#2d3748' }}>Editar Sala</h2>
+                (isEditModalOpen || isClosingEditRoom) && (
+                    <PortalModalOverlay isClosing={isClosingEditRoom}>
+                        <ModalContent isClosing={isClosingEditRoom}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                                <h2 style={{ fontSize: '1.5rem', margin: 0, color: '#2d3748' }}>Editar Sala</h2>
+                                <button
+                                    onClick={closeEditRoomModal}
+                                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.5rem', color: '#a0aec0' }}
+                                >
+                                    ✕
+                                </button>
+                            </div>
 
                             <div style={{ marginBottom: '1rem' }}>
                                 <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Nombre</label>
@@ -5116,45 +5586,65 @@ const RoomDetail: React.FC = () => {
                             </div>
 
                             <div style={{ marginBottom: '1rem' }}>
-                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Tipo</label>
-                                <select
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Etapa de cultivo</label>
+                                <CustomSelect
                                     value={editRoomType}
-                                    onChange={e => setEditRoomType(e.target.value)}
-                                    style={{ width: '100%', padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '0.5rem' }}
-                                >
-                                    <option value="vegetation">Vegetación</option>
-                                    <option value="flowering">Floración</option>
-                                    <option value="drying">Secado</option>
-                                    <option value="living_soil">Agro/Living Soil</option>
-                                </select>
+                                    onChange={(val) => setEditRoomType(val)}
+                                    options={[
+                                        { value: 'vegetation', label: 'Vegetación' },
+                                        { value: 'flowering', label: 'Floración' },
+                                        { value: 'drying', label: 'Secado' },
+                                        { value: 'living_soil', label: 'Agro/Living Soil' }
+                                    ]}
+                                />
                             </div>
 
                             <div style={{ marginBottom: '1.5rem' }}>
                                 <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Fecha de Inicio</label>
-                                <input
-                                    type="date"
-                                    value={editRoomStartDate}
-                                    onChange={e => setEditRoomStartDate(e.target.value)}
-                                    style={{ width: '100%', padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '0.5rem' }}
+                                <CustomDatePicker
+                                    selected={editRoomStartDate ? new Date(editRoomStartDate) : new Date()}
+                                    onChange={(date) => {
+                                        if (date) {
+                                            setEditRoomStartDate(format(date, 'yyyy-MM-dd'));
+                                        }
+                                    }}
                                 />
                             </div>
 
                             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
                                 <button
-                                    onClick={() => setIsEditModalOpen(false)}
+                                    onClick={closeEditRoomModal}
                                     style={{ background: 'white', border: '1px solid #e2e8f0', padding: '0.5rem 1rem', borderRadius: '0.5rem', cursor: 'pointer' }}
                                 >
                                     Cancelar
                                 </button>
                                 <button
                                     onClick={handleUpdateRoom}
-                                    style={{ background: '#48bb78', color: 'white', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 600 }}
+                                    disabled={isUpdatingRoom}
+                                    style={{
+                                        background: isUpdatingRoom ? '#a0aec0' : '#48bb78',
+                                        color: 'white',
+                                        border: 'none',
+                                        padding: '0.5rem 1rem',
+                                        borderRadius: '0.5rem',
+                                        cursor: isUpdatingRoom ? 'not-allowed' : 'pointer',
+                                        fontWeight: 600,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem'
+                                    }}
                                 >
-                                    Guardar Cambios
+                                    {isUpdatingRoom ? (
+                                        <>
+                                            <SpinningIcon /> Guardando...
+                                        </>
+                                    ) : (
+                                        'Guardar Cambios'
+                                    )}
                                 </button>
                             </div>
-                        </div>
-                    </div>
+                        </ModalContent>
+                    </PortalModalOverlay >
                 )
             }
 
@@ -5210,33 +5700,43 @@ const RoomDetail: React.FC = () => {
                                 </button>
                             </div>
                         </div>
-                    </div>
+                    </div >
                 )
             }
             <ConfirmationModal
                 isOpen={isDistributionConfirmOpen}
+                isClosing={isClosingDistribution}
+                isLoading={loading}
                 title="Distribuir Lote Automáticamente"
                 message={distributionData ? `¿Deseas distribuir ${distributionData.batches.length} lotes (${distributionData.batches.reduce((a, b) => a + b.quantity, 0)} plantas) en el mapa comenzando desde la celda ${distributionData.position}?` : ''}
                 onConfirm={handleConfirmDistribution}
                 onCancel={() => {
-                    setIsDistributionConfirmOpen(false);
-                    setDistributionData(null);
+                    setIsClosingDistribution(true);
+                    setTimeout(() => {
+                        setIsDistributionConfirmOpen(false);
+                        setIsClosingDistribution(false);
+                        setDistributionData(null);
+                    }, 200);
                 }}
                 confirmText="Distribuir"
                 cancelText="Cancelar"
+                variant="success"
             />
 
             {/* Single Distribution Confirmation Modal */}
             <ConfirmationModal
                 isOpen={isSingleDistributeConfirmOpen}
+                isClosing={isClosingSingleDistribution}
+                isLoading={loading}
                 title="Distribuir Plantas"
                 message={singleDistributionData ? `¿Distribuir ${singleDistributionData.quantity} plantas individualmente en el mapa a partir de ${singleDistributionData.position}?` : ''}
                 onConfirm={async () => {
                     if (!singleDistributionData) return;
                     setLoading(true);
-                    setIsSingleDistributeConfirmOpen(false); // Close modal immediately
+                    // Close happens after success/fail in logic, but we can trigger loading here
 
                     const { batchId, position, mapId } = singleDistributionData;
+                    // ... existing logic ...
                     // Calculate start row/col from position (e.g. "A1")
                     const rowLetter = position.charAt(0);
                     const colStr = position.slice(1);
@@ -5259,38 +5759,38 @@ const RoomDetail: React.FC = () => {
                             if (success) {
                                 if (id) await loadData(id);
                                 showToast("Plantas distribuidas correctamente", 'success');
+                                setIsClosingSingleDistribution(true);
+                                setTimeout(() => {
+                                    setIsSingleDistributeConfirmOpen(false);
+                                    setIsClosingSingleDistribution(false);
+                                    setSingleDistributionData(null);
+                                }, 200);
                             } else {
                                 showToast("No se pudo distribuir el lote completo. Verifica el espacio.", 'error');
+                                setLoading(false); // Stop loading if failed
                             }
                         } catch (e) {
                             console.error(e);
                             showToast("Error al distribuir el lote.", 'error');
+                            setLoading(false);
                         }
+                    } else {
+                        setLoading(false);
                     }
-                    setLoading(false);
-                    setSingleDistributionData(null);
                 }}
                 onCancel={() => {
-                    setIsSingleDistributeConfirmOpen(false);
-                    setSingleDistributionData(null);
+                    setIsClosingSingleDistribution(true);
+                    setTimeout(() => {
+                        setIsSingleDistributeConfirmOpen(false);
+                        setIsClosingSingleDistribution(false);
+                        setSingleDistributionData(null);
+                    }, 200);
                 }}
                 confirmText="Distribuir"
                 cancelText="Cancelar"
+                variant="success"
             />
-            {
-                room && (
-                    <TransplantModal
-                        isOpen={isTransplantModalOpen}
-                        onClose={() => setIsTransplantModalOpen(false)}
-                        currentRoom={room}
-                        rooms={allRooms}
-                        cloneMaps={(console.log('RoomDetail Passing CloneMaps:', room.clone_maps), room.clone_maps || [])}
-                        onConfirm={handleTransplant}
-                        initialMapId={activeMapId || undefined}
-                        initialSelectedBatchIds={memoizedTransplantBatchIds}
-                    />
-                )
-            }
+
             {/* OBSEVATION MODAL */}
             {
                 isObservationModalOpen && (
@@ -5349,38 +5849,42 @@ const RoomDetail: React.FC = () => {
                 onCancel={() => setIsBulkDeleteConfirmOpen(false)}
                 onConfirm={handleBulkDeleteConfirm}
                 title="Confirmar Eliminación Masiva"
-                message={`¿Estás seguro de que deseas eliminar ${selectedBatchIds.size} lotes seleccionados? Esta acción no se puede deshacer.`}
+                message={`¿Estás seguro de que deseas eliminar ${selectedBatchIds.size} lotes seleccionados ? Esta acción no se puede deshacer.`}
                 confirmText="Eliminar Lotes"
                 cancelText="Cancelar"
                 isDestructive={true}
             />
             {/* CREATE BATCH MODAL */}
             {
-                isCreateBatchModalOpen && (
-                    <div style={{
-                        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                        background: 'rgba(0,0,0,0.5)', zIndex: 1000,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center'
-                    }}>
-                        <div style={{ background: 'white', padding: '2rem', borderRadius: '1rem', width: '400px' }}>
-                            <h3 style={{ marginBottom: '1.5rem' }}>
-                                {['germinacion', 'germinación', 'germination', 'semillero'].includes((room?.type || '').toLowerCase()) ? 'Nuevo Lote de Semillas' : 'Nuevo Lote'}
-                            </h3>
-                            <div style={{ marginBottom: '1rem' }}>
-                                <label style={{ display: 'block', marginBottom: '0.5rem' }}>Genética</label>
-                                <select
-                                    value={newBatch.geneticId}
-                                    onChange={e => setNewBatch({ ...newBatch, geneticId: e.target.value })}
-                                    style={{ width: '100%', padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '0.5rem' }}
+                (isCreateBatchModalOpen || isClosingCreateBatch) && (
+                    <PortalModalOverlay isClosing={isClosingCreateBatch}>
+                        <ModalContent isClosing={isClosingCreateBatch}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                                <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#2d3748' }}>
+                                    {['germinacion', 'germinación', 'germination', 'semillero'].includes((room?.type || '').toLowerCase()) ? 'Nuevo Lote de Semillas' : 'Nuevo Lote'}
+                                </h3>
+                                <button
+                                    onClick={closeCreateBatchModal}
+                                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.5rem', color: '#a0aec0' }}
                                 >
-                                    <option value="">Seleccionar Genética</option>
-                                    {genetics.map(m => (
-                                        <option key={m.id} value={m.id}>{m.name}</option>
-                                    ))}
-                                </select>
+                                    ✕
+                                </button>
+                            </div>
+
+                            <div style={{ marginBottom: '1rem' }}>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Genética</label>
+                                <CustomSelect
+                                    value={newBatch.geneticId}
+                                    onChange={(value) => setNewBatch({ ...newBatch, geneticId: value })}
+                                    options={[
+                                        { value: "", label: "Seleccionar Genética" },
+                                        ...genetics.map(m => ({ value: m.id, label: m.name }))
+                                    ]}
+                                    placeholder="Seleccionar Genética"
+                                />
                             </div>
                             <div style={{ marginBottom: '1rem' }}>
-                                <label style={{ display: 'block', marginBottom: '0.5rem' }}>Cantidad</label>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Cantidad</label>
                                 <input
                                     type="number"
                                     value={newBatch.quantity}
@@ -5390,20 +5894,45 @@ const RoomDetail: React.FC = () => {
                                 />
                             </div>
                             <div style={{ marginBottom: '1.5rem' }}>
-                                <label style={{ display: 'block', marginBottom: '0.5rem' }}>Fecha de Inicio</label>
-                                <input
-                                    type="date"
-                                    value={newBatch.date}
-                                    onChange={e => setNewBatch({ ...newBatch, date: e.target.value })}
-                                    style={{ width: '100%', padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '0.5rem' }}
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Fecha de Inicio</label>
+                                <CustomDatePicker
+                                    selected={newBatch.date ? new Date(newBatch.date) : new Date()}
+                                    onChange={(date) => {
+                                        if (date) {
+                                            setNewBatch({ ...newBatch, date: format(date, 'yyyy-MM-dd') });
+                                        }
+                                    }}
                                 />
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
-                                <button onClick={() => setIsCreateBatchModalOpen(false)} style={{ background: 'white', border: '1px solid #e2e8f0', padding: '0.5rem 1rem', borderRadius: '0.5rem' }}>Cancelar</button>
-                                <button onClick={handleCreateBatch} style={{ background: '#3182ce', color: 'white', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.5rem' }}>Crear</button>
+                                <button
+                                    onClick={closeCreateBatchModal}
+                                    style={{ background: 'white', border: '1px solid #e2e8f0', padding: '0.5rem 1rem', borderRadius: '0.5rem', cursor: 'pointer' }}
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={handleCreateBatch}
+                                    disabled={isCreatingBatch}
+                                    style={{
+                                        background: isCreatingBatch ? '#9ae6b4' : '#48bb78',
+                                        color: 'white',
+                                        border: 'none',
+                                        padding: '0.5rem 1rem',
+                                        borderRadius: '0.5rem',
+                                        cursor: isCreatingBatch ? 'not-allowed' : 'pointer',
+                                        fontWeight: 600,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem'
+                                    }}
+                                >
+                                    {isCreatingBatch && <FaCircleNotch className="spin" />}
+                                    {isCreatingBatch ? 'Creando...' : 'Crear'}
+                                </button>
                             </div>
-                        </div>
-                    </div>
+                        </ModalContent>
+                    </PortalModalOverlay>
                 )
             }
             {/* Stage Selection Modal */}
@@ -5418,13 +5947,13 @@ const RoomDetail: React.FC = () => {
             <div className="printable-report">
                 <style>
                     {`
-                    @media print {
-                        .printable-report table { page-break-inside: auto; }
-                        .printable-report tr { page-break-inside: avoid; page-break-after: auto; }
+@media print {
+                        .printable-report table { page -break-inside: auto; }
+                        .printable-report tr { page -break-inside: avoid; page -break-after: auto; }
                         .printable-report thead { display: table-header-group; }
                         .printable-report tfoot { display: table-footer-group; }
-                    }
-                `}
+}
+`}
                 </style>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '2px solid #000', paddingBottom: '0.5rem' }}>
                     <h2 style={{ margin: 0 }}>Reporte: {room?.name}</h2>
@@ -5479,11 +6008,49 @@ const RoomDetail: React.FC = () => {
                         </tbody>
                     </table>
                 </div>
-            </div>
+            </div >
 
         </Container >
     );
 };
 
+
+const BatchActionButton = styled.button<{ $variant?: 'delete' }>`
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    color: ${props => props.$variant === 'delete' ? '#e53e3e' : '#3182ce'};
+    cursor: pointer;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+
+    &:hover {
+        transform: translateY(-2px) scale(1.05);
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        background: ${props => props.$variant === 'delete' ? '#fff5f5' : '#ebf8ff'};
+        border-color: ${props => props.$variant === 'delete' ? '#fc8181' : '#63b3ed'};
+        z-index: 2;
+    }
+
+    &:active {
+        transform: translateY(0) scale(1);
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    }
+`;
+
+const ExpandableContainer = styled.div<{ $expanded: boolean }>`
+    display: grid;
+    grid-template-rows: ${props => props.$expanded ? '1fr' : '0fr'};
+    transition: grid-template-rows 0.3s ease-out;
+`;
+
+const ExpandableInner = styled.div`
+    overflow: hidden;
+`;
 
 export default RoomDetail;

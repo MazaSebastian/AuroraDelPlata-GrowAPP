@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import styled, { keyframes } from 'styled-components';
+import styled, { keyframes, css } from 'styled-components';
 import { FaCheckCircle, FaExclamationCircle, FaInfoCircle } from 'react-icons/fa';
 
 const fadeIn = keyframes`
@@ -12,19 +12,19 @@ const scaleIn = keyframes`
   to { transform: scale(1); opacity: 1; }
 `;
 
-const Overlay = styled.div`
+const Overlay = styled.div<{ $animate: boolean }>`
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 2500;
-  backdrop-filter: blur(2px);
-  animation: ${fadeIn} 0.2s ease-out;
+  backdrop-filter: blur(4px);
+  animation: ${p => p.$animate ? css`${fadeIn} 0.2s ease-out` : 'none'};
 `;
 
 const Content = styled.div`
@@ -77,13 +77,15 @@ interface ToastModalProps {
   message: string;
   onClose: () => void;
   type?: 'success' | 'error' | 'info';
+  animateOverlay?: boolean;
 }
 
 export const ToastModal: React.FC<ToastModalProps> = ({
   isOpen,
   message,
   onClose,
-  type = 'info'
+  type = 'info',
+  animateOverlay = true
 }) => {
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
@@ -96,7 +98,7 @@ export const ToastModal: React.FC<ToastModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <Overlay onClick={onClose}>
+    <Overlay onClick={onClose} $animate={animateOverlay}>
       <Content onClick={e => e.stopPropagation()}>
         <IconWrapper type={type}>
           {type === 'success' && <FaCheckCircle />}

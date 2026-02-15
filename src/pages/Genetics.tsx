@@ -1,16 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import styled from 'styled-components';
+import styled, { keyframes } from 'styled-components';
 import { FaDna, FaPlus, FaClock, FaCalendarAlt, FaLeaf, FaEdit, FaTrash, FaTag } from 'react-icons/fa';
 import { geneticsService } from '../services/geneticsService';
 import { Genetic, GeneticType } from '../types/genetics';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ConfirmModal } from '../components/ConfirmModal';
+import { ToastModal } from '../components/ToastModal';
+
+const fadeIn = keyframes`
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+`;
 
 const Container = styled.div`
   padding: 2rem;
   padding-top: 5rem;
   max-width: 1400px;
   margin: 0 auto;
+  animation: ${fadeIn} 0.5s ease-in-out;
 `;
 
 const Header = styled.div`
@@ -162,6 +169,61 @@ const FormGroup = styled.div`
   .hint { font-size: 0.8rem; color: #718096; margin-top: 0.25rem; }
 `;
 
+const rotate = keyframes`
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+`;
+
+const CreateCard = styled.div`
+  background: white;
+  border-radius: 1rem;
+  border: 2px dashed #cbd5e0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  min-height: 250px;
+  gap: 1rem;
+  transition: all 0.2s ease;
+  opacity: 0.8;
+  color: #a0aec0;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+
+  &:hover {
+    border-color: #805ad5;
+    color: #805ad5;
+    background: #faf5ff;
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+`;
+
+const DashedCircle = styled.div`
+  width: 60px;
+  height: 60px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  color: inherit;
+  transition: all 0.5s ease;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    border-radius: 50%;
+    border: 2px dashed currentColor;
+    transition: all 0.5s ease;
+  }
+
+  ${CreateCard}:hover &::before {
+    animation: ${rotate} 10s linear infinite;
+  }
+`;
+
 const Genetics: React.FC = () => {
     const [genetics, setGenetics] = useState<Genetic[]>([]);
     const [loading, setLoading] = useState(true);
@@ -194,6 +256,11 @@ const Genetics: React.FC = () => {
     // Delete Modal State
     const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
     const [geneticToDelete, setGeneticToDelete] = useState<Genetic | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [toastAnimate, setToastAnimate] = useState(true);
+    const [toastOpen, setToastOpen] = useState(false);
+    const [toastMessage, setToastMessage] = useState('');
+    const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('info');
 
     const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -211,12 +278,25 @@ const Genetics: React.FC = () => {
     const handleConfirmDelete = async () => {
         if (!geneticToDelete) return;
 
+        setIsDeleting(true);
         const success = await geneticsService.deleteGenetic(geneticToDelete.id);
+        setIsDeleting(false);
+
         if (success) {
             setGenetics(genetics.filter(g => g.id !== geneticToDelete.id));
-            setConfirmDeleteOpen(false);
-            setGeneticToDelete(null);
+            // Show Success Toast
+            setToastMessage(`La madre "${geneticToDelete.name}" ha sido eliminada correctamente.`);
+            setToastType('success');
+            setToastAnimate(false);
+            setToastOpen(true);
+        } else {
+            setToastMessage("Error al eliminar la Madre. Inténtalo de nuevo.");
+            setToastType('error');
+            setToastAnimate(true);
+            setToastOpen(true);
         }
+        setConfirmDeleteOpen(false);
+        setGeneticToDelete(null);
     };
 
     const handleSave = async () => {
@@ -354,6 +434,12 @@ const Genetics: React.FC = () => {
                         </CardBody>
                     </GeneticCard>
                 ))}
+                <CreateCard onClick={() => setIsModalOpen(true)}>
+                    <DashedCircle>
+                        <FaPlus />
+                    </DashedCircle>
+                    <span style={{ fontWeight: 600, fontSize: '1rem', color: 'inherit', textAlign: 'center', padding: '0 1rem' }}>Nueva Madre</span>
+                </CreateCard>
             </ContentGrid>
 
             {isModalOpen && (
@@ -483,6 +569,15 @@ const Genetics: React.FC = () => {
                 onConfirm={handleConfirmDelete}
                 confirmText="Eliminar"
                 isDanger
+                isLoading={isDeleting}
+            />
+
+            <ToastModal
+                isOpen={toastOpen}
+                message={toastMessage}
+                type={toastType}
+                onClose={() => setToastOpen(false)}
+                animateOverlay={toastAnimate}
             />
         </Container>
     );

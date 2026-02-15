@@ -108,7 +108,7 @@ export interface CreateTaskInput {
 
 export interface RecurrenceConfig {
   type: 'daily' | 'weekly' | 'custom';
-  interval: number; // Every X units
+  interval: number | string; // Every X units
   unit: 'day' | 'week' | 'month';
   daysOfWeek?: number[]; // 0=Sunday, 1=Monday...
   endDate?: string; // ISO
