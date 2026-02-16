@@ -45,9 +45,7 @@ import {
 import { Task, CreateTaskInput, RecurrenceConfig, Crop } from '../types';
 import { tasksService } from '../services/tasksService';
 import { dailyLogsService } from '../services/dailyLogsService';
-import { cropsService } from '../services/cropsService';
 
-import { roomsService } from '../services/roomsService';
 
 import { CustomDatePicker } from '../components/CustomDatePicker';
 import { CustomSelect } from '../components/CustomSelect';
