@@ -1209,1010 +1209,1008 @@ const CropDetail: React.FC = () => {
 
   /*
   const handleOpenFinishModal = (e: React.MouseEvent, room: any) => {
-    // ...
+    e.stopPropagation();
+    setRoomToFinish(room);
+
+    // Initialize yields for each batch
+    const yields: Record<string, number> = {};
+    if (room.batches) {
+      room.batches.forEach((b: any) => {
+        yields[b.id] = 0;
+      });
+    }
+    setHarvestForm({
+      date: new Date().toISOString().split('T')[0],
+      totalWeight: 0,
+      notes: '',
+      dryingDays: 14,
+      dryingConditions: '20°C / 55% HR',
+      batchYields: yields,
+      unit: 'g'
+    });
+    setHarvestPhoto(null);
+    setIsFinishModalOpen(true);
   };
   */
-  e.stopPropagation();
-  setRoomToFinish(room);
 
-  // Initialize yields for each batch
-  const yields: Record<string, number> = {};
-  if (room.batches) {
-    room.batches.forEach((b: any) => {
-      yields[b.id] = 0;
-    });
-  }
-  setHarvestForm({
-    date: new Date().toISOString().split('T')[0],
+  const handleConfirmFinish = async () => {
+    if (!roomToFinish || !crop) return;
+
+    // Validate
+    if (Object.values(harvestForm.batchYields).some(v => v < 0)) {
+      alert("Los pesos no pueden ser negativos.");
+      return;
+    }
+
+    try {
+      setIsFinishing(true);
+      const { roomsService } = await import('../services/roomsService');
+      const { dispensaryService } = await import('../services/dispensaryService');
+      const { cropsService } = await import('../services/cropsService');
+
+      let uploadedPhotoUrl = undefined;
+      if (harvestPhoto) {
+        uploadedPhotoUrl = await dispensaryService.uploadHarvestPhoto(harvestPhoto);
+      }
+
+      const batches = roomToFinish.batches || [];
+
+      // Process each batch
+      for (const batch of batches) {
+        const amount = harvestForm.batchYields[batch.id];
+        // Logic handles if amount is missing or invalid in loop
+        if (!amount || amount < 0) continue;
+
+        // 1. Log Harvest
+        const harvestLogId = await cropsService.logHarvest({
+          cropId: crop.id,
+          roomName: roomToFinish.name,
+          amount: amount,
+          unit: harvestForm.unit || 'g',
+          notes: `${harvestForm.notes} - Lote: ${batch.name} (${batch.genetic?.name || 'Unknown'})`
+        });
+
+        if (harvestLogId) {
+          // 2. Create Dispensary Batch
+          try {
+            await dispensaryService.createFromHarvest({
+              cropId: crop.id,
+              harvestLogId: harvestLogId,
+              strainName: batch.genetic?.name || batch.name || 'Unknown Strain',
+              amount: amount,
+              unit: harvestForm.unit || 'g',
+              originalBatchCode: batch.name,
+              photoUrl: uploadedPhotoUrl || undefined
+            });
+
+            // 3. Delete Batch
+            await roomsService.deleteBatch(batch.id);
+          } catch (err) {
+            console.error(`Error creating dispensary batch for ${batch.name}:`, err);
+          }
+        }
+      }
+
+      // Finish Room (Delete)
+      const success = await roomsService.deleteRoom(roomToFinish.id);
+
+      if (success) {
+        setRoomToFinish(null);
+        setIsFinishModalOpen(false); // Close first
+        if (id) await loadRooms(id, 2000); // Wait 2s
+      } else {
+        alert("Error al finalizar la sala.");
+      }
+
+    } catch (error) {
+      console.error("Error finishing room:", error);
+      alert("Error al finalizar la sala.");
+    } finally {
+      setIsFinishing(false);
+    }
+  };
+
+  const [isFinishing, setIsFinishing] = useState(false);
+  const [roomToFinish, setRoomToFinish] = useState<any>(null);
+  const [isFinishModalOpen, setIsFinishModalOpen] = useState(false);
+  const [harvestPhoto, setHarvestPhoto] = useState<File | null>(null);
+  const [harvestForm, setHarvestForm] = useState<{
+    date: string;
+    totalWeight: number;
+    notes: string;
+    dryingDays: number;
+    dryingConditions: string;
+    batchYields: Record<string, number>;
+    unit: 'g' | 'kg';
+  }>({
+    date: '',
     totalWeight: 0,
     notes: '',
     dryingDays: 14,
-    dryingConditions: '20°C / 55% HR',
-    batchYields: yields,
+    dryingConditions: '',
+    batchYields: {},
     unit: 'g'
   });
-  setHarvestPhoto(null);
-  setIsFinishModalOpen(true);
-};
 
-const handleConfirmFinish = async () => {
-  if (!roomToFinish || !crop) return;
+  // Confirm Modal State
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [roomToDelete, setRoomToDelete] = useState<{ id: string, name: string } | null>(null);
+  const [isDeletingRoom, setIsDeletingRoom] = useState(false);
 
-  // Validate
-  if (Object.values(harvestForm.batchYields).some(v => v < 0)) {
-    alert("Los pesos no pueden ser negativos.");
-    return;
-  }
+  const handleDeleteRoom = (e: React.MouseEvent, roomId: string, roomName: string) => {
+    e.stopPropagation();
+    setRoomToDelete({ id: roomId, name: roomName });
+    setConfirmOpen(true);
+  };
 
-  try {
-    setIsFinishing(true);
+  const handleConfirmDeleteRoom = async () => {
+    if (!roomToDelete) return;
+
+    setIsDeletingRoom(true);
     const { roomsService } = await import('../services/roomsService');
-    const { dispensaryService } = await import('../services/dispensaryService');
-    const { cropsService } = await import('../services/cropsService');
+    const success = await roomsService.deleteRoom(roomToDelete.id);
+    setIsDeletingRoom(false);
 
-    let uploadedPhotoUrl = undefined;
-    if (harvestPhoto) {
-      uploadedPhotoUrl = await dispensaryService.uploadHarvestPhoto(harvestPhoto);
+    if (success) {
+      setConfirmOpen(false); // Close modal FIRST
+      setRoomToDelete(null);
+      if (id) await loadRooms(id, 2000); // THEN trigger loading state with 2s delay
+    } else {
+      setErrorMessage("Error al eliminar la sala.");
+      setIsErrorModalOpen(true);
     }
+  };
 
-    const batches = roomToFinish.batches || [];
 
-    // Process each batch
-    for (const batch of batches) {
-      const amount = harvestForm.batchYields[batch.id];
-      // Logic handles if amount is missing or invalid in loop
-      if (!amount || amount < 0) continue;
 
-      // 1. Log Harvest
-      const harvestLogId = await cropsService.logHarvest({
-        cropId: crop.id,
-        roomName: roomToFinish.name,
-        amount: amount,
-        unit: harvestForm.unit || 'g',
-        notes: `${harvestForm.notes} - Lote: ${batch.name} (${batch.genetic?.name || 'Unknown'})`
-      });
+  // Edit Modal State
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editType, setEditType] = useState<'room' | 'spot' | null>(null);
+  const [editData, setEditData] = useState<{ id: string, name: string } | null>(null);
 
-      if (harvestLogId) {
-        // 2. Create Dispensary Batch
-        try {
-          await dispensaryService.createFromHarvest({
-            cropId: crop.id,
-            harvestLogId: harvestLogId,
-            strainName: batch.genetic?.name || batch.name || 'Unknown Strain',
-            amount: amount,
-            unit: harvestForm.unit || 'g',
-            originalBatchCode: batch.name,
-            photoUrl: uploadedPhotoUrl || undefined
-          });
+  const handleEditRoomName = (e: React.MouseEvent, room: any) => {
+    e.stopPropagation();
+    setEditType('room');
+    setEditData({ id: room.id, name: room.name });
+    setEditModalOpen(true);
+  };
 
-          // 3. Delete Batch
-          await roomsService.deleteBatch(batch.id);
-        } catch (err) {
-          console.error(`Error creating dispensary batch for ${batch.name}:`, err);
-        }
+
+
+  const handleConfirmEditName = async (newName: string) => {
+    if (!editData || !newName.trim()) return;
+
+    if (editType === 'room') {
+      const { roomsService } = await import('../services/roomsService');
+      const success = await roomsService.updateRoom(editData.id, { name: newName });
+      if (success) {
+        if (id) loadRooms(id);
+        setEditModalOpen(false);
+      } else {
+        alert("Error al renombrar la sala.");
+      }
+    } else if (editType === 'spot') {
+      const success = await cropsService.updateCrop(editData.id, { name: newName });
+      if (success) {
+        setCrop(prev => prev ? { ...prev, name: newName } : null);
+        setEditModalOpen(false);
+      } else {
+        alert("Error al renombrar el spot.");
       }
     }
+  };
 
-    // Finish Room (Delete)
-    const success = await roomsService.deleteRoom(roomToFinish.id);
+  // Old Transplant Logic Removed/Replaced in the block below
+  // keeping the state declarations for compatibility with the replacement block if needed, 
+  // but better to remove the old handlers to avoid confusion.
+  // ... handled in the main replacement block ...
 
-    if (success) {
-      setRoomToFinish(null);
-      setIsFinishModalOpen(false); // Close first
-      if (id) await loadRooms(id, 2000); // Wait 2s
-    } else {
-      alert("Error al finalizar la sala.");
-    }
-
-  } catch (error) {
-    console.error("Error finishing room:", error);
-    alert("Error al finalizar la sala.");
-  } finally {
-    setIsFinishing(false);
-  }
-};
-
-const [isFinishing, setIsFinishing] = useState(false);
-const [roomToFinish, setRoomToFinish] = useState<any>(null);
-const [isFinishModalOpen, setIsFinishModalOpen] = useState(false);
-const [harvestPhoto, setHarvestPhoto] = useState<File | null>(null);
-const [harvestForm, setHarvestForm] = useState<{
-  date: string;
-  totalWeight: number;
-  notes: string;
-  dryingDays: number;
-  dryingConditions: string;
-  batchYields: Record<string, number>;
-  unit: 'g' | 'kg';
-}>({
-  date: '',
-  totalWeight: 0,
-  notes: '',
-  dryingDays: 14,
-  dryingConditions: '',
-  batchYields: {},
-  unit: 'g'
-});
-
-// Confirm Modal State
-const [confirmOpen, setConfirmOpen] = useState(false);
-const [roomToDelete, setRoomToDelete] = useState<{ id: string, name: string } | null>(null);
-const [isDeletingRoom, setIsDeletingRoom] = useState(false);
-
-const handleDeleteRoom = (e: React.MouseEvent, roomId: string, roomName: string) => {
-  e.stopPropagation();
-  setRoomToDelete({ id: roomId, name: roomName });
-  setConfirmOpen(true);
-};
-
-const handleConfirmDeleteRoom = async () => {
-  if (!roomToDelete) return;
-
-  setIsDeletingRoom(true);
-  const { roomsService } = await import('../services/roomsService');
-  const success = await roomsService.deleteRoom(roomToDelete.id);
-  setIsDeletingRoom(false);
-
-  if (success) {
-    setConfirmOpen(false); // Close modal FIRST
-    setRoomToDelete(null);
-    if (id) await loadRooms(id, 2000); // THEN trigger loading state with 2s delay
-  } else {
-    setErrorMessage("Error al eliminar la sala.");
-    setIsErrorModalOpen(true);
-  }
-};
+  // Confirm Modal State
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [pendingStageChange, setPendingStageChange] = useState<{ room: any, nextStage: string } | null>(null);
 
 
 
-// Edit Modal State
-const [editModalOpen, setEditModalOpen] = useState(false);
-const [editType, setEditType] = useState<'room' | 'spot' | null>(null);
-const [editData, setEditData] = useState<{ id: string, name: string } | null>(null);
-
-const handleEditRoomName = (e: React.MouseEvent, room: any) => {
-  e.stopPropagation();
-  setEditType('room');
-  setEditData({ id: room.id, name: room.name });
-  setEditModalOpen(true);
-};
 
 
-
-const handleConfirmEditName = async (newName: string) => {
-  if (!editData || !newName.trim()) return;
-
-  if (editType === 'room') {
+  const executeStageChange = async () => {
+    if (!pendingStageChange) return;
+    const { room, nextStage } = pendingStageChange;
     const { roomsService } = await import('../services/roomsService');
-    const success = await roomsService.updateRoom(editData.id, { name: newName });
+    const success = await roomsService.updateRoom(room.id, { type: nextStage as any });
+
     if (success) {
       if (id) loadRooms(id);
-      setEditModalOpen(false);
+      setIsConfirmModalOpen(false);
+      setPendingStageChange(null);
     } else {
-      alert("Error al renombrar la sala.");
+      alert("Error al cambiar etapa.");
     }
-  } else if (editType === 'spot') {
-    const success = await cropsService.updateCrop(editData.id, { name: newName });
-    if (success) {
-      setCrop(prev => prev ? { ...prev, name: newName } : null);
-      setEditModalOpen(false);
-    } else {
-      alert("Error al renombrar el spot.");
-    }
-  }
-};
+  };
 
-// Old Transplant Logic Removed/Replaced in the block below
-// keeping the state declarations for compatibility with the replacement block if needed, 
-// but better to remove the old handlers to avoid confusion.
-// ... handled in the main replacement block ...
+  // Assign Clone Modal State
+  // Assign Clone Modal State
+  const isAssignModalOpen = false;
+  const assignRoom: any = null;
+  const availableCloneBatches: any[] = [];
+  const selectedBatchId = '';
+  const assignQuantity = 0;
+  const isAssigning = false;
+  const isSuccessModalOpen = false;
 
-// Confirm Modal State
-const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
-const [pendingStageChange, setPendingStageChange] = useState<{ room: any, nextStage: string } | null>(null);
-
-
-
-
-
-const executeStageChange = async () => {
-  if (!pendingStageChange) return;
-  const { room, nextStage } = pendingStageChange;
-  const { roomsService } = await import('../services/roomsService');
-  const success = await roomsService.updateRoom(room.id, { type: nextStage as any });
-
-  if (success) {
-    if (id) loadRooms(id);
-    setIsConfirmModalOpen(false);
-    setPendingStageChange(null);
-  } else {
-    alert("Error al cambiar etapa.");
-  }
-};
-
-// Assign Clone Modal State
-// Assign Clone Modal State
-const isAssignModalOpen = false;
-const assignRoom: any = null;
-const availableCloneBatches: any[] = [];
-const selectedBatchId = '';
-const assignQuantity = 0;
-const isAssigning = false;
-const isSuccessModalOpen = false;
-
-// Dummy setters to satisfy dead JSX
-const setIsAssignModalOpen = (v: boolean) => { };
-const setSelectedBatchId = (v: string) => { };
-const setAssignQuantity = (v: number) => { };
-const setIsSuccessModalOpen = (v: boolean) => { };
-const handleConfirmAssign = () => { };
+  // Dummy setters to satisfy dead JSX
+  const setIsAssignModalOpen = (v: boolean) => { };
+  const setSelectedBatchId = (v: string) => { };
+  const setAssignQuantity = (v: number) => { };
+  const setIsSuccessModalOpen = (v: boolean) => { };
+  const handleConfirmAssign = () => { };
 
 
 
 
 
 
-// --- BATCH EDIT / DELETE STATE ---
-const [isBatchEditModalOpen, setIsBatchEditModalOpen] = useState(false);
-const [batchEditForm, setBatchEditForm] = useState({ id: '', name: '', quantity: 0, geneticId: '' });
+  // --- BATCH EDIT / DELETE STATE ---
+  const [isBatchEditModalOpen, setIsBatchEditModalOpen] = useState(false);
+  const [batchEditForm, setBatchEditForm] = useState({ id: '', name: '', quantity: 0, geneticId: '' });
 
-const handleEditBatchClick = (e: React.MouseEvent, batch: any) => {
-  e.stopPropagation();
-  setBatchEditForm({ id: batch.id, name: batch.name, quantity: batch.quantity, geneticId: batch.genetic_id || '' });
-  setIsBatchEditModalOpen(true);
-};
+  const handleEditBatchClick = (e: React.MouseEvent, batch: any) => {
+    e.stopPropagation();
+    setBatchEditForm({ id: batch.id, name: batch.name, quantity: batch.quantity, geneticId: batch.genetic_id || '' });
+    setIsBatchEditModalOpen(true);
+  };
 
-const handleSaveBatchEdit = async () => {
-  const { roomsService } = await import('../services/roomsService');
-  const success = await roomsService.updateBatch(batchEditForm.id, {
-    name: batchEditForm.name,
-    quantity: Number(batchEditForm.quantity),
-    genetic_id: batchEditForm.geneticId // Update genetic
-  });
-
-  if (success) {
-    if (id) loadRooms(id);
-    setIsBatchEditModalOpen(false);
-  } else {
-    alert("Error al editar el lote.");
-  }
-};
-
-const [isDeleteBatchConfirmOpen, setIsDeleteBatchConfirmOpen] = useState(false);
-const [batchToDelete, setBatchToDelete] = useState<any | null>(null);
-
-const handleDeleteBatchClick = (e: React.MouseEvent, batch: any) => {
-  e.stopPropagation();
-  setBatchToDelete(batch);
-  setIsDeleteBatchConfirmOpen(true);
-};
-
-const executeDeleteBatch = async () => {
-  if (!batchToDelete) return;
-
-  const { roomsService } = await import('../services/roomsService');
-  const success = await roomsService.deleteBatch(batchToDelete.id);
-
-  if (success) {
-    if (id) loadRooms(id);
-    setIsDeleteBatchConfirmOpen(false);
-    setBatchToDelete(null);
-  } else {
-    alert("Error al eliminar el lote.");
-  }
-};
-
-// --- NEW TRANSPLANT LOGIC ---
-const [isTransplantModalOpen, setIsTransplantModalOpen] = useState(false);
-const [transplantRoom, setTransplantRoom] = useState<any | null>(null);
-
-const [transplantForm, setTransplantForm] = useState<{
-  targetRoomId: string;
-  batchId: string;
-  medium: 'Maceta' | 'Bandeja' | 'Bunker';
-  quantity: number;
-}>({
-  targetRoomId: '',
-  batchId: '',
-  medium: 'Maceta',
-  quantity: 0
-});
-
-
-
-const handleTransplantSave = async () => {
-  if (!transplantRoom || !transplantForm.targetRoomId || !transplantForm.batchId) {
-    alert("Por favor completa todos los campos.");
-    return;
-  }
-
-  if (transplantForm.quantity <= 0) {
-    alert("La cantidad debe ser mayor a 0.");
-    return;
-  }
-
-  const { roomsService } = await import('../services/roomsService');
-
-  // Notes can include the medium info
-  const notes = `Transplante a ${transplantForm.medium}`;
-
-  const success = await roomsService.moveBatch(
-    transplantForm.batchId,
-    transplantRoom.id,
-    transplantForm.targetRoomId,
-    notes,
-    transplantForm.quantity
-  );
-
-  if (success) {
-    if (id) loadRooms(id);
-    setIsTransplantModalOpen(false);
-    setTransplantRoom(null);
-  } else {
-    alert("Error al realizar el transplante.");
-  }
-};
-
-// const handleRecurrenceChange = (field: keyof RecurrenceConfig, value: any) => {
-//   setRecurrenceConfig(prev => ({ ...prev, [field]: value }));
-// };
-
-
-useEffect(() => {
-  if (id) {
-    loadCrop(id, true);
-  }
-}, [id, loadCrop]);
-
-
-const handleEditTask = (task: Task) => {
-  setTaskForm({
-    title: task.title,
-    type: task.type as any, // Warning: loss of type safety pending strict check
-    description: task.description || ''
-  });
-  setEditingTaskId(task.id);
-};
-
-const handleDeleteTask = async (taskId: string) => {
-  if (!window.confirm('¿Eliminar esta tarea?')) return;
-  await tasksService.deleteTask(taskId);
-  setIsModalOpen(false); // Close to refresh cleanly or update local state
-};
-
-const handleDeleteLog = async () => {
-  if (!existingLogId) return;
-  if (!window.confirm('¿Eliminar este registro diario?')) return;
-  await dailyLogsService.deleteLog(existingLogId);
-  setIsModalOpen(false);
-};
-
-const [processingTaskId, setProcessingTaskId] = useState<string | null>(null);
-
-const handleToggleTaskStatus = async (taskId: string, currentStatus: string) => {
-  if (processingTaskId === taskId) return;
-  setProcessingTaskId(taskId);
-
-  const newStatus = currentStatus === 'done' ? 'pending' : 'done';
-
-  // Optimistic Update for UI responsiveness
-  setSelectedDayTasks(prev => prev.map(t =>
-    t.id === taskId ? { ...t, status: newStatus as any } : t
-  ));
-
-  const success = await tasksService.updateStatus(taskId, newStatus as any);
-
-  if (!success) {
-    // Revert on failure
-    setSelectedDayTasks(prev => prev.map(t =>
-      t.id === taskId ? { ...t, status: currentStatus as any } : t
-    ));
-  }
-  setProcessingTaskId(null);
-};
-
-const handleSave = async () => {
-  if (!selectedDate || !id) return;
-  // Fix: Force date to noon to avoid timezone shifts (e.g. 20th 00:00 becoming 19th 21:00)
-  const safeDate = new Date(selectedDate);
-  safeDate.setHours(12, 0, 0, 0);
-  const dateStr = format(safeDate, 'yyyy-MM-dd');
-
-  if (activeTab === 'task') {
-    if (!taskForm.title) return;
-    // Append fertilizer details if applicable
-    let finalDescription = taskForm.description;
-    /* if (taskForm.type === 'fertilizante' && fertilizerDetails.trim()) {
-      finalDescription = `${finalDescription ? finalDescription + '\n\n' : ''}🧪 Fertilizante/Dosis: ${fertilizerDetails}`;
-    } */
-
-    const taskData: CreateTaskInput = {
-      title: taskForm.title,
-      description: finalDescription,
-      type: taskForm.type as any,
-      due_date: dateStr,
-      crop_id: id,
-      // room_id: crop.rooms?.[0].id, // Default to first room? Or logic to select room?
-      recurrence: recurrenceEnabled ? recurrenceConfig : undefined
-    };
-
-    if (editingTaskId) {
-      await tasksService.updateTask(editingTaskId, taskData);
-    } else {
-      await tasksService.createTask(taskData);
-    }
-  } else {
-    // Assuming this is where room creation logic would be if it were in handleSave
-    // The instruction implies adding 'medium' to a 'createRoom' or 'createRooms' payload.
-    // Since the provided snippet doesn't contain the actual room creation logic,
-    // I'm inserting the requested change as a placeholder where it might logically fit,
-    // but it's important to note that the original content does not have this specific
-    // room creation block within the handleSave function.
-    // If the room creation logic is elsewhere, this change should be applied there.
-    // For the purpose of this exercise, I'm placing it as per the user's instruction's structure.
-
-    // This block below is from the user's instruction, but it seems to be misplaced
-    // if it's intended for room creation within handleSave's 'else' (daily log).
-    // I will place it here as per the instruction's structure, assuming it's a
-    // conceptual insertion point for the 'medium' property.
-    // If this is not the correct location, please provide the actual room creation function.
-    // const roomsData = [{
-    //   name: roomForm.name,
-    //   type: roomForm.type,
-    //   medium: roomForm.medium, // Added as per instruction
-    //   capacity: totalPlants,
-    //   spot_id: id
-    // }];
-    // const { data: newRoomData, error: roomError } = await roomsService.createRooms(roomsData);
-
-    await dailyLogsService.upsertLog({
-      crop_id: id,
-      date: dateStr,
-      notes: logForm.notes
+  const handleSaveBatchEdit = async () => {
+    const { roomsService } = await import('../services/roomsService');
+    const success = await roomsService.updateBatch(batchEditForm.id, {
+      name: batchEditForm.name,
+      quantity: Number(batchEditForm.quantity),
+      genetic_id: batchEditForm.geneticId // Update genetic
     });
 
+    if (success) {
+      if (id) loadRooms(id);
+      setIsBatchEditModalOpen(false);
+    } else {
+      alert("Error al editar el lote.");
+    }
+  };
+
+  const [isDeleteBatchConfirmOpen, setIsDeleteBatchConfirmOpen] = useState(false);
+  const [batchToDelete, setBatchToDelete] = useState<any | null>(null);
+
+  const handleDeleteBatchClick = (e: React.MouseEvent, batch: any) => {
+    e.stopPropagation();
+    setBatchToDelete(batch);
+    setIsDeleteBatchConfirmOpen(true);
+  };
+
+  const executeDeleteBatch = async () => {
+    if (!batchToDelete) return;
+
+    const { roomsService } = await import('../services/roomsService');
+    const success = await roomsService.deleteBatch(batchToDelete.id);
+
+    if (success) {
+      if (id) loadRooms(id);
+      setIsDeleteBatchConfirmOpen(false);
+      setBatchToDelete(null);
+    } else {
+      alert("Error al eliminar el lote.");
+    }
+  };
+
+  // --- NEW TRANSPLANT LOGIC ---
+  const [isTransplantModalOpen, setIsTransplantModalOpen] = useState(false);
+  const [transplantRoom, setTransplantRoom] = useState<any | null>(null);
+
+  const [transplantForm, setTransplantForm] = useState<{
+    targetRoomId: string;
+    batchId: string;
+    medium: 'Maceta' | 'Bandeja' | 'Bunker';
+    quantity: number;
+  }>({
+    targetRoomId: '',
+    batchId: '',
+    medium: 'Maceta',
+    quantity: 0
+  });
+
+
+
+  const handleTransplantSave = async () => {
+    if (!transplantRoom || !transplantForm.targetRoomId || !transplantForm.batchId) {
+      alert("Por favor completa todos los campos.");
+      return;
+    }
+
+    if (transplantForm.quantity <= 0) {
+      alert("La cantidad debe ser mayor a 0.");
+      return;
+    }
+
+    const { roomsService } = await import('../services/roomsService');
+
+    // Notes can include the medium info
+    const notes = `Transplante a ${transplantForm.medium}`;
+
+    const success = await roomsService.moveBatch(
+      transplantForm.batchId,
+      transplantRoom.id,
+      transplantForm.targetRoomId,
+      notes,
+      transplantForm.quantity
+    );
+
+    if (success) {
+      if (id) loadRooms(id);
+      setIsTransplantModalOpen(false);
+      setTransplantRoom(null);
+    } else {
+      alert("Error al realizar el transplante.");
+    }
+  };
+
+  // const handleRecurrenceChange = (field: keyof RecurrenceConfig, value: any) => {
+  //   setRecurrenceConfig(prev => ({ ...prev, [field]: value }));
+  // };
+
+
+  useEffect(() => {
+    if (id) {
+      loadCrop(id, true);
+    }
+  }, [id, loadCrop]);
+
+
+  const handleEditTask = (task: Task) => {
+    setTaskForm({
+      title: task.title,
+      type: task.type as any, // Warning: loss of type safety pending strict check
+      description: task.description || ''
+    });
+    setEditingTaskId(task.id);
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    if (!window.confirm('¿Eliminar esta tarea?')) return;
+    await tasksService.deleteTask(taskId);
+    setIsModalOpen(false); // Close to refresh cleanly or update local state
+  };
+
+  const handleDeleteLog = async () => {
+    if (!existingLogId) return;
+    if (!window.confirm('¿Eliminar este registro diario?')) return;
+    await dailyLogsService.deleteLog(existingLogId);
+    setIsModalOpen(false);
+  };
+
+  const [processingTaskId, setProcessingTaskId] = useState<string | null>(null);
+
+  const handleToggleTaskStatus = async (taskId: string, currentStatus: string) => {
+    if (processingTaskId === taskId) return;
+    setProcessingTaskId(taskId);
+
+    const newStatus = currentStatus === 'done' ? 'pending' : 'done';
+
+    // Optimistic Update for UI responsiveness
+    setSelectedDayTasks(prev => prev.map(t =>
+      t.id === taskId ? { ...t, status: newStatus as any } : t
+    ));
+
+    const success = await tasksService.updateStatus(taskId, newStatus as any);
+
+    if (!success) {
+      // Revert on failure
+      setSelectedDayTasks(prev => prev.map(t =>
+        t.id === taskId ? { ...t, status: currentStatus as any } : t
+      ));
+    }
+    setProcessingTaskId(null);
+  };
+
+  const handleSave = async () => {
+    if (!selectedDate || !id) return;
+    // Fix: Force date to noon to avoid timezone shifts (e.g. 20th 00:00 becoming 19th 21:00)
+    const safeDate = new Date(selectedDate);
+    safeDate.setHours(12, 0, 0, 0);
+    const dateStr = format(safeDate, 'yyyy-MM-dd');
+
+    if (activeTab === 'task') {
+      if (!taskForm.title) return;
+      // Append fertilizer details if applicable
+      let finalDescription = taskForm.description;
+      /* if (taskForm.type === 'fertilizante' && fertilizerDetails.trim()) {
+        finalDescription = `${finalDescription ? finalDescription + '\n\n' : ''}🧪 Fertilizante/Dosis: ${fertilizerDetails}`;
+      } */
+
+      const taskData: CreateTaskInput = {
+        title: taskForm.title,
+        description: finalDescription,
+        type: taskForm.type as any,
+        due_date: dateStr,
+        crop_id: id,
+        // room_id: crop.rooms?.[0].id, // Default to first room? Or logic to select room?
+        recurrence: recurrenceEnabled ? recurrenceConfig : undefined
+      };
+
+      if (editingTaskId) {
+        await tasksService.updateTask(editingTaskId, taskData);
+      } else {
+        await tasksService.createTask(taskData);
+      }
+    } else {
+      // Assuming this is where room creation logic would be if it were in handleSave
+      // The instruction implies adding 'medium' to a 'createRoom' or 'createRooms' payload.
+      // Since the provided snippet doesn't contain the actual room creation logic,
+      // I'm inserting the requested change as a placeholder where it might logically fit,
+      // but it's important to note that the original content does not have this specific
+      // room creation block within the handleSave function.
+      // If the room creation logic is elsewhere, this change should be applied there.
+      // For the purpose of this exercise, I'm placing it as per the user's instruction's structure.
+
+      // This block below is from the user's instruction, but it seems to be misplaced
+      // if it's intended for room creation within handleSave's 'else' (daily log).
+      // I will place it here as per the instruction's structure, assuming it's a
+      // conceptual insertion point for the 'medium' property.
+      // If this is not the correct location, please provide the actual room creation function.
+      // const roomsData = [{
+      //   name: roomForm.name,
+      //   type: roomForm.type,
+      //   medium: roomForm.medium, // Added as per instruction
+      //   capacity: totalPlants,
+      //   spot_id: id
+      // }];
+      // const { data: newRoomData, error: roomError } = await roomsService.createRooms(roomsData);
+
+      await dailyLogsService.upsertLog({
+        crop_id: id,
+        date: dateStr,
+        notes: logForm.notes
+      });
+
+    }
+    // Refresh events map
+    // if (id) await loadEvents(id);
+    setIsModalOpen(false);
+  };
+
+  // This function is not used in the provided snippet, but it was part of the original code
+  // and is likely intended to be used when opening the modal for a specific date.
+  // Keeping it here for context, but it's not directly modified by the current instruction.
+  // const handleDayClick = async (date: Date) => {
+  //   // setSelectedDate(date);
+  //   // const dateStr = format(date, 'yyyy-MM-dd');
+  //   // const tasksForDay = await tasksService.getTasksByDate(id!, dateStr);
+  //   // setSelectedDayTasks(tasksForDay);
+
+  //   // const logForDay = await dailyLogsService.getLogByDate(id!, dateStr);
+  //   // if (logForDay) {
+  //   //   setLogForm({ notes: logForDay.notes || '', photos: logForDay.photos || [] });
+  //   //   setExistingLogId(logForDay.id);
+  //   // } else {
+  //   //   setLogForm({ notes: '', photos: [] });
+  //   //   setExistingLogId(null);
+  //   // }
+
+  //   // Reset Task/Recurrence Form
+  //   // setTaskForm({ title: '', type: 'info', description: '' });
+  //   // setRecurrenceEnabled(false);
+  //   // setRecurrenceConfig({ type: 'daily', interval: 1, unit: 'day', daysOfWeek: [] });
+  //   // setEditingTaskId(null);
+
+  //   // setIsModalOpen(true);
+  // };
+
+
+
+
+  if (!crop) {
+    return <LoadingSpinner text="Cargando detalles del cultivo..." fullScreen duration={1500} />;
   }
-  // Refresh events map
-  // if (id) await loadEvents(id);
-  setIsModalOpen(false);
-};
-
-// This function is not used in the provided snippet, but it was part of the original code
-// and is likely intended to be used when opening the modal for a specific date.
-// Keeping it here for context, but it's not directly modified by the current instruction.
-// const handleDayClick = async (date: Date) => {
-//   // setSelectedDate(date);
-//   // const dateStr = format(date, 'yyyy-MM-dd');
-//   // const tasksForDay = await tasksService.getTasksByDate(id!, dateStr);
-//   // setSelectedDayTasks(tasksForDay);
-
-//   // const logForDay = await dailyLogsService.getLogByDate(id!, dateStr);
-//   // if (logForDay) {
-//   //   setLogForm({ notes: logForDay.notes || '', photos: logForDay.photos || [] });
-//   //   setExistingLogId(logForDay.id);
-//   // } else {
-//   //   setLogForm({ notes: '', photos: [] });
-//   //   setExistingLogId(null);
-//   // }
-
-//   // Reset Task/Recurrence Form
-//   // setTaskForm({ title: '', type: 'info', description: '' });
-//   // setRecurrenceEnabled(false);
-//   // setRecurrenceConfig({ type: 'daily', interval: 1, unit: 'day', daysOfWeek: [] });
-//   // setEditingTaskId(null);
-
-//   // setIsModalOpen(true);
-// };
 
 
 
+  const executeDeleteCrop = async () => {
+    if (!crop) return;
 
-if (!crop) {
-  return <LoadingSpinner text="Cargando detalles del cultivo..." fullScreen duration={1500} />;
-}
+    const success = await cropsService.deleteCrop(crop.id);
+    if (success) {
+      navigate('/');
+    } else {
+      setErrorMessage("Error al eliminar el Cultivo.");
+      setIsErrorModalOpen(true);
+    }
+  };
 
+  const handleUpdateColor = async (newColor: string) => {
+    if (!crop) return;
+    const success = await cropsService.updateCrop(crop.id, { color: newColor });
+    if (success) {
+      setCrop({ ...crop, color: newColor });
+      setIsColorPickerOpen(false);
+    }
+  };
 
-
-const executeDeleteCrop = async () => {
-  if (!crop) return;
-
-  const success = await cropsService.deleteCrop(crop.id);
-  if (success) {
-    navigate('/');
-  } else {
-    setErrorMessage("Error al eliminar el Cultivo.");
-    setIsErrorModalOpen(true);
-  }
-};
-
-const handleUpdateColor = async (newColor: string) => {
-  if (!crop) return;
-  const success = await cropsService.updateCrop(crop.id, { color: newColor });
-  if (success) {
-    setCrop({ ...crop, color: newColor });
-    setIsColorPickerOpen(false);
-  }
-};
-
-return (
-  <Container>
-    <Header>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <BackButton onClick={() => navigate('/crops')}>
-          <FaArrowLeft /> Volver a Cultivos
-        </BackButton>
-      </div>
-
-      <TitleSection>
-        <div>
-          <CropTitle>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <FaSeedling /> {/* Changed icon to Seedling/Spot concept */}
-              {crop.name}
-              {/* Buttons removed as per request */}
-            </div>
-          </CropTitle>
-          <MetaGrid>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <FaCalendarAlt /> Creado: {format(new Date(crop.startDate), 'dd MMM yyyy', { locale: es })}
-            </div>
-          </MetaGrid>
+  return (
+    <Container>
+      <Header>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <BackButton onClick={() => navigate('/crops')}>
+            <FaArrowLeft /> Volver a Cultivos
+          </BackButton>
         </div>
-      </TitleSection>
-    </Header>
 
-    {/* --- ROOMS SECTION --- */}
-    <div style={{ marginBottom: '3rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <h2 style={{ fontSize: '1.5rem', color: '#2d3748', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          Salas de Cultivo Activas
-        </h2>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-
-
-        </div>
-      </div>
-
-      {isLoadingRooms ? (
-        <div style={{ padding: '2rem', textAlign: 'center', color: '#718096' }}>
-          <LoadingSpinner text="Cargando salas..." />
-        </div>
-      ) : (
-        <FadeInWrapper>
-          {rooms.length === 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%' }}>
-
-              <div style={{
-                padding: '2rem',
-                background: '#fff',
-                borderRadius: '1rem',
-                border: '1px solid #e2e8f0',
-                textAlign: 'center',
-                color: '#718096',
-                marginBottom: '1rem'
-              }}>
-                <p style={{ fontSize: '1.1rem', fontWeight: 500, margin: 0 }}>No hay salas/cultivos activos</p>
+        <TitleSection>
+          <div>
+            <CropTitle>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <FaSeedling /> {/* Changed icon to Seedling/Spot concept */}
+                {crop.name}
+                {/* Buttons removed as per request */}
               </div>
+            </CropTitle>
+            <MetaGrid>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <FaCalendarAlt /> Creado: {format(new Date(crop.startDate), 'dd MMM yyyy', { locale: es })}
+              </div>
+            </MetaGrid>
+          </div>
+        </TitleSection>
+      </Header>
 
-              <CreateCard onClick={() => setIsRoomModalOpen(true)}>
-                <DashedCircle>
-                  <FaPlus />
-                </DashedCircle>
-                <span style={{ fontWeight: 600, fontSize: '1rem', color: 'inherit', textAlign: 'center', padding: '0 1rem' }}>
-                  Crear la primera sala
-                </span>
-              </CreateCard>
-            </div>
-          ) : (
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-              <SortableContext items={rooms.map((r: any) => r.id)} strategy={rectSortingStrategy}>
-                <GridContainer>
-                  {rooms.map(room => {
-                    // Calculate logic
-                    let weekInfo = "";
-                    let startDateDisplay = "-";
-                    let daysToFlip = null;
-
-                    // Determine effective start date (Priority: Earliest Active Batch > Room Start Date)
-                    let effectiveStartDate = room.start_date;
-                    let activeBatches: any[] = [];
-
-                    if (room.batches && room.batches.length > 0) {
-                      activeBatches = room.batches.filter((b: any) => b.stage === room.type);
-                      if (activeBatches.length > 0) {
-                        const earliestBatchDate = activeBatches.reduce((min: string, b: any) => b.start_date < min ? b.start_date : min, activeBatches[0].start_date);
-                        effectiveStartDate = earliestBatchDate;
-                      }
-                    }
-
-                    // --- OPERATIONAL DAYS LOGIC ---
-                    let daysRemainingString = null;
-                    let isPeriodOver = false;
-                    let alertLevel = 0; // 0: None, 1: Badge Red, 2: Border Red, 3: Heartbeat
-
-                    if (room.operational_days && room.start_date) {
-                      const start = new Date(room.start_date);
-                      const now = new Date();
-                      const end = new Date(start);
-                      end.setDate(start.getDate() + room.operational_days);
-
-                      const diffDays = differenceInDays(end, now);
-
-                      if (diffDays <= 0) {
-                        isPeriodOver = true;
-                        daysRemainingString = "Periodo finalizado";
-                        alertLevel = 3; // Finished = Critical
-                      } else {
-                        daysRemainingString = `${diffDays} días restantes`;
-                        if (diffDays <= 3) alertLevel = 3;
-                        else if (diffDays <= 5) alertLevel = 2;
-                        else if (diffDays <= 7) alertLevel = 1;
-                      }
-                    }
+      {/* --- ROOMS SECTION --- */}
+      <div style={{ marginBottom: '3rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+          <h2 style={{ fontSize: '1.5rem', color: '#2d3748', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            Salas de Cultivo Activas
+          </h2>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
 
 
-                    // --- ESQUEJERA LOGIC: Genetic Breakdown ---
-                    let geneticBreakdown: Record<string, number> | null = null;
-                    if (room.type === 'clones' && room.batches) {
-                      geneticBreakdown = {};
-                      room.batches.forEach((b: any) => {
-                        const gName = b.genetic?.name || 'Desconocida';
-                        geneticBreakdown![gName] = (geneticBreakdown![gName] || 0) + b.quantity;
-                      });
-                    }
+          </div>
+        </div>
 
-                    // Calculate Display Date & Weeks
-                    if (effectiveStartDate) {
-                      // Parse manually to avoid UTC conversion issues (e.g. 2026-01-30 becoming 29th in GMT-3)
-                      const [y, m, d] = effectiveStartDate.split('T')[0].split('-').map(Number);
-                      const dateObj = new Date(y, m - 1, d); // Local midnight
+        {isLoadingRooms ? (
+          <div style={{ padding: '2rem', textAlign: 'center', color: '#718096' }}>
+            <LoadingSpinner text="Cargando salas..." />
+          </div>
+        ) : (
+          <FadeInWrapper>
+            {rooms.length === 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%' }}>
 
-                      startDateDisplay = format(dateObj, 'dd/MM/yyyy');
-                      const weeks = differenceInWeeks(new Date(), dateObj) + 1;
-                      weekInfo = `Semana ${weeks}`;
-                    }
+                <div style={{
+                  padding: '2rem',
+                  background: '#fff',
+                  borderRadius: '1rem',
+                  border: '1px solid #e2e8f0',
+                  textAlign: 'center',
+                  color: '#718096',
+                  marginBottom: '1rem'
+                }}>
+                  <p style={{ fontSize: '1.1rem', fontWeight: 500, margin: 0 }}>No hay salas/cultivos activos</p>
+                </div>
 
-                    // Countdown Logic (Only for Vegetation with Genetics)
-                    if (room.type === 'vegetation' && activeBatches.length > 0) {
-                      const firstBatch = activeBatches[0];
-                      if (firstBatch && firstBatch.genetic_id) {
-                        const genetic = genetics.find(g => g.id === firstBatch.genetic_id);
-                        if (genetic && genetic.vegetative_weeks && effectiveStartDate) {
-                          const targetDate = addWeeks(new Date(effectiveStartDate), genetic.vegetative_weeks);
-                          daysToFlip = differenceInDays(targetDate, new Date());
+                <CreateCard onClick={() => setIsRoomModalOpen(true)}>
+                  <DashedCircle>
+                    <FaPlus />
+                  </DashedCircle>
+                  <span style={{ fontWeight: 600, fontSize: '1rem', color: 'inherit', textAlign: 'center', padding: '0 1rem' }}>
+                    Crear la primera sala
+                  </span>
+                </CreateCard>
+              </div>
+            ) : (
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+                <SortableContext items={rooms.map((r: any) => r.id)} strategy={rectSortingStrategy}>
+                  <GridContainer>
+                    {rooms.map(room => {
+                      // Calculate logic
+                      let weekInfo = "";
+                      let startDateDisplay = "-";
+                      let daysToFlip = null;
+
+                      // Determine effective start date (Priority: Earliest Active Batch > Room Start Date)
+                      let effectiveStartDate = room.start_date;
+                      let activeBatches: any[] = [];
+
+                      if (room.batches && room.batches.length > 0) {
+                        activeBatches = room.batches.filter((b: any) => b.stage === room.type);
+                        if (activeBatches.length > 0) {
+                          const earliestBatchDate = activeBatches.reduce((min: string, b: any) => b.start_date < min ? b.start_date : min, activeBatches[0].start_date);
+                          effectiveStartDate = earliestBatchDate;
                         }
                       }
-                    }
 
-                    // --- CYCLE CALCULATION FOR PROGRESS BAR ---
+                      // --- OPERATIONAL DAYS LOGIC ---
+                      let daysRemainingString = null;
+                      let isPeriodOver = false;
+                      let alertLevel = 0; // 0: None, 1: Badge Red, 2: Border Red, 3: Heartbeat
 
-                    let vegeWidth = 0;
-                    let floraWidth = 0;
-                    let currentStageProgress = 0; // % within the total bar
-                    let activeBatchForCycle = room.batches && room.batches.length > 0 ? room.batches.find((b: any) => b.stage === room.type) : null;
-                    let cycleGenetic = activeBatchForCycle ? genetics.find(g => g.id === activeBatchForCycle.genetic_id) : null;
+                      if (room.operational_days && room.start_date) {
+                        const start = new Date(room.start_date);
+                        const now = new Date();
+                        const end = new Date(start);
+                        end.setDate(start.getDate() + room.operational_days);
 
-                    if (activeBatchForCycle && cycleGenetic) {
-                      const startDate = new Date(activeBatchForCycle.start_date);
-                      const today = new Date();
-                      const weeksPassed = Math.max(0, differenceInWeeks(today, startDate));
+                        const diffDays = differenceInDays(end, now);
 
-                      // Default estima: 4 weeks vege, 9 weeks flora (if no genetics)
-                      const estVege = cycleGenetic.vegetative_weeks || 4;
-                      const estFlora = cycleGenetic.flowering_weeks || 9;
-                      const totalEstWeeks = estVege + estFlora;
-
-                      // Calculate widths relative to total
-                      vegeWidth = (estVege / totalEstWeeks) * 100;
-                      floraWidth = (estFlora / totalEstWeeks) * 100;
-
-                      // Find current position logic...
-                      // Simplified: use total weeks passed from start_date / total weeks
-                      const totalProgress = (weeksPassed / totalEstWeeks) * 100;
-                      currentStageProgress = Math.min(100, totalProgress);
-                    }
+                        if (diffDays <= 0) {
+                          isPeriodOver = true;
+                          daysRemainingString = "Periodo finalizado";
+                          alertLevel = 3; // Finished = Critical
+                        } else {
+                          daysRemainingString = `${diffDays} días restantes`;
+                          if (diffDays <= 3) alertLevel = 3;
+                          else if (diffDays <= 5) alertLevel = 2;
+                          else if (diffDays <= 7) alertLevel = 1;
+                        }
+                      }
 
 
+                      // --- ESQUEJERA LOGIC: Genetic Breakdown ---
+                      let geneticBreakdown: Record<string, number> | null = null;
+                      if (room.type === 'clones' && room.batches) {
+                        geneticBreakdown = {};
+                        room.batches.forEach((b: any) => {
+                          const gName = b.genetic?.name || 'Desconocida';
+                          geneticBreakdown![gName] = (geneticBreakdown![gName] || 0) + b.quantity;
+                        });
+                      }
+
+                      // Calculate Display Date & Weeks
+                      if (effectiveStartDate) {
+                        // Parse manually to avoid UTC conversion issues (e.g. 2026-01-30 becoming 29th in GMT-3)
+                        const [y, m, d] = effectiveStartDate.split('T')[0].split('-').map(Number);
+                        const dateObj = new Date(y, m - 1, d); // Local midnight
+
+                        startDateDisplay = format(dateObj, 'dd/MM/yyyy');
+                        const weeks = differenceInWeeks(new Date(), dateObj) + 1;
+                        weekInfo = `Semana ${weeks}`;
+                      }
+
+                      // Countdown Logic (Only for Vegetation with Genetics)
+                      if (room.type === 'vegetation' && activeBatches.length > 0) {
+                        const firstBatch = activeBatches[0];
+                        if (firstBatch && firstBatch.genetic_id) {
+                          const genetic = genetics.find(g => g.id === firstBatch.genetic_id);
+                          if (genetic && genetic.vegetative_weeks && effectiveStartDate) {
+                            const targetDate = addWeeks(new Date(effectiveStartDate), genetic.vegetative_weeks);
+                            daysToFlip = differenceInDays(targetDate, new Date());
+                          }
+                        }
+                      }
+
+                      // --- CYCLE CALCULATION FOR PROGRESS BAR ---
+
+                      let vegeWidth = 0;
+                      let floraWidth = 0;
+                      let currentStageProgress = 0; // % within the total bar
+                      let activeBatchForCycle = room.batches && room.batches.length > 0 ? room.batches.find((b: any) => b.stage === room.type) : null;
+                      let cycleGenetic = activeBatchForCycle ? genetics.find(g => g.id === activeBatchForCycle.genetic_id) : null;
+
+                      if (activeBatchForCycle && cycleGenetic) {
+                        const startDate = new Date(activeBatchForCycle.start_date);
+                        const today = new Date();
+                        const weeksPassed = Math.max(0, differenceInWeeks(today, startDate));
+
+                        // Default estima: 4 weeks vege, 9 weeks flora (if no genetics)
+                        const estVege = cycleGenetic.vegetative_weeks || 4;
+                        const estFlora = cycleGenetic.flowering_weeks || 9;
+                        const totalEstWeeks = estVege + estFlora;
+
+                        // Calculate widths relative to total
+                        vegeWidth = (estVege / totalEstWeeks) * 100;
+                        floraWidth = (estFlora / totalEstWeeks) * 100;
+
+                        // Find current position logic...
+                        // Simplified: use total weeks passed from start_date / total weeks
+                        const totalProgress = (weeksPassed / totalEstWeeks) * 100;
+                        currentStageProgress = Math.min(100, totalProgress);
+                      }
 
 
-                    return (
-                      <SortableRoomItem key={room.id} room={room}>
-                        <div
-                          onClick={() => navigate(`/rooms/${room.id}`)}
-                          style={{
-                            // Removed wrapping explicit div styles as they are now handled by RoomCard or moved
-                            cursor: 'pointer'
-                          }}
-                        >
-                          <div style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            height: '4px',
-                            background: room.type === 'vegetation' ? '#48bb78' // Green
-                              : room.type === 'flowering' ? '#ed8936' // Orange
-                                : room.type === 'clones' ? '#63b3ed' // Blue
-                                  : room.type === 'living_soil' ? '#319795' // Teal
-                                    : room.type === 'mother' ? '#d53f8c' // Pink
-                                      : room.type === 'germination' ? '#9ae6b4' // Light Green
-                                        : '#ecc94b' // Yellow (Default)
-                          }} />
 
-                          <div style={{ display: 'flex', flexDirection: 'column', marginBottom: '1rem', marginTop: '3.5rem' }}>
-                            <h3 style={{ margin: 0, color: '#2d3748', fontSize: '1.25rem', fontWeight: 800, paddingRight: '140px', wordBreak: 'break-word' }}>{room.name}</h3>
 
-                            {/* Visual Stage Badge - Replaces old small badge */}
-                            <VisualStageBadge $type={room.type}>
-                              {room.type === 'vegetation' ? <FaLeaf />
-                                : room.type === 'flowering' ? <span>🌸</span>
-                                  : room.type === 'mother' ? <FaSeedling />
-                                    : room.type === 'clones' ? <span>🧬</span>
-                                      : room.type === 'germination' ? <span>🌱</span>
-                                        : room.type === 'living_soil' ? <span>🌍</span>
-                                          : <FaWarehouse />}
-                              <span>
-                                {room.type === 'vegetation' ? 'VEGETACIÓN'
-                                  : room.type === 'flowering' ? 'FLORA'
-                                    : room.type === 'mother' ? 'MADRES'
-                                      : room.type === 'clones' ? 'ESQUEJERA'
-                                        : room.type === 'germination' ? 'GERMINACIÓN'
-                                          : room.type === 'living_soil' ? 'LIVING SOIL'
-                                            : 'SECADO'}
-                              </span>
-                            </VisualStageBadge>
-                          </div>
-
-                          {weekInfo && (
-                            <span style={{
+                      return (
+                        <SortableRoomItem key={room.id} room={room}>
+                          <div
+                            onClick={() => navigate(`/rooms/${room.id}`)}
+                            style={{
+                              // Removed wrapping explicit div styles as they are now handled by RoomCard or moved
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <div style={{
                               position: 'absolute',
-                              top: '3.5rem',
-                              right: '0.75rem',
-                              fontSize: '0.75rem',
-                              fontWeight: 700,
-                              padding: '0.25rem 0.6rem',
-                              borderRadius: '4px',
-                              background: '#ebf8ff',
-                              color: '#2b6cb0',
-                              width: 'fit-content',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '0.25rem',
-                              zIndex: 5
-                            }}>
-                              <FaRegCircle size={8} /> {weekInfo}
-                            </span>
-                          )}
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              height: '4px',
+                              background: room.type === 'vegetation' ? '#48bb78' // Green
+                                : room.type === 'flowering' ? '#ed8936' // Orange
+                                  : room.type === 'clones' ? '#63b3ed' // Blue
+                                    : room.type === 'living_soil' ? '#319795' // Teal
+                                      : room.type === 'mother' ? '#d53f8c' // Pink
+                                        : room.type === 'germination' ? '#9ae6b4' // Light Green
+                                          : '#ecc94b' // Yellow (Default)
+                            }} />
 
+                            <div style={{ display: 'flex', flexDirection: 'column', marginBottom: '1rem', marginTop: '3.5rem' }}>
+                              <h3 style={{ margin: 0, color: '#2d3748', fontSize: '1.25rem', fontWeight: 800, paddingRight: '140px', wordBreak: 'break-word' }}>{room.name}</h3>
 
-
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                            {/* Start Date */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#4a5568', fontSize: '0.9rem' }}>
-                              <FaCalendarAlt size={14} color="#718096" />
-                              <span>Iniciado: <strong>{startDateDisplay}</strong></span>
+                              {/* Visual Stage Badge - Replaces old small badge */}
+                              <VisualStageBadge $type={room.type}>
+                                {room.type === 'vegetation' ? <FaLeaf />
+                                  : room.type === 'flowering' ? <span>🌸</span>
+                                    : room.type === 'mother' ? <FaSeedling />
+                                      : room.type === 'clones' ? <span>🧬</span>
+                                        : room.type === 'germination' ? <span>🌱</span>
+                                          : room.type === 'living_soil' ? <span>🌍</span>
+                                            : <FaWarehouse />}
+                                <span>
+                                  {room.type === 'vegetation' ? 'VEGETACIÓN'
+                                    : room.type === 'flowering' ? 'FLORA'
+                                      : room.type === 'mother' ? 'MADRES'
+                                        : room.type === 'clones' ? 'ESQUEJERA'
+                                          : room.type === 'germination' ? 'GERMINACIÓN'
+                                            : room.type === 'living_soil' ? 'LIVING SOIL'
+                                              : 'SECADO'}
+                                </span>
+                              </VisualStageBadge>
                             </div>
 
-                            {/* OPERATIONAL DAYS ALERT/COUNTDOWN */}
-                            {room.operational_days && daysRemainingString && (
-                              <div style={{
-                                marginTop: '0.5rem',
-                                padding: '0.5rem',
-                                borderRadius: '0.5rem',
-                                background: alertLevel >= 1 || isPeriodOver ? '#fed7d7' : '#e6fffa',
-                                color: alertLevel >= 1 || isPeriodOver ? '#c53030' : '#2c7a7b',
+                            {weekInfo && (
+                              <span style={{
+                                position: 'absolute',
+                                top: '3.5rem',
+                                right: '0.75rem',
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                                padding: '0.25rem 0.6rem',
+                                borderRadius: '4px',
+                                background: '#ebf8ff',
+                                color: '#2b6cb0',
+                                width: 'fit-content',
                                 display: 'flex',
                                 alignItems: 'center',
-                                gap: '0.5rem',
-                                fontWeight: 700,
-                                fontSize: '0.9rem',
-                                border: alertLevel >= 1 || isPeriodOver ? '1px solid #fc8181' : '1px solid #b2f5ea'
+                                gap: '0.25rem',
+                                zIndex: 5
                               }}>
-                                {alertLevel >= 1 || isPeriodOver ? <FaExclamationTriangle /> : <FaClock />}
-                                <span>{daysRemainingString}</span>
-                              </div>
+                                <FaRegCircle size={8} /> {weekInfo}
+                              </span>
                             )}
 
-                            {/* ESQUEJERA SUMMARY */}
-                            {geneticBreakdown && (
-                              <div style={{ marginTop: '0.5rem', padding: '0.5rem', background: '#ebf8ff', borderRadius: '0.5rem', border: '1px solid #bee3f8' }}>
-                                <strong style={{ display: 'block', fontSize: '0.8rem', color: '#2b6cb0', marginBottom: '0.25rem' }}>Resumen por Genética:</strong>
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                                  {Object.entries(geneticBreakdown as Record<string, number>).map(([name, count]) => (
-                                    <span key={name} style={{ fontSize: '0.8.5rem', background: 'white', padding: '0.1rem 0.4rem', borderRadius: '4px', border: '1px solid #e2e8f0', color: '#4a5568' }}>
-                                      <strong>{count}</strong> {name}
-                                    </span>
-                                  ))}
+
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                              {/* Start Date */}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#4a5568', fontSize: '0.9rem' }}>
+                                <FaCalendarAlt size={14} color="#718096" />
+                                <span>Iniciado: <strong>{startDateDisplay}</strong></span>
+                              </div>
+
+                              {/* OPERATIONAL DAYS ALERT/COUNTDOWN */}
+                              {room.operational_days && daysRemainingString && (
+                                <div style={{
+                                  marginTop: '0.5rem',
+                                  padding: '0.5rem',
+                                  borderRadius: '0.5rem',
+                                  background: alertLevel >= 1 || isPeriodOver ? '#fed7d7' : '#e6fffa',
+                                  color: alertLevel >= 1 || isPeriodOver ? '#c53030' : '#2c7a7b',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '0.5rem',
+                                  fontWeight: 700,
+                                  fontSize: '0.9rem',
+                                  border: alertLevel >= 1 || isPeriodOver ? '1px solid #fc8181' : '1px solid #b2f5ea'
+                                }}>
+                                  {alertLevel >= 1 || isPeriodOver ? <FaExclamationTriangle /> : <FaClock />}
+                                  <span>{daysRemainingString}</span>
                                 </div>
-                              </div>
-                            )}
+                              )}
 
-                            {/* Assigned Batch Info - SMART GROUPING REPLACEMENT */}
-                            {room.batches && room.batches.length > 0 && (
-                              <div
-                                onClick={(e) => e.stopPropagation()} // Stop navigation when clicking in batch area
-                                style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.25rem', fontSize: '0.9rem', color: '#4a5568', background: '#f7fafc', padding: '0.5rem', borderRadius: '0.5rem' }}
-                              >
-                                {(() => {
-                                  // Smart Grouping Logic
-                                  const groupedBatches = groupBatchesByGeneticDateRoom(room.batches);
-                                  const visibleGroups = expandedRooms[room.id] ? groupedBatches : groupedBatches.slice(0, 5);
+                              {/* ESQUEJERA SUMMARY */}
+                              {geneticBreakdown && (
+                                <div style={{ marginTop: '0.5rem', padding: '0.5rem', background: '#ebf8ff', borderRadius: '0.5rem', border: '1px solid #bee3f8' }}>
+                                  <strong style={{ display: 'block', fontSize: '0.8rem', color: '#2b6cb0', marginBottom: '0.25rem' }}>Resumen por Genética:</strong>
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                    {Object.entries(geneticBreakdown as Record<string, number>).map(([name, count]) => (
+                                      <span key={name} style={{ fontSize: '0.8.5rem', background: 'white', padding: '0.1rem 0.4rem', borderRadius: '4px', border: '1px solid #e2e8f0', color: '#4a5568' }}>
+                                        <strong>{count}</strong> {name}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
 
-                                  return (
-                                    <>
-                                      {visibleGroups.map((group: any) => (
-                                        <BatchGroupRow
-                                          key={group.root.id}
-                                          group={group}
-                                          expanded={expandedBatchGroups.has(group.root.id)}
-                                          onToggleExpand={() => toggleBatchGroupExpansion(group.root.id)}
-                                          childrenRender={(batch: any) => (
-                                            <DraggableBatchRow
-                                              key={batch.id}
-                                              batch={batch}
-                                              isSelected={selectedBatchIds.has(batch.id)}
-                                              onToggleSelect={toggleBatchSelection}
-                                            >
-                                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px dashed #e2e8f0', paddingBottom: '0.25rem', marginBottom: '0.25rem' }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                  <FaBarcode color="#4a5568" size={12} />
-                                                  <span style={{ display: 'flex', alignItems: 'center', gap: '5px', minWidth: 0, flex: 1 }}>
-                                                    <strong style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{batch.name}</strong> <span style={{ color: '#718096', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>({batch.quantity}u)</span>
-                                                  </span>
+                              {/* Assigned Batch Info - SMART GROUPING REPLACEMENT */}
+                              {room.batches && room.batches.length > 0 && (
+                                <div
+                                  onClick={(e) => e.stopPropagation()} // Stop navigation when clicking in batch area
+                                  style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.25rem', fontSize: '0.9rem', color: '#4a5568', background: '#f7fafc', padding: '0.5rem', borderRadius: '0.5rem' }}
+                                >
+                                  {(() => {
+                                    // Smart Grouping Logic
+                                    const groupedBatches = groupBatchesByGeneticDateRoom(room.batches);
+                                    const visibleGroups = expandedRooms[room.id] ? groupedBatches : groupedBatches.slice(0, 5);
+
+                                    return (
+                                      <>
+                                        {visibleGroups.map((group: any) => (
+                                          <BatchGroupRow
+                                            key={group.root.id}
+                                            group={group}
+                                            expanded={expandedBatchGroups.has(group.root.id)}
+                                            onToggleExpand={() => toggleBatchGroupExpansion(group.root.id)}
+                                            childrenRender={(batch: any) => (
+                                              <DraggableBatchRow
+                                                key={batch.id}
+                                                batch={batch}
+                                                isSelected={selectedBatchIds.has(batch.id)}
+                                                onToggleSelect={toggleBatchSelection}
+                                              >
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px dashed #e2e8f0', paddingBottom: '0.25rem', marginBottom: '0.25rem' }}>
+                                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                    <FaBarcode color="#4a5568" size={12} />
+                                                    <span style={{ display: 'flex', alignItems: 'center', gap: '5px', minWidth: 0, flex: 1 }}>
+                                                      <strong style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{batch.name}</strong> <span style={{ color: '#718096', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>({batch.quantity}u)</span>
+                                                    </span>
+                                                  </div>
+                                                  <div style={{ display: 'flex', gap: '5px' }}>
+                                                    <Tooltip text="Editar Datos del Lote">
+                                                      <button
+                                                        onPointerDown={(e) => e.stopPropagation()} // Prevent Drag
+                                                        onClick={(e) => handleEditBatchClick(e, batch)}
+                                                        style={{
+                                                          background: 'white', border: '1px solid #e2e8f0', borderRadius: '4px',
+                                                          color: '#3182ce', cursor: 'pointer', fontSize: '0.8rem', padding: '0.2rem',
+                                                          display: 'flex', alignItems: 'center'
+                                                        }}
+                                                      >
+                                                        <FaEdit size={12} />
+                                                      </button>
+                                                    </Tooltip>
+                                                    <Tooltip text="Eliminar Lote">
+                                                      <button
+                                                        onPointerDown={(e) => e.stopPropagation()} // Prevent Drag
+                                                        onClick={(e) => handleDeleteBatchClick(e, batch)}
+                                                        style={{
+                                                          background: 'white', border: '1px solid #fed7d7', borderRadius: '4px',
+                                                          color: '#e53e3e', cursor: 'pointer', fontSize: '0.8rem', padding: '0.2rem',
+                                                          display: 'flex', alignItems: 'center'
+                                                        }}
+                                                      >
+                                                        <FaTrash size={12} />
+                                                      </button>
+                                                    </Tooltip>
+                                                    <Tooltip text="Ver Código QR / Pasaporte">
+                                                      <button
+                                                        onPointerDown={(e) => e.stopPropagation()} // Prevent Drag
+                                                        onClick={(e) => {
+                                                          e.stopPropagation();
+                                                          const passportUrl = `${window.location.origin}/passport/${batch.id}`;
+                                                          setQrValue(passportUrl);
+                                                          setQrTitle(`QR: ${batch.name}`);
+                                                          setQrModalOpen(true);
+                                                        }}
+                                                        style={{
+                                                          background: 'white',
+                                                          border: '1px solid #e2e8f0',
+                                                          borderRadius: '4px',
+                                                          color: '#4a5568',
+                                                          cursor: 'pointer',
+                                                          fontSize: '0.7rem',
+                                                          padding: '0.1rem 0.4rem',
+                                                          fontWeight: 600
+                                                        }}
+                                                      >
+                                                        QR
+                                                      </button>
+                                                    </Tooltip>
+                                                  </div>
                                                 </div>
-                                                <div style={{ display: 'flex', gap: '5px' }}>
-                                                  <Tooltip text="Editar Datos del Lote">
-                                                    <button
-                                                      onPointerDown={(e) => e.stopPropagation()} // Prevent Drag
-                                                      onClick={(e) => handleEditBatchClick(e, batch)}
-                                                      style={{
-                                                        background: 'white', border: '1px solid #e2e8f0', borderRadius: '4px',
-                                                        color: '#3182ce', cursor: 'pointer', fontSize: '0.8rem', padding: '0.2rem',
-                                                        display: 'flex', alignItems: 'center'
-                                                      }}
-                                                    >
-                                                      <FaEdit size={12} />
-                                                    </button>
-                                                  </Tooltip>
-                                                  <Tooltip text="Eliminar Lote">
-                                                    <button
-                                                      onPointerDown={(e) => e.stopPropagation()} // Prevent Drag
-                                                      onClick={(e) => handleDeleteBatchClick(e, batch)}
-                                                      style={{
-                                                        background: 'white', border: '1px solid #fed7d7', borderRadius: '4px',
-                                                        color: '#e53e3e', cursor: 'pointer', fontSize: '0.8rem', padding: '0.2rem',
-                                                        display: 'flex', alignItems: 'center'
-                                                      }}
-                                                    >
-                                                      <FaTrash size={12} />
-                                                    </button>
-                                                  </Tooltip>
-                                                  <Tooltip text="Ver Código QR / Pasaporte">
-                                                    <button
-                                                      onPointerDown={(e) => e.stopPropagation()} // Prevent Drag
-                                                      onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        const passportUrl = `${window.location.origin}/passport/${batch.id}`;
-                                                        setQrValue(passportUrl);
-                                                        setQrTitle(`QR: ${batch.name}`);
-                                                        setQrModalOpen(true);
-                                                      }}
-                                                      style={{
-                                                        background: 'white',
-                                                        border: '1px solid #e2e8f0',
-                                                        borderRadius: '4px',
-                                                        color: '#4a5568',
-                                                        cursor: 'pointer',
-                                                        fontSize: '0.7rem',
-                                                        padding: '0.1rem 0.4rem',
-                                                        fontWeight: 600
-                                                      }}
-                                                    >
-                                                      QR
-                                                    </button>
-                                                  </Tooltip>
-                                                </div>
-                                              </div>
-                                            </DraggableBatchRow>
-                                          )}
-                                        />
-                                      ))}
+                                              </DraggableBatchRow>
+                                            )}
+                                          />
+                                        ))}
 
-                                      {/* Show "Ver todos" based on GROUPS count, not batches */}
-                                      {groupedBatches.length > 5 && (
-                                        <button
-                                          onClick={(e) => toggleRoomExpansion(room.id, e)}
-                                          style={{
-                                            border: 'none',
-                                            background: 'none',
-                                            color: '#3182ce',
-                                            fontSize: '0.8rem',
-                                            fontWeight: 600,
-                                            cursor: 'pointer',
-                                            marginTop: '0.25rem',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            width: '100%',
-                                            padding: '0.25rem'
-                                          }}
-                                        >
-                                          {expandedRooms[room.id] ? 'Ver menos' : `Ver todos (${groupedBatches.length} lotes)`}
-                                        </button>
-                                      )}
-                                    </>
-                                  );
-                                })()}
-                              </div>
-                            )}
-
-                            {/* Environmental Data (Placeholders for TUYA API) */}
-                            <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px dashed #e2e8f0', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#4a5568', fontSize: '0.85rem' }}>
-                                <FaTemperatureHigh size={12} color="#e53e3e" />
-                                <span>Temp. Actual <span style={{ float: 'right', fontWeight: 'bold' }}>--</span></span>
-                              </div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#4a5568', fontSize: '0.85rem' }}>
-                                <FaTint size={12} color="#3182ce" />
-                                <span>Humedad <span style={{ float: 'right', fontWeight: 'bold' }}>--</span></span>
-                              </div>
-                            </div>
-
-                            {/* Countdown To Flora */}
-                            {daysToFlip !== null && (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#4a5568', fontSize: '0.9rem', marginTop: '0.25rem' }}>
-                                <FaClock size={14} color="#ed8936" />
-                                <span>
-                                  {daysToFlip > 0
-                                    ? <span>Pasa a Flora en: <strong>{daysToFlip} días</strong></span>
-                                    : <span style={{ color: '#e53e3e', fontWeight: 600 }}>¡Listo para pasar a Flora!</span>
-                                  }
-                                </span>
-                              </div>
-                            )}
-                            {/* We could add Sensor data here if available */}
-
-                            {/* LIFE CYCLE PROGRESS BAR */}
-                            {(room.type === 'vegetation' || room.type === 'flowering') && activeBatchForCycle && (
-                              <div style={{ marginTop: '0.5rem' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: '#718096', marginBottom: '2px' }}>
-                                  <span>Inicio</span>
-                                  <span>Cosecha Est.</span>
+                                        {/* Show "Ver todos" based on GROUPS count, not batches */}
+                                        {groupedBatches.length > 5 && (
+                                          <button
+                                            onClick={(e) => toggleRoomExpansion(room.id, e)}
+                                            style={{
+                                              border: 'none',
+                                              background: 'none',
+                                              color: '#3182ce',
+                                              fontSize: '0.8rem',
+                                              fontWeight: 600,
+                                              cursor: 'pointer',
+                                              marginTop: '0.25rem',
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              justifyContent: 'center',
+                                              width: '100%',
+                                              padding: '0.25rem'
+                                            }}
+                                          >
+                                            {expandedRooms[room.id] ? 'Ver menos' : `Ver todos (${groupedBatches.length} lotes)`}
+                                          </button>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
                                 </div>
-                                <div style={{ position: 'relative', height: '10px', width: '100%', background: '#edf2f7', borderRadius: '5px', overflow: 'hidden' }}>
-                                  {/* Vege Segment */}
-                                  <div style={{
-                                    position: 'absolute', left: 0, top: 0, bottom: 0,
-                                    width: `${vegeWidth}%`, background: '#c6f6d5',
-                                    borderRight: '1px solid white'
-                                  }} title="Fase Vegetativa Estimada" />
+                              )}
 
-                                  {/* Flora Segment */}
-                                  <div style={{
-                                    position: 'absolute', left: `${vegeWidth}%`, top: 0, bottom: 0,
-                                    width: `${floraWidth}%`, background: '#fbd38d'
-                                  }} title="Fase de Floración Estimada" />
-
-                                  {/* Current Progress Indicator */}
-                                  <div style={{
-                                    position: 'absolute',
-                                    left: 0, top: 0, bottom: 0,
-                                    width: `${currentStageProgress}%`,
-                                    background: 'rgba(0,0,0,0.15)', // Shadow overlay to show progress
-                                    borderRight: '2px solid #2d3748',
-                                    transition: 'width 0.5s ease-out'
-                                  }} />
+                              {/* Environmental Data (Placeholders for TUYA API) */}
+                              <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px dashed #e2e8f0', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#4a5568', fontSize: '0.85rem' }}>
+                                  <FaTemperatureHigh size={12} color="#e53e3e" />
+                                  <span>Temp. Actual <span style={{ float: 'right', fontWeight: 'bold' }}>--</span></span>
                                 </div>
-
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#4a5568', fontSize: '0.85rem' }}>
+                                  <FaTint size={12} color="#3182ce" />
+                                  <span>Humedad <span style={{ float: 'right', fontWeight: 'bold' }}>--</span></span>
+                                </div>
                               </div>
-                            )}
 
-                            {/* Footer Actions: Stage Controls + Utility Buttons */}
-                            <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px dashed #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+                              {/* Countdown To Flora */}
+                              {daysToFlip !== null && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#4a5568', fontSize: '0.9rem', marginTop: '0.25rem' }}>
+                                  <FaClock size={14} color="#ed8936" />
+                                  <span>
+                                    {daysToFlip > 0
+                                      ? <span>Pasa a Flora en: <strong>{daysToFlip} días</strong></span>
+                                      : <span style={{ color: '#e53e3e', fontWeight: 600 }}>¡Listo para pasar a Flora!</span>
+                                    }
+                                  </span>
+                                </div>
+                              )}
+                              {/* We could add Sensor data here if available */}
 
-                              {/* Left: Stage Action (or empty spacer if none) */}
-                              <div style={{ flex: 1 }}>
-                                {/* {room.type === 'vegetation' && (
+                              {/* LIFE CYCLE PROGRESS BAR */}
+                              {(room.type === 'vegetation' || room.type === 'flowering') && activeBatchForCycle && (
+                                <div style={{ marginTop: '0.5rem' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: '#718096', marginBottom: '2px' }}>
+                                    <span>Inicio</span>
+                                    <span>Cosecha Est.</span>
+                                  </div>
+                                  <div style={{ position: 'relative', height: '10px', width: '100%', background: '#edf2f7', borderRadius: '5px', overflow: 'hidden' }}>
+                                    {/* Vege Segment */}
+                                    <div style={{
+                                      position: 'absolute', left: 0, top: 0, bottom: 0,
+                                      width: `${vegeWidth}%`, background: '#c6f6d5',
+                                      borderRight: '1px solid white'
+                                    }} title="Fase Vegetativa Estimada" />
+
+                                    {/* Flora Segment */}
+                                    <div style={{
+                                      position: 'absolute', left: `${vegeWidth}%`, top: 0, bottom: 0,
+                                      width: `${floraWidth}%`, background: '#fbd38d'
+                                    }} title="Fase de Floración Estimada" />
+
+                                    {/* Current Progress Indicator */}
+                                    <div style={{
+                                      position: 'absolute',
+                                      left: 0, top: 0, bottom: 0,
+                                      width: `${currentStageProgress}%`,
+                                      background: 'rgba(0,0,0,0.15)', // Shadow overlay to show progress
+                                      borderRight: '2px solid #2d3748',
+                                      transition: 'width 0.5s ease-out'
+                                    }} />
+                                  </div>
+
+                                </div>
+                              )}
+
+                              {/* Footer Actions: Stage Controls + Utility Buttons */}
+                              <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px dashed #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+
+                                {/* Left: Stage Action (or empty spacer if none) */}
+                                <div style={{ flex: 1 }}>
+                                  {/* {room.type === 'vegetation' && (
                                 <button
                                   onClick={(e) => handleForceStage(e, room, 'flowering')}
                                   style={{
@@ -2240,13 +2238,13 @@ return (
 
 
 
-                              </div>
+                                </div>
 
-                              {/* Right: Utility Buttons (Moved from Absolute Position) */}
-                              <div style={{ display: 'flex', gap: '5px' }}>
-                                {/* Removed "Asignar Nuevo Lote" button as per request, since it is handled in the map */}
-                                {/* Removed Transplant Button as per request */}
-                                {/* <Tooltip text="Transplantar">
+                                {/* Right: Utility Buttons (Moved from Absolute Position) */}
+                                <div style={{ display: 'flex', gap: '5px' }}>
+                                  {/* Removed "Asignar Nuevo Lote" button as per request, since it is handled in the map */}
+                                  {/* Removed Transplant Button as per request */}
+                                  {/* <Tooltip text="Transplantar">
                                 <button
                                   onClick={(e) => handleOpenTransplant(e, room)}
                                   style={{
@@ -2258,52 +2256,52 @@ return (
                                   <FaExchangeAlt size={14} />
                                 </button>
                               </Tooltip> */}
-                                <Tooltip text="Editar Nombre de Sala">
-                                  <button
-                                    onClick={(e) => handleEditRoomName(e, room)}
-                                    style={{
-                                      background: 'white', border: '1px solid #e2e8f0', cursor: 'pointer', color: '#718096', padding: '8px', borderRadius: '6px', display: 'flex', alignItems: 'center', transition: 'all 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-                                    }}
-                                    onMouseEnter={(e) => { e.currentTarget.style.color = '#3182ce'; e.currentTarget.style.borderColor = '#3182ce'; }}
-                                    onMouseLeave={(e) => { e.currentTarget.style.color = '#718096'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
-                                  >
-                                    <FaEdit size={14} />
-                                  </button>
-                                </Tooltip>
-                                <Tooltip text="Eliminar Sala">
-                                  <button
-                                    onClick={(e) => handleDeleteRoom(e, room.id, room.name)}
-                                    style={{
-                                      background: 'white', border: '1px solid #e2e8f0', cursor: 'pointer', color: '#718096', padding: '8px', borderRadius: '6px', display: 'flex', alignItems: 'center', transition: 'all 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-                                    }}
-                                    onMouseEnter={(e) => { e.currentTarget.style.color = '#e53e3e'; e.currentTarget.style.borderColor = '#e53e3e'; }}
-                                    onMouseLeave={(e) => { e.currentTarget.style.color = '#718096'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
-                                  >
-                                    <FaTrash size={14} />
-                                  </button>
-                                </Tooltip>
+                                  <Tooltip text="Editar Nombre de Sala">
+                                    <button
+                                      onClick={(e) => handleEditRoomName(e, room)}
+                                      style={{
+                                        background: 'white', border: '1px solid #e2e8f0', cursor: 'pointer', color: '#718096', padding: '8px', borderRadius: '6px', display: 'flex', alignItems: 'center', transition: 'all 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                                      }}
+                                      onMouseEnter={(e) => { e.currentTarget.style.color = '#3182ce'; e.currentTarget.style.borderColor = '#3182ce'; }}
+                                      onMouseLeave={(e) => { e.currentTarget.style.color = '#718096'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
+                                    >
+                                      <FaEdit size={14} />
+                                    </button>
+                                  </Tooltip>
+                                  <Tooltip text="Eliminar Sala">
+                                    <button
+                                      onClick={(e) => handleDeleteRoom(e, room.id, room.name)}
+                                      style={{
+                                        background: 'white', border: '1px solid #e2e8f0', cursor: 'pointer', color: '#718096', padding: '8px', borderRadius: '6px', display: 'flex', alignItems: 'center', transition: 'all 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                                      }}
+                                      onMouseEnter={(e) => { e.currentTarget.style.color = '#e53e3e'; e.currentTarget.style.borderColor = '#e53e3e'; }}
+                                      onMouseLeave={(e) => { e.currentTarget.style.color = '#718096'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
+                                    >
+                                      <FaTrash size={14} />
+                                    </button>
+                                  </Tooltip>
+                                </div>
                               </div>
                             </div>
                           </div>
-                        </div>
-                      </SortableRoomItem>
-                    )
-                  })}
+                        </SortableRoomItem>
+                      )
+                    })}
 
-                  {/* Add New Room Card */}
-                  <CreateCard onClick={() => setIsRoomModalOpen(true)}>
-                    <DashedCircle>
-                      <FaPlus />
-                    </DashedCircle>
-                    <span style={{ fontWeight: 600, fontSize: '1rem', color: 'inherit' }}>Haz click aquí para crear una nueva sala</span>
-                  </CreateCard>
-                </GridContainer>
-              </SortableContext>
-              <DragOverlay>
-                {activeDragRoom ? (
-                  <div style={{ transform: 'scale(1.05)', cursor: 'grabbing' }}>
-                    <RoomCardContainer room={activeDragRoom}>
-                      {/* Re-render content? Or just basic card? 
+                    {/* Add New Room Card */}
+                    <CreateCard onClick={() => setIsRoomModalOpen(true)}>
+                      <DashedCircle>
+                        <FaPlus />
+                      </DashedCircle>
+                      <span style={{ fontWeight: 600, fontSize: '1rem', color: 'inherit' }}>Haz click aquí para crear una nueva sala</span>
+                    </CreateCard>
+                  </GridContainer>
+                </SortableContext>
+                <DragOverlay>
+                  {activeDragRoom ? (
+                    <div style={{ transform: 'scale(1.05)', cursor: 'grabbing' }}>
+                      <RoomCardContainer room={activeDragRoom}>
+                        {/* Re-render content? Or just basic card? 
                                We need to render the content to make it look like the actual card being dragged.
                                Ideally we'd extract the card content to a component, but for now we can't easily replicate
                                the distinct children logic (Drag batches etc) without refactoring properly.
@@ -2316,832 +2314,832 @@ return (
                                because dragging a huge list is heavy. 
                                But the user expects the card.
                            */}
-                      <div style={{ padding: '1rem' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#2d3748' }}>{activeDragRoom.name}</h3>
+                        <div style={{ padding: '1rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#2d3748' }}>{activeDragRoom.name}</h3>
+                            </div>
+                            {(() => {
+                              const typeStyles: Record<string, { label: string, color: string, bg: string }> = {
+                                vegetation: { label: 'VEGETACIÓN', color: '#22543d', bg: '#c6f6d5' },
+                                flowering: { label: 'FLORA', color: '#975a16', bg: '#fbd38d' },
+                                drying: { label: 'SECADO', color: '#c05621', bg: '#fffaf0' },
+                                curing: { label: 'CURADO', color: '#c05621', bg: '#fffaf0' },
+                                mother: { label: 'MADRES', color: '#553c9a', bg: '#e9d8fd' },
+                                clones: { label: 'ESQUEJERA', color: '#234e52', bg: '#b2f5ea' },
+                                germination: { label: 'GERMINACIÓN', color: '#7b341e', bg: '#feebc8' },
+                                living_soil: { label: 'LIVING SOIL', color: '#155724', bg: '#d4edda' },
+                              };
+                              const style = typeStyles[activeDragRoom.type] || { label: activeDragRoom.type?.toUpperCase() || 'SALA', color: '#4a5568', bg: '#e2e8f0' };
+                              return (
+                                <span style={{ fontSize: '0.8rem', fontWeight: 800, padding: '0.2rem 0.5rem', borderRadius: '0.2rem', background: style.bg, color: style.color }}>
+                                  {style.label}
+                                </span>
+                              );
+                            })()}
                           </div>
-                          {(() => {
-                            const typeStyles: Record<string, { label: string, color: string, bg: string }> = {
-                              vegetation: { label: 'VEGETACIÓN', color: '#22543d', bg: '#c6f6d5' },
-                              flowering: { label: 'FLORA', color: '#975a16', bg: '#fbd38d' },
-                              drying: { label: 'SECADO', color: '#c05621', bg: '#fffaf0' },
-                              curing: { label: 'CURADO', color: '#c05621', bg: '#fffaf0' },
-                              mother: { label: 'MADRES', color: '#553c9a', bg: '#e9d8fd' },
-                              clones: { label: 'ESQUEJERA', color: '#234e52', bg: '#b2f5ea' },
-                              germination: { label: 'GERMINACIÓN', color: '#7b341e', bg: '#feebc8' },
-                              living_soil: { label: 'LIVING SOIL', color: '#155724', bg: '#d4edda' },
-                            };
-                            const style = typeStyles[activeDragRoom.type] || { label: activeDragRoom.type?.toUpperCase() || 'SALA', color: '#4a5568', bg: '#e2e8f0' };
-                            return (
-                              <span style={{ fontSize: '0.8rem', fontWeight: 800, padding: '0.2rem 0.5rem', borderRadius: '0.2rem', background: style.bg, color: style.color }}>
-                                {style.label}
-                              </span>
-                            );
-                          })()}
+                          <div style={{ fontSize: '0.9rem', color: '#718096' }}>
+                            <FaClock style={{ marginRight: '0.4rem' }} /> Arrastra y soltá para reordenar las salas
+                          </div>
                         </div>
-                        <div style={{ fontSize: '0.9rem', color: '#718096' }}>
-                          <FaClock style={{ marginRight: '0.4rem' }} /> Arrastra y soltá para reordenar las salas
-                        </div>
-                      </div>
-                    </RoomCardContainer>
-                  </div>
-                ) : activeDragBatch ? (
-                  <div style={{
-                    padding: '0.5rem', background: 'white', border: '1px solid #3182ce',
-                    borderRadius: '0.5rem', boxShadow: '0 5px 10px rgba(0,0,0,0.2)',
-                    width: '250px', display: 'flex', alignItems: 'center', gap: '0.5rem'
-                  }}>
-                    <span style={{ fontWeight: 'bold' }}>{activeDragBatch.name}</span>
-                    <span style={{ fontSize: '0.8rem' }}>({activeDragBatch.quantity}u)</span>
-                  </div>
-                ) : null}
-              </DragOverlay>
-            </DndContext>
-          )}
-        </FadeInWrapper>
-      )}
-    </div >
+                      </RoomCardContainer>
+                    </div>
+                  ) : activeDragBatch ? (
+                    <div style={{
+                      padding: '0.5rem', background: 'white', border: '1px solid #3182ce',
+                      borderRadius: '0.5rem', boxShadow: '0 5px 10px rgba(0,0,0,0.2)',
+                      width: '250px', display: 'flex', alignItems: 'center', gap: '0.5rem'
+                    }}>
+                      <span style={{ fontWeight: 'bold' }}>{activeDragBatch.name}</span>
+                      <span style={{ fontSize: '0.8rem' }}>({activeDragBatch.quantity}u)</span>
+                    </div>
+                  ) : null}
+                </DragOverlay>
+              </DndContext>
+            )}
+          </FadeInWrapper>
+        )}
+      </div >
 
-    {/* Move Confirmation Modal */}
-    < ConfirmModal
-      isOpen={moveConfirmState.isOpen}
-      title="Confirmar Movimiento"
-      message={
-        moveConfirmState.batchIds && moveConfirmState.batchIds.length > 1
-          ? `¿Estás seguro de mover ${moveConfirmState.batchIds.length} lotes a la sala seleccionada?`
-          : `¿Estás seguro de mover el lote "${moveConfirmState.batch?.name}" a la sala seleccionada?`
-      }
-      onClose={() => setMoveConfirmState(prev => ({ ...prev, isOpen: false }))}
-      onConfirm={executeBatchMove}
-      confirmText={moveConfirmState.batchIds && moveConfirmState.batchIds.length > 1 ? "Mover Lotes" : "Mover Lote"}
-      cancelText="Cancelar"
-    />
+      {/* Move Confirmation Modal */}
+      < ConfirmModal
+        isOpen={moveConfirmState.isOpen}
+        title="Confirmar Movimiento"
+        message={
+          moveConfirmState.batchIds && moveConfirmState.batchIds.length > 1
+            ? `¿Estás seguro de mover ${moveConfirmState.batchIds.length} lotes a la sala seleccionada?`
+            : `¿Estás seguro de mover el lote "${moveConfirmState.batch?.name}" a la sala seleccionada?`
+        }
+        onClose={() => setMoveConfirmState(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={executeBatchMove}
+        confirmText={moveConfirmState.batchIds && moveConfirmState.batchIds.length > 1 ? "Mover Lotes" : "Mover Lote"}
+        cancelText="Cancelar"
+      />
 
-    {/* New Room Modal */}
-    {/* Transplant Modal (New Layout) */}
-    {
-      isTransplantModalOpen && transplantRoom && (
-        <ModalOverlay>
-          <Modal onClick={e => e.stopPropagation()}>
-            <ModalHeader>
-              <h3>Transplantar</h3>
-              <CloseButton onClick={() => setIsTransplantModalOpen(false)}>&times;</CloseButton>
-            </ModalHeader>
+      {/* New Room Modal */}
+      {/* Transplant Modal (New Layout) */}
+      {
+        isTransplantModalOpen && transplantRoom && (
+          <ModalOverlay>
+            <Modal onClick={e => e.stopPropagation()}>
+              <ModalHeader>
+                <h3>Transplantar</h3>
+                <CloseButton onClick={() => setIsTransplantModalOpen(false)}>&times;</CloseButton>
+              </ModalHeader>
 
-            <FormGroup>
-              <label>Lote a Transplantar</label>
-              <select
-                value={transplantForm.batchId}
-                onChange={e => {
-                  const batch = transplantRoom.batches.find((b: any) => b.id === e.target.value);
-                  setTransplantForm(prev => ({
-                    ...prev,
-                    batchId: e.target.value,
-                    quantity: batch ? batch.quantity : 0
-                  }));
-                }}
-              >
-                {transplantRoom.batches && transplantRoom.batches.length > 0 ? (
-                  transplantRoom.batches.map((b: any) => (
-                    <option key={b.id} value={b.id}>{b.name} ({b.quantity}u)</option>
-                  ))
-                ) : (
-                  <option value="">No hay lotes disponibles</option>
-                )}
-              </select>
-            </FormGroup>
-
-            <FormGroup>
-              <label>Sala de Destino</label>
-              <select
-                value={transplantForm.targetRoomId}
-                onChange={e => setTransplantForm(prev => ({ ...prev, targetRoomId: e.target.value }))}
-              >
-                <option value="">-- Seleccionar Sala --</option>
-                {rooms
-                  .filter(r => r.id !== transplantRoom.id) // Exclude current room
-                  .map(r => (
-                    <option key={r.id} value={r.id}>{r.name} ({r.type})</option>
-                  ))}
-              </select>
-            </FormGroup>
-
-            <FormGroup>
-              <label>Nuevo Medio de Cultivo</label>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                {['Maceta', 'Bandeja', 'Bunker'].map(opt => (
-                  <button
-                    key={opt}
-                    onClick={() => setTransplantForm(prev => ({ ...prev, medium: opt as any }))}
-                    style={{
-                      flex: 1,
-                      padding: '0.5rem',
-                      borderRadius: '0.375rem',
-                      border: '1px solid #e2e8f0',
-                      background: transplantForm.medium === opt ? '#ebf8ff' : 'white',
-                      color: transplantForm.medium === opt ? '#2b6cb0' : '#4a5568',
-                      fontWeight: transplantForm.medium === opt ? 600 : 400,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {opt}
-                  </button>
-                ))}
-              </div>
-            </FormGroup>
-
-            <FormGroup>
-              <label>Cantidad a Transplantar</label>
-              <input
-                type="number"
-                min="1"
-                value={transplantForm.quantity}
-                onChange={e => setTransplantForm(prev => ({ ...prev, quantity: Number(e.target.value) }))}
-              />
-              <small style={{ display: 'block', marginTop: '0.25rem', color: '#718096' }}>
-                Si la cantidad es menor al total del lote, se dividirá en un nuevo lote.
-              </small>
-            </FormGroup>
-
-            <PrimaryButton onClick={handleTransplantSave}>Confirmar Transplante</PrimaryButton>
-          </Modal>
-        </ModalOverlay>
-      )
-    }
-
-    {/* Batch Edit Modal */}
-    {
-      isBatchEditModalOpen && (
-        <ModalOverlay>
-          <Modal onClick={e => e.stopPropagation()}>
-            <ModalHeader>
-              <h3>Editar Lote</h3>
-              <CloseButton onClick={() => setIsBatchEditModalOpen(false)}>&times;</CloseButton>
-            </ModalHeader>
-            <FormGroup>
-              <label>Nombre del Lote</label>
-              <input
-                type="text"
-                value={batchEditForm.name}
-                onChange={e => setBatchEditForm(prev => ({ ...prev, name: e.target.value }))}
-              />
-            </FormGroup>
-            <FormGroup>
-              <label>Genética</label>
-              <select
-                value={batchEditForm.geneticId}
-                onChange={e => setBatchEditForm(prev => ({ ...prev, geneticId: e.target.value }))}
-                style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0' }}
-              >
-                <option value="">-- Seleccionar Genética --</option>
-                {genetics.map(g => (
-                  <option key={g.id} value={g.id}>{g.name} ({g.type})</option>
-                ))}
-              </select>
-            </FormGroup>
-            <FormGroup>
-              <label>Cantidad (Unidades)</label>
-              <input
-                type="number"
-                value={batchEditForm.quantity}
-                onChange={e => setBatchEditForm(prev => ({ ...prev, quantity: Number(e.target.value) }))}
-              />
-            </FormGroup>
-            <PrimaryButton onClick={handleSaveBatchEdit}>Guardar Cambios</PrimaryButton>
-          </Modal>
-        </ModalOverlay>
-      )
-    }
-
-    {/* Modal Nueva Sala */}
-    {
-      (isRoomModalOpen || isRoomModalClosing) && (
-        <ModalOverlay isClosing={isRoomModalClosing}>
-          <Modal isClosing={isRoomModalClosing}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 600, color: '#2d3748' }}>Nueva Sala</h3>
-              <button
-                onClick={handleCloseRoomModal}
-                style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#a0aec0' }}
-              >
-                &times;
-              </button>
-            </div>
-
-            <FormGroup>
-              <label>Nombre de la Sala</label>
-              <input
-                autoFocus
-                type="text"
-                placeholder="Ej: Sala Vege 1"
-                value={roomForm.name}
-                onChange={(e) => setRoomForm({ ...roomForm, name: e.target.value })}
-              />
-            </FormGroup>
-
-            {/* --- Date Logic --- */}
-            <FormGroup>
-              <label>Fecha de Inicio del Cultivo</label>
-              <CustomDatePicker
-                selected={roomForm.startDate ? new Date(roomForm.startDate + 'T12:00:00') : new Date()}
-                onChange={(date) => {
-                  const dateStr = date ? date.toISOString().split('T')[0] : '';
-                  setRoomForm({ ...roomForm, startDate: dateStr });
-                }}
-                dateFormat="dd/MM/yyyy"
-              />
-            </FormGroup>
-
-            {roomForm.type !== 'living_soil' && (
               <FormGroup>
-                <label>Días de Funcionamiento <span style={{ color: 'red' }}>*</span></label>
+                <label>Lote a Transplantar</label>
+                <select
+                  value={transplantForm.batchId}
+                  onChange={e => {
+                    const batch = transplantRoom.batches.find((b: any) => b.id === e.target.value);
+                    setTransplantForm(prev => ({
+                      ...prev,
+                      batchId: e.target.value,
+                      quantity: batch ? batch.quantity : 0
+                    }));
+                  }}
+                >
+                  {transplantRoom.batches && transplantRoom.batches.length > 0 ? (
+                    transplantRoom.batches.map((b: any) => (
+                      <option key={b.id} value={b.id}>{b.name} ({b.quantity}u)</option>
+                    ))
+                  ) : (
+                    <option value="">No hay lotes disponibles</option>
+                  )}
+                </select>
+              </FormGroup>
+
+              <FormGroup>
+                <label>Sala de Destino</label>
+                <select
+                  value={transplantForm.targetRoomId}
+                  onChange={e => setTransplantForm(prev => ({ ...prev, targetRoomId: e.target.value }))}
+                >
+                  <option value="">-- Seleccionar Sala --</option>
+                  {rooms
+                    .filter(r => r.id !== transplantRoom.id) // Exclude current room
+                    .map(r => (
+                      <option key={r.id} value={r.id}>{r.name} ({r.type})</option>
+                    ))}
+                </select>
+              </FormGroup>
+
+              <FormGroup>
+                <label>Nuevo Medio de Cultivo</label>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  {['Maceta', 'Bandeja', 'Bunker'].map(opt => (
+                    <button
+                      key={opt}
+                      onClick={() => setTransplantForm(prev => ({ ...prev, medium: opt as any }))}
+                      style={{
+                        flex: 1,
+                        padding: '0.5rem',
+                        borderRadius: '0.375rem',
+                        border: '1px solid #e2e8f0',
+                        background: transplantForm.medium === opt ? '#ebf8ff' : 'white',
+                        color: transplantForm.medium === opt ? '#2b6cb0' : '#4a5568',
+                        fontWeight: transplantForm.medium === opt ? 600 : 400,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              </FormGroup>
+
+              <FormGroup>
+                <label>Cantidad a Transplantar</label>
                 <input
                   type="number"
-                  placeholder="Ej: 30"
-                  value={roomForm.operationalDays || ''}
-                  onChange={e => setRoomForm({ ...roomForm, operationalDays: e.target.value ? Number(e.target.value) : undefined })}
+                  min="1"
+                  value={transplantForm.quantity}
+                  onChange={e => setTransplantForm(prev => ({ ...prev, quantity: Number(e.target.value) }))}
                 />
                 <small style={{ display: 'block', marginTop: '0.25rem', color: '#718096' }}>
-                  Definir la duración del ciclo para activar las alertas.
+                  Si la cantidad es menor al total del lote, se dividirá en un nuevo lote.
                 </small>
               </FormGroup>
-            )}
 
-            <FormGroup>
-              <label>Fase de Cultivo</label>
-              <CustomSelect
-                value={roomForm.type}
-                onChange={(value) => setRoomForm({ ...roomForm, type: value as any })}
-                options={[
-                  { value: "vegetation", label: "Vegetación" },
-                  { value: "flowering", label: "Floración" },
+              <PrimaryButton onClick={handleTransplantSave}>Confirmar Transplante</PrimaryButton>
+            </Modal>
+          </ModalOverlay>
+        )
+      }
 
-                  { value: "curing", label: "Secado" },
-                  { value: "clones", label: "Esquejera/Clones" },
-                  { value: "living_soil", label: "Agro/Living Soil" }
-                ]}
-              />
-            </FormGroup>
-
-            <ModalActions>
-              <Button $variant="secondary" onClick={handleCloseRoomModal}>Cancelar</Button>
-              <Button onClick={handleCreateRoom} disabled={isCreatingRoom} $variant="primary">{isCreatingRoom ? 'Creando...' : 'Crear Sala'}</Button>
-            </ModalActions>
-          </Modal>
-        </ModalOverlay>
-      )}
-
-    {/* Color Picker Modal */}
-    {
-      isColorPickerOpen && (
-        <ModalOverlay>
-
-          <Modal onClick={e => e.stopPropagation()} style={{ maxWidth: '300px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h3 style={{ margin: 0 }}>Elegir Color</h3>
-              <button
-                onClick={() => setIsColorPickerOpen(false)}
-                style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#a0aec0' }}
-              >
-                &times;
-              </button>
-            </div>
-
-            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', padding: '1rem 0', flexWrap: 'wrap' }}>
-              {['green', 'blue', 'purple', 'orange', 'red', 'pink', 'teal', 'cyan', 'yellow', 'gray'].map(color => (
-                <button
-                  key={color}
-                  onClick={() => handleUpdateColor(color)}
-                  style={{
-                    width: '40px',
-                    height: '40px',
-                    borderRadius: '50%',
-                    background: getColorHex(color),
-                    border: crop.color === color ? '3px solid #cbd5e0' : 'none',
-                    cursor: 'pointer',
-                    transform: crop.color === color ? 'scale(1.1)' : 'scale(1)',
-                    transition: 'all 0.2s',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                  }}
-                  title={color}
-                />
-              ))}
-            </div>
-          </Modal>
-        </ModalOverlay>
-      )
-    }
-
-    {/* Monthly View */}
-
-
-
-
-    {
-      isModalOpen && selectedDate && (
-        <ModalOverlay>
-          <Modal onClick={e => e.stopPropagation()}>
-            <ModalHeader>
-              <h3>{format(selectedDate, "EEEE d 'de' MMMM", { locale: es })}</h3>
-              <CloseButton onClick={() => setIsModalOpen(false)}>&times;</CloseButton>
-            </ModalHeader>
-
-            <TabGroup>
-              <Tab active={activeTab === 'task'} onClick={() => setActiveTab('task')}>Nueva Tarea</Tab>
-              <Tab active={activeTab === 'log'} onClick={() => setActiveTab('log')}>Diario de Cultivo</Tab>
-            </TabGroup>
-
-            {activeTab === 'task' ? (
-              <>
-                {/* Task List for the Day */}
-                {selectedDayTasks.length > 0 && (
-                  <div style={{ marginBottom: '1.5rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '1rem' }}>
-                    <h4 style={{ margin: '0 0 0.5rem 0', color: '#718096' }}>Tareas Programadas:</h4>
-                    {selectedDayTasks.map(task => (
-                      <div key={task.id} style={{
-                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                        background: '#f7fafc', padding: '0.5rem', borderRadius: '0.375rem', marginBottom: '0.5rem',
-                        opacity: task.status === 'done' ? 0.7 : 1
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                          <button
-                            onClick={() => handleToggleTaskStatus(task.id, task.status)}
-                            style={{ border: 'none', background: 'none', cursor: 'pointer', color: task.status === 'done' ? '#38a169' : '#cbd5e0', padding: 0, display: 'flex' }}
-                            title={task.status === 'done' ? 'Marcar como pendiente' : 'Marcar como completada'}
-                          >
-                            {task.status === 'done' ? <FaCheckCircle size={18} /> : <FaRegCircle size={18} />}
-                          </button>
-                          <span style={{
-                            fontWeight: 500,
-                            color: '#2d3748',
-                            textDecoration: task.status === 'done' ? 'line-through' : 'none'
-                          }}>
-                            {task.title}
-                          </span>
-                        </div>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          <button onClick={() => handleEditTask(task)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#4299e1' }}>
-                            <FaEdit />
-                          </button>
-                          <button onClick={() => handleDeleteTask(task.id)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#e53e3e' }}>
-                            <FaTrash />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <h4 style={{ margin: '0 0 1rem 0', color: '#2d3748' }}>
-                  {editingTaskId ? 'Editar Tarea' : 'Agendar Nueva Tarea'}
-                  {editingTaskId && <button onClick={() => { setEditingTaskId(null); setTaskForm({ title: '', type: 'info', description: '' }); }} style={{ marginLeft: '1rem', fontSize: '0.8rem', color: '#e53e3e', border: 'none', background: 'none', cursor: 'pointer' }}>Cancelar Edición</button>}
-                </h4>
-
-                <FormGroup>
-                  <label>Tipo</label>
-                  <select
-                    value={taskForm.type}
-                    onChange={e => {
-                      const newType = e.target.value as any;
-
-                      // Auto-set title based on type label
-                      const typeLabels: { [key: string]: string } = {
-                        'info': 'Nota Informativa',
-                        'warning': 'Alerta',
-                        'danger': 'Urgente',
-                        'fertilizante': 'Fertilizante',
-                        'defoliacion': 'Defoliación',
-                        'poda_apical': 'Poda Apical',
-                        'hst': 'HST (High Stress)',
-                        'lst': 'LST (Low Stress)',
-                        'enmienda': 'Enmienda',
-                        'te_compost': 'Té de Compost',
-                        'agua': 'Agua / Riego',
-                        'esquejes': 'Esquejes'
-                      };
-
-                      setTaskForm(prevForm => ({
-                        ...prevForm,
-                        type: newType,
-                        title: typeLabels[newType] || 'Tarea'
-                      }));
-                    }}
-                  >
-                    <option value="info">Info / Atención</option>
-                    <option value="fertilizante">Fertilizante</option>
-                    <option value="defoliacion">Defoliación</option>
-                    <option value="poda_apical">Poda Apical</option>
-                    <option value="hst">HST (High Stress Training)</option>
-                    <option value="lst">LST (Low Stress Training)</option>
-                    <option value="enmienda">Enmienda</option>
-                    <option value="te_compost">Té de Compost</option>
-                    <option value="agua">Agua / Riego</option>
-                    <option value="esquejes">Esquejes</option>
-                    <option value="warning">Alerta (Warning)</option>
-                    <option value="danger">Urgente (Danger)</option>
-                  </select>
-                </FormGroup>
-
-                <FormGroup>
-                  <label>Descripción (Opcional)</label>
-                  <textarea
-                    value={taskForm.description}
-                    onChange={e => setTaskForm({ ...taskForm, description: e.target.value })}
-                  />
-                </FormGroup>
-
-                {/* Recurrence Section */}
-                <div style={{ marginTop: '1.5rem', borderTop: '1px solid #e2e8f0', paddingTop: '1rem' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600, color: '#2d3748', cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={recurrenceEnabled}
-                      onChange={e => setRecurrenceEnabled(e.target.checked)}
-                      style={{ transform: 'scale(1.2)' }}
-                    />
-                    Repetir Tarea (Periodicidad)
-                  </label>
-
-                  {recurrenceEnabled && (
-                    <div style={{ marginTop: '1rem', padding: '1rem', background: '#f7fafc', borderRadius: '0.5rem', border: '1px solid #edf2f7' }}>
-                      <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
-                        <div style={{ flex: 1 }}>
-                          <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.25rem', color: '#718096' }}>Repetir cada:</label>
-                          <div style={{ display: 'flex', gap: '0.5rem' }}>
-                            <input
-                              type="number"
-                              min="1"
-                              value={recurrenceConfig.interval}
-                              onChange={e => setRecurrenceConfig(prev => ({ ...prev, interval: parseInt(e.target.value) || 1 }))}
-                              style={{ width: '60px', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e0' }}
-                            />
-                            <select
-                              value={recurrenceConfig.unit}
-                              onChange={e => setRecurrenceConfig(prev => ({ ...prev, unit: e.target.value as any, type: 'custom' }))}
-                              style={{ flex: 1, padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e0' }}
-                            >
-                              <option value="day">Días</option>
-                              <option value="week">Semanas</option>
-                              <option value="month">Meses</option>
-                            </select>
-                          </div>
-                        </div>
-                      </div>
-
-                      {recurrenceConfig.unit === 'week' && (
-                        <div style={{ marginBottom: '1rem' }}>
-                          <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.5rem', color: '#718096' }}>Se repite el:</label>
-                          <div style={{ display: 'flex', gap: '0.5rem' }}>
-                            {['D', 'L', 'M', 'M', 'J', 'V', 'S'].map((day, idx) => {
-                              const isSelected = recurrenceConfig.daysOfWeek?.includes(idx);
-                              return (
-                                <button
-                                  key={idx}
-                                  onClick={() => {
-                                    setRecurrenceConfig(prev => {
-                                      const days = prev.daysOfWeek || [];
-                                      if (days.includes(idx)) return { ...prev, daysOfWeek: days.filter(d => d !== idx) };
-                                      return { ...prev, daysOfWeek: [...days, idx] };
-                                    });
-                                  }}
-                                  style={{
-                                    width: '32px', height: '32px', borderRadius: '50%', border: 'none',
-                                    background: isSelected ? '#3182ce' : '#e2e8f0',
-                                    color: isSelected ? 'white' : '#4a5568',
-                                    fontWeight: 'bold', cursor: 'pointer', fontSize: '0.8rem'
-                                  }}
-                                >
-                                  {day}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </>
-            ) : (
+      {/* Batch Edit Modal */}
+      {
+        isBatchEditModalOpen && (
+          <ModalOverlay>
+            <Modal onClick={e => e.stopPropagation()}>
+              <ModalHeader>
+                <h3>Editar Lote</h3>
+                <CloseButton onClick={() => setIsBatchEditModalOpen(false)}>&times;</CloseButton>
+              </ModalHeader>
               <FormGroup>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                  <label style={{ margin: 0 }}>Notas del Día</label>
-                  {existingLogId && (
-                    <button onClick={handleDeleteLog} style={{ color: '#e53e3e', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.85rem' }}>
-                      <FaTrash /> Eliminar Registro
-                    </button>
-                  )}
-                </div>
-                <textarea
-                  value={logForm.notes}
-                  onChange={e => setLogForm({ ...logForm, notes: e.target.value })}
-                  placeholder="¿Cómo se ve la planta hoy? ¿Alguna plaga? ¿Crecimiento?"
-                  style={{ minHeight: '200px' }}
+                <label>Nombre del Lote</label>
+                <input
+                  type="text"
+                  value={batchEditForm.name}
+                  onChange={e => setBatchEditForm(prev => ({ ...prev, name: e.target.value }))}
                 />
               </FormGroup>
-            )}
-
-            <PrimaryButton onClick={handleSave}>Guardar</PrimaryButton>
-          </Modal>
-        </ModalOverlay>
-      )
-    }
-
-    {/* Finish Crop Modal */}
-    {
-      isFinishModalOpen && roomToFinish && (
-        <ModalOverlay>
-          <Modal onClick={e => e.stopPropagation()}>
-            <ModalHeader>
-              <h3>🎉 Finalizar Cultivo</h3>
-              <CloseButton onClick={() => setIsFinishModalOpen(false)}>&times;</CloseButton>
-            </ModalHeader>
-            <div style={{ padding: '1rem', color: '#4a5568' }}>
-              <p style={{ marginBottom: '1rem' }}>
-                ¡Felicitaciones! Estás a punto de cerrar el ciclo de la sala <strong>{roomToFinish.name}</strong>.
-                <br />Por favor, registra el rendimiento final obtenido.
-              </p>
-
               <FormGroup>
-                <label>Rendimiento por Lote ({harvestForm.unit}) <span style={{ color: 'red' }}>*</span></label>
-
-                <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'flex-end' }}>
-                  <select
-                    value={harvestForm.unit}
-                    onChange={(e) => setHarvestForm({ ...harvestForm, unit: e.target.value as 'g' | 'kg' })}
-                    style={{ width: '80px', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #e2e8f0', fontSize: '0.9rem' }}
-                  >
-                    <option value="g">Gramos (g)</option>
-                    <option value="kg">Kilos (kg)</option>
-                  </select>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '300px', overflowY: 'auto' }}>
-                  {roomToFinish.batches && roomToFinish.batches.map((batch: any) => (
-                    <div key={batch.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f7fafc', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #edf2f7' }}>
-                      <div>
-                        <strong style={{ color: '#2d3748', display: 'block' }}>{batch.name}</strong>
-                        <small style={{ color: '#718096' }}>{batch.genetic?.name || 'Genética Desconocida'}</small>
-                      </div>
-                      <input
-                        type="number"
-                        placeholder="0.00"
-                        value={harvestForm.batchYields[batch.id] || ''}
-                        onChange={(e) => setHarvestForm({
-                          ...harvestForm,
-                          batchYields: {
-                            ...harvestForm.batchYields,
-                            [batch.id]: e.target.value
-                          }
-                        })}
-                        style={{ width: '100px', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e0' }}
-                      />
-                    </div>
+                <label>Genética</label>
+                <select
+                  value={batchEditForm.geneticId}
+                  onChange={e => setBatchEditForm(prev => ({ ...prev, geneticId: e.target.value }))}
+                  style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0' }}
+                >
+                  <option value="">-- Seleccionar Genética --</option>
+                  {genetics.map(g => (
+                    <option key={g.id} value={g.id}>{g.name} ({g.type})</option>
                   ))}
-                  {(!roomToFinish.batches || roomToFinish.batches.length === 0) && (
-                    <p style={{ color: '#e53e3e', fontStyle: 'italic' }}>No hay lotes registrados en esta sala.</p>
-                  )}
-                </div>
+                </select>
               </FormGroup>
+              <FormGroup>
+                <label>Cantidad (Unidades)</label>
+                <input
+                  type="number"
+                  value={batchEditForm.quantity}
+                  onChange={e => setBatchEditForm(prev => ({ ...prev, quantity: Number(e.target.value) }))}
+                />
+              </FormGroup>
+              <PrimaryButton onClick={handleSaveBatchEdit}>Guardar Cambios</PrimaryButton>
+            </Modal>
+          </ModalOverlay>
+        )
+      }
+
+      {/* Modal Nueva Sala */}
+      {
+        (isRoomModalOpen || isRoomModalClosing) && (
+          <ModalOverlay isClosing={isRoomModalClosing}>
+            <Modal isClosing={isRoomModalClosing}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 600, color: '#2d3748' }}>Nueva Sala</h3>
+                <button
+                  onClick={handleCloseRoomModal}
+                  style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#a0aec0' }}
+                >
+                  &times;
+                </button>
+              </div>
 
               <FormGroup>
-                <label>Notas Adicionales (Opcional)</label>
-                <textarea
-                  rows={3}
-                  placeholder="Comentarios sobre la calidad, problemas, etc."
-                  value={harvestForm.notes}
-                  onChange={(e) => setHarvestForm({ ...harvestForm, notes: e.target.value })}
-                  style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #e2e8f0' }}
+                <label>Nombre de la Sala</label>
+                <input
+                  autoFocus
+                  type="text"
+                  placeholder="Ej: Sala Vege 1"
+                  value={roomForm.name}
+                  onChange={(e) => setRoomForm({ ...roomForm, name: e.target.value })}
                 />
               </FormGroup>
 
+              {/* --- Date Logic --- */}
               <FormGroup>
-                <label>Foto del Producto Final (Opcional)</label>
-                <FileUploadBox onClick={() => document.getElementById('harvest-photo-upload')?.click()}>
-                  {harvestPhoto ? (
-                    <div style={{ color: 'green', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-                      <FaCheckCircle /> {harvestPhoto.name}
-                    </div>
-                  ) : (
-                    <div style={{ color: '#718096' }}>
-                      <FaFileUpload size={24} style={{ marginBottom: '0.5rem' }} />
-                      <p>Hacé click para subir foto</p>
-                    </div>
-                  )}
-                  <input
-                    id="harvest-photo-upload"
-                    type="file"
-                    accept="image/*"
-                    style={{ display: 'none' }}
-                    onChange={(e) => {
-                      if (e.target.files && e.target.files[0]) {
-                        setHarvestPhoto(e.target.files[0]);
-                      }
-                    }}
-                  />
-                </FileUploadBox>
+                <label>Fecha de Inicio del Cultivo</label>
+                <CustomDatePicker
+                  selected={roomForm.startDate ? new Date(roomForm.startDate + 'T12:00:00') : new Date()}
+                  onChange={(date) => {
+                    const dateStr = date ? date.toISOString().split('T')[0] : '';
+                    setRoomForm({ ...roomForm, startDate: dateStr });
+                  }}
+                  dateFormat="dd/MM/yyyy"
+                />
               </FormGroup>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1.5rem' }}>
-                <Button $variant="secondary" onClick={() => setIsFinishModalOpen(false)}>Cancelar</Button>
-                <Button $variant="primary" onClick={handleConfirmFinish} disabled={isFinishing} style={{ background: '#38a169', borderColor: '#38a169', opacity: isFinishing ? 0.7 : 1 }}>
-                  {isFinishing ? 'Finalizando...' : '✅ Guardar y Finalizar'}
-                </Button>
-              </div>
-            </div>
-          </Modal>
-        </ModalOverlay>
-      )
-    }
-
-    {/* Rename Modal */}
-    <PromptModal
-      isOpen={editModalOpen}
-      title={editType === 'room' ? "Renombrar Sala" : "Renombrar Spot"}
-      initialValue={editData?.name || ''}
-      placeholder="Nuevo nombre..."
-      onClose={() => setEditModalOpen(false)}
-      onConfirm={handleConfirmEditName}
-      confirmButtonColor="green"
-    />
-
-    {
-      crop && (
-        <DeleteProtectionModal
-          isOpen={isDeleteProtectionOpen}
-          itemType="Cultivo"
-          itemName={crop.name}
-          onClose={() => setIsDeleteProtectionOpen(false)}
-          onConfirm={executeDeleteCrop}
-        />
-      )
-    }
-
-    <QRCodeModal
-      isOpen={qrModalOpen}
-      value={qrValue}
-      title={qrTitle}
-      onClose={() => setQrModalOpen(false)}
-    />
-
-    {/* Confirm Delete Room Modal */}
-    <ConfirmModal
-      isOpen={confirmOpen}
-      title="Eliminar Sala"
-      message={`¿Estás seguro de que deseas eliminar la sala "${roomToDelete?.name}"? Se perderán todos los datos asociados.`}
-      onClose={() => setConfirmOpen(false)}
-      onConfirm={handleConfirmDeleteRoom}
-      confirmText="Eliminar"
-      isDanger
-      isLoading={isDeletingRoom}
-    />
-
-    {/* Confirm Delete Batch Modal */}
-    <ConfirmModal
-      isOpen={isDeleteBatchConfirmOpen}
-      title="Eliminar Lote"
-      message={`¿Estás seguro de que deseas eliminar el lote "${batchToDelete?.name}"? Esta acción no se puede deshacer.`}
-      onClose={() => setIsDeleteBatchConfirmOpen(false)}
-      onConfirm={executeDeleteBatch}
-      confirmText="Eliminar Lote"
-      isDanger
-    />
-
-    {/* Old Transplant Modal removed */}
-
-    {/* Assign Clone Batch Modal */}
-    {
-      isAssignModalOpen && assignRoom && (
-        <ModalOverlay>
-          <Modal>
-            <ModalHeader>
-              <h3>Asignar Lote a {assignRoom.name}</h3>
-              <CloseButton onClick={() => setIsAssignModalOpen(false)}><FaTimes /></CloseButton>
-            </ModalHeader>
-            <p style={{ color: '#718096', marginBottom: '1.5rem' }}>Selecciona un lote de esquejes disponible para mover a esta sala.</p>
-
-            <FormGroup>
-              <label>Lote de Esquejes</label>
-              <select
-                value={selectedBatchId}
-                onChange={e => {
-                  setSelectedBatchId(e.target.value);
-                  const batch = availableCloneBatches.find(b => b.id === e.target.value);
-                  if (batch) setAssignQuantity(batch.quantity);
-                }}
-              >
-                <option value="">Seleccionar Lote...</option>
-                {availableCloneBatches.map(b => (
-                  <option key={b.id} value={b.id}>
-                    {b.name} - {b.genetic?.name || 'Genética Desconocida'} ({b.quantity}u)
-                  </option>
-                ))}
-                {availableCloneBatches.length === 0 && <option disabled>No hay lotes de esquejes disponibles</option>}
-              </select>
-            </FormGroup>
-
-            {selectedBatchId && (() => {
-              const batch = availableCloneBatches.find(b => b.id === selectedBatchId);
-              if (!batch) return null;
-              return (
+              {roomForm.type !== 'living_soil' && (
                 <FormGroup>
-                  <label>Cantidad a Asignar (Total: {batch.quantity})</label>
+                  <label>Días de Funcionamiento <span style={{ color: 'red' }}>*</span></label>
                   <input
                     type="number"
-                    min="1"
-                    max={batch.quantity}
-                    value={assignQuantity}
-                    onChange={e => setAssignQuantity(Math.min(batch.quantity, Math.max(1, parseInt(e.target.value) || 1)))}
+                    placeholder="Ej: 30"
+                    value={roomForm.operationalDays || ''}
+                    onChange={e => setRoomForm({ ...roomForm, operationalDays: e.target.value ? Number(e.target.value) : undefined })}
                   />
-                  <div style={{ fontSize: '0.8rem', color: '#718096', marginTop: '0.25rem' }}>
-                    {assignQuantity < batch.quantity
-                      ? `Se moverán ${assignQuantity} esquejes. Quedarán ${batch.quantity - assignQuantity} en el lote original.`
-                      : 'Se moverá todo el lote a la sala.'}
+                  <small style={{ display: 'block', marginTop: '0.25rem', color: '#718096' }}>
+                    Definir la duración del ciclo para activar las alertas.
+                  </small>
+                </FormGroup>
+              )}
+
+              <FormGroup>
+                <label>Fase de Cultivo</label>
+                <CustomSelect
+                  value={roomForm.type}
+                  onChange={(value) => setRoomForm({ ...roomForm, type: value as any })}
+                  options={[
+                    { value: "vegetation", label: "Vegetación" },
+                    { value: "flowering", label: "Floración" },
+
+                    { value: "curing", label: "Secado" },
+                    { value: "clones", label: "Esquejera/Clones" },
+                    { value: "living_soil", label: "Agro/Living Soil" }
+                  ]}
+                />
+              </FormGroup>
+
+              <ModalActions>
+                <Button $variant="secondary" onClick={handleCloseRoomModal}>Cancelar</Button>
+                <Button onClick={handleCreateRoom} disabled={isCreatingRoom} $variant="primary">{isCreatingRoom ? 'Creando...' : 'Crear Sala'}</Button>
+              </ModalActions>
+            </Modal>
+          </ModalOverlay>
+        )}
+
+      {/* Color Picker Modal */}
+      {
+        isColorPickerOpen && (
+          <ModalOverlay>
+
+            <Modal onClick={e => e.stopPropagation()} style={{ maxWidth: '300px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                <h3 style={{ margin: 0 }}>Elegir Color</h3>
+                <button
+                  onClick={() => setIsColorPickerOpen(false)}
+                  style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#a0aec0' }}
+                >
+                  &times;
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', padding: '1rem 0', flexWrap: 'wrap' }}>
+                {['green', 'blue', 'purple', 'orange', 'red', 'pink', 'teal', 'cyan', 'yellow', 'gray'].map(color => (
+                  <button
+                    key={color}
+                    onClick={() => handleUpdateColor(color)}
+                    style={{
+                      width: '40px',
+                      height: '40px',
+                      borderRadius: '50%',
+                      background: getColorHex(color),
+                      border: crop.color === color ? '3px solid #cbd5e0' : 'none',
+                      cursor: 'pointer',
+                      transform: crop.color === color ? 'scale(1.1)' : 'scale(1)',
+                      transition: 'all 0.2s',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                    }}
+                    title={color}
+                  />
+                ))}
+              </div>
+            </Modal>
+          </ModalOverlay>
+        )
+      }
+
+      {/* Monthly View */}
+
+
+
+
+      {
+        isModalOpen && selectedDate && (
+          <ModalOverlay>
+            <Modal onClick={e => e.stopPropagation()}>
+              <ModalHeader>
+                <h3>{format(selectedDate, "EEEE d 'de' MMMM", { locale: es })}</h3>
+                <CloseButton onClick={() => setIsModalOpen(false)}>&times;</CloseButton>
+              </ModalHeader>
+
+              <TabGroup>
+                <Tab active={activeTab === 'task'} onClick={() => setActiveTab('task')}>Nueva Tarea</Tab>
+                <Tab active={activeTab === 'log'} onClick={() => setActiveTab('log')}>Diario de Cultivo</Tab>
+              </TabGroup>
+
+              {activeTab === 'task' ? (
+                <>
+                  {/* Task List for the Day */}
+                  {selectedDayTasks.length > 0 && (
+                    <div style={{ marginBottom: '1.5rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '1rem' }}>
+                      <h4 style={{ margin: '0 0 0.5rem 0', color: '#718096' }}>Tareas Programadas:</h4>
+                      {selectedDayTasks.map(task => (
+                        <div key={task.id} style={{
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          background: '#f7fafc', padding: '0.5rem', borderRadius: '0.375rem', marginBottom: '0.5rem',
+                          opacity: task.status === 'done' ? 0.7 : 1
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                            <button
+                              onClick={() => handleToggleTaskStatus(task.id, task.status)}
+                              style={{ border: 'none', background: 'none', cursor: 'pointer', color: task.status === 'done' ? '#38a169' : '#cbd5e0', padding: 0, display: 'flex' }}
+                              title={task.status === 'done' ? 'Marcar como pendiente' : 'Marcar como completada'}
+                            >
+                              {task.status === 'done' ? <FaCheckCircle size={18} /> : <FaRegCircle size={18} />}
+                            </button>
+                            <span style={{
+                              fontWeight: 500,
+                              color: '#2d3748',
+                              textDecoration: task.status === 'done' ? 'line-through' : 'none'
+                            }}>
+                              {task.title}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <button onClick={() => handleEditTask(task)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#4299e1' }}>
+                              <FaEdit />
+                            </button>
+                            <button onClick={() => handleDeleteTask(task.id)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#e53e3e' }}>
+                              <FaTrash />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <h4 style={{ margin: '0 0 1rem 0', color: '#2d3748' }}>
+                    {editingTaskId ? 'Editar Tarea' : 'Agendar Nueva Tarea'}
+                    {editingTaskId && <button onClick={() => { setEditingTaskId(null); setTaskForm({ title: '', type: 'info', description: '' }); }} style={{ marginLeft: '1rem', fontSize: '0.8rem', color: '#e53e3e', border: 'none', background: 'none', cursor: 'pointer' }}>Cancelar Edición</button>}
+                  </h4>
+
+                  <FormGroup>
+                    <label>Tipo</label>
+                    <select
+                      value={taskForm.type}
+                      onChange={e => {
+                        const newType = e.target.value as any;
+
+                        // Auto-set title based on type label
+                        const typeLabels: { [key: string]: string } = {
+                          'info': 'Nota Informativa',
+                          'warning': 'Alerta',
+                          'danger': 'Urgente',
+                          'fertilizante': 'Fertilizante',
+                          'defoliacion': 'Defoliación',
+                          'poda_apical': 'Poda Apical',
+                          'hst': 'HST (High Stress)',
+                          'lst': 'LST (Low Stress)',
+                          'enmienda': 'Enmienda',
+                          'te_compost': 'Té de Compost',
+                          'agua': 'Agua / Riego',
+                          'esquejes': 'Esquejes'
+                        };
+
+                        setTaskForm(prevForm => ({
+                          ...prevForm,
+                          type: newType,
+                          title: typeLabels[newType] || 'Tarea'
+                        }));
+                      }}
+                    >
+                      <option value="info">Info / Atención</option>
+                      <option value="fertilizante">Fertilizante</option>
+                      <option value="defoliacion">Defoliación</option>
+                      <option value="poda_apical">Poda Apical</option>
+                      <option value="hst">HST (High Stress Training)</option>
+                      <option value="lst">LST (Low Stress Training)</option>
+                      <option value="enmienda">Enmienda</option>
+                      <option value="te_compost">Té de Compost</option>
+                      <option value="agua">Agua / Riego</option>
+                      <option value="esquejes">Esquejes</option>
+                      <option value="warning">Alerta (Warning)</option>
+                      <option value="danger">Urgente (Danger)</option>
+                    </select>
+                  </FormGroup>
+
+                  <FormGroup>
+                    <label>Descripción (Opcional)</label>
+                    <textarea
+                      value={taskForm.description}
+                      onChange={e => setTaskForm({ ...taskForm, description: e.target.value })}
+                    />
+                  </FormGroup>
+
+                  {/* Recurrence Section */}
+                  <div style={{ marginTop: '1.5rem', borderTop: '1px solid #e2e8f0', paddingTop: '1rem' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600, color: '#2d3748', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={recurrenceEnabled}
+                        onChange={e => setRecurrenceEnabled(e.target.checked)}
+                        style={{ transform: 'scale(1.2)' }}
+                      />
+                      Repetir Tarea (Periodicidad)
+                    </label>
+
+                    {recurrenceEnabled && (
+                      <div style={{ marginTop: '1rem', padding: '1rem', background: '#f7fafc', borderRadius: '0.5rem', border: '1px solid #edf2f7' }}>
+                        <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
+                          <div style={{ flex: 1 }}>
+                            <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.25rem', color: '#718096' }}>Repetir cada:</label>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                              <input
+                                type="number"
+                                min="1"
+                                value={recurrenceConfig.interval}
+                                onChange={e => setRecurrenceConfig(prev => ({ ...prev, interval: parseInt(e.target.value) || 1 }))}
+                                style={{ width: '60px', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e0' }}
+                              />
+                              <select
+                                value={recurrenceConfig.unit}
+                                onChange={e => setRecurrenceConfig(prev => ({ ...prev, unit: e.target.value as any, type: 'custom' }))}
+                                style={{ flex: 1, padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e0' }}
+                              >
+                                <option value="day">Días</option>
+                                <option value="week">Semanas</option>
+                                <option value="month">Meses</option>
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+
+                        {recurrenceConfig.unit === 'week' && (
+                          <div style={{ marginBottom: '1rem' }}>
+                            <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.5rem', color: '#718096' }}>Se repite el:</label>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                              {['D', 'L', 'M', 'M', 'J', 'V', 'S'].map((day, idx) => {
+                                const isSelected = recurrenceConfig.daysOfWeek?.includes(idx);
+                                return (
+                                  <button
+                                    key={idx}
+                                    onClick={() => {
+                                      setRecurrenceConfig(prev => {
+                                        const days = prev.daysOfWeek || [];
+                                        if (days.includes(idx)) return { ...prev, daysOfWeek: days.filter(d => d !== idx) };
+                                        return { ...prev, daysOfWeek: [...days, idx] };
+                                      });
+                                    }}
+                                    style={{
+                                      width: '32px', height: '32px', borderRadius: '50%', border: 'none',
+                                      background: isSelected ? '#3182ce' : '#e2e8f0',
+                                      color: isSelected ? 'white' : '#4a5568',
+                                      fontWeight: 'bold', cursor: 'pointer', fontSize: '0.8rem'
+                                    }}
+                                  >
+                                    {day}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <FormGroup>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                    <label style={{ margin: 0 }}>Notas del Día</label>
+                    {existingLogId && (
+                      <button onClick={handleDeleteLog} style={{ color: '#e53e3e', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.85rem' }}>
+                        <FaTrash /> Eliminar Registro
+                      </button>
+                    )}
+                  </div>
+                  <textarea
+                    value={logForm.notes}
+                    onChange={e => setLogForm({ ...logForm, notes: e.target.value })}
+                    placeholder="¿Cómo se ve la planta hoy? ¿Alguna plaga? ¿Crecimiento?"
+                    style={{ minHeight: '200px' }}
+                  />
+                </FormGroup>
+              )}
+
+              <PrimaryButton onClick={handleSave}>Guardar</PrimaryButton>
+            </Modal>
+          </ModalOverlay>
+        )
+      }
+
+      {/* Finish Crop Modal */}
+      {
+        isFinishModalOpen && roomToFinish && (
+          <ModalOverlay>
+            <Modal onClick={e => e.stopPropagation()}>
+              <ModalHeader>
+                <h3>🎉 Finalizar Cultivo</h3>
+                <CloseButton onClick={() => setIsFinishModalOpen(false)}>&times;</CloseButton>
+              </ModalHeader>
+              <div style={{ padding: '1rem', color: '#4a5568' }}>
+                <p style={{ marginBottom: '1rem' }}>
+                  ¡Felicitaciones! Estás a punto de cerrar el ciclo de la sala <strong>{roomToFinish.name}</strong>.
+                  <br />Por favor, registra el rendimiento final obtenido.
+                </p>
+
+                <FormGroup>
+                  <label>Rendimiento por Lote ({harvestForm.unit}) <span style={{ color: 'red' }}>*</span></label>
+
+                  <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'flex-end' }}>
+                    <select
+                      value={harvestForm.unit}
+                      onChange={(e) => setHarvestForm({ ...harvestForm, unit: e.target.value as 'g' | 'kg' })}
+                      style={{ width: '80px', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #e2e8f0', fontSize: '0.9rem' }}
+                    >
+                      <option value="g">Gramos (g)</option>
+                      <option value="kg">Kilos (kg)</option>
+                    </select>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '300px', overflowY: 'auto' }}>
+                    {roomToFinish.batches && roomToFinish.batches.map((batch: any) => (
+                      <div key={batch.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f7fafc', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #edf2f7' }}>
+                        <div>
+                          <strong style={{ color: '#2d3748', display: 'block' }}>{batch.name}</strong>
+                          <small style={{ color: '#718096' }}>{batch.genetic?.name || 'Genética Desconocida'}</small>
+                        </div>
+                        <input
+                          type="number"
+                          placeholder="0.00"
+                          value={harvestForm.batchYields[batch.id] || ''}
+                          onChange={(e) => setHarvestForm({
+                            ...harvestForm,
+                            batchYields: {
+                              ...harvestForm.batchYields,
+                              [batch.id]: e.target.value
+                            }
+                          })}
+                          style={{ width: '100px', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e0' }}
+                        />
+                      </div>
+                    ))}
+                    {(!roomToFinish.batches || roomToFinish.batches.length === 0) && (
+                      <p style={{ color: '#e53e3e', fontStyle: 'italic' }}>No hay lotes registrados en esta sala.</p>
+                    )}
                   </div>
                 </FormGroup>
-              );
-            })()}
 
-            <PrimaryButton onClick={handleConfirmAssign} disabled={!selectedBatchId || isAssigning}>
-              {isAssigning ? 'Procesando...' : 'Confirmar Asignación'}
-            </PrimaryButton>
-          </Modal>
-        </ModalOverlay>
-      )
-    }
+                <FormGroup>
+                  <label>Notas Adicionales (Opcional)</label>
+                  <textarea
+                    rows={3}
+                    placeholder="Comentarios sobre la calidad, problemas, etc."
+                    value={harvestForm.notes}
+                    onChange={(e) => setHarvestForm({ ...harvestForm, notes: e.target.value })}
+                    style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #e2e8f0' }}
+                  />
+                </FormGroup>
 
-    {/* Success Modal (for assignment) */}
-    {
-      isSuccessModalOpen && (
-        <ModalOverlay onClick={() => setIsSuccessModalOpen(false)}>
-          <Modal style={{ maxWidth: '400px', textAlign: 'center', padding: '2rem' }}>
-            <div style={{ color: '#48bb78', fontSize: '3rem', marginBottom: '1rem' }}>
-              <FaCheckCircle />
-            </div>
-            <h3 style={{ fontSize: '1.25rem', color: '#2d3748', marginBottom: '0.5rem' }}>¡Éxito!</h3>
-            <p style={{ color: '#718096', marginBottom: '1.5rem' }}>
-              El lote de esquejes ha sido asignado correctamente.
-            </p>
-            <PrimaryButton onClick={() => setIsSuccessModalOpen(false)} style={{ margin: '0 auto', width: 'fit-content', padding: '0.5rem 2rem' }}>
-              Aceptar
-            </PrimaryButton>
-          </Modal>
-        </ModalOverlay>
-      )
-    }
+                <FormGroup>
+                  <label>Foto del Producto Final (Opcional)</label>
+                  <FileUploadBox onClick={() => document.getElementById('harvest-photo-upload')?.click()}>
+                    {harvestPhoto ? (
+                      <div style={{ color: 'green', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                        <FaCheckCircle /> {harvestPhoto.name}
+                      </div>
+                    ) : (
+                      <div style={{ color: '#718096' }}>
+                        <FaFileUpload size={24} style={{ marginBottom: '0.5rem' }} />
+                        <p>Hacé click para subir foto</p>
+                      </div>
+                    )}
+                    <input
+                      id="harvest-photo-upload"
+                      type="file"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          setHarvestPhoto(e.target.files[0]);
+                        }
+                      }}
+                    />
+                  </FileUploadBox>
+                </FormGroup>
 
-    {/* Error Modal */}
-    {
-      isErrorModalOpen && (
-        <ModalOverlay onClick={() => setIsErrorModalOpen(false)}>
-          <Modal style={{ maxWidth: '400px', textAlign: 'center', padding: '2rem' }}>
-            <div style={{ color: '#e53e3e', fontSize: '3rem', marginBottom: '1rem' }}>
-              <FaTimes />
-            </div>
-            <h3 style={{ fontSize: '1.25rem', color: '#2d3748', marginBottom: '0.5rem' }}>Error</h3>
-            <p style={{ color: '#718096', marginBottom: '1.5rem' }}>
-              {errorMessage}
-            </p>
-            <PrimaryButton onClick={() => setIsErrorModalOpen(false)} style={{ margin: '0 auto', width: 'fit-content', padding: '0.5rem 2rem', background: '#e53e3e' }}>
-              Cerrar
-            </PrimaryButton>
-          </Modal>
-        </ModalOverlay>
-      )
-    }
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1.5rem' }}>
+                  <Button $variant="secondary" onClick={() => setIsFinishModalOpen(false)}>Cancelar</Button>
+                  <Button $variant="primary" onClick={handleConfirmFinish} disabled={isFinishing} style={{ background: '#38a169', borderColor: '#38a169', opacity: isFinishing ? 0.7 : 1 }}>
+                    {isFinishing ? 'Finalizando...' : '✅ Guardar y Finalizar'}
+                  </Button>
+                </div>
+              </div>
+            </Modal>
+          </ModalOverlay>
+        )
+      }
 
-    {/* Styled Change Stage Confirmation Modal */}
-    {
-      isConfirmModalOpen && pendingStageChange && (
-        <ModalOverlay onClick={() => setIsConfirmModalOpen(false)}>
-          <ConfirmModalContent onClick={e => e.stopPropagation()}>
-            <h3>
-              {pendingStageChange.nextStage === 'flowering' ? '🌺 Pasar a Floración' : '✂️ Pasar a Cosecha'}
-            </h3>
-            <p>
-              ¿Estás seguro que deseas {pendingStageChange.nextStage === 'flowering' ? 'cambiar a fase de Floración' : 'cosechar esta sala'}?
-              <br />
-              Esta acción actualizará el estado y las fechas del ciclo.
-            </p>
-            <div className="actions">
-              <button className="cancel" onClick={() => setIsConfirmModalOpen(false)}>Cancelar</button>
-              <button className="confirm" onClick={executeStageChange}>Confirmar</button>
-            </div>
-          </ConfirmModalContent>
-        </ModalOverlay>
-      )
-    }
+      {/* Rename Modal */}
+      <PromptModal
+        isOpen={editModalOpen}
+        title={editType === 'room' ? "Renombrar Sala" : "Renombrar Spot"}
+        initialValue={editData?.name || ''}
+        placeholder="Nuevo nombre..."
+        onClose={() => setEditModalOpen(false)}
+        onConfirm={handleConfirmEditName}
+        confirmButtonColor="green"
+      />
 
-    {/* Toast Modal */}
-    <ToastModal
-      isOpen={toastOpen}
-      message={toastMessage}
-      type={toastType}
-      onClose={() => setToastOpen(false)}
-    />
-  </Container >
-);
+      {
+        crop && (
+          <DeleteProtectionModal
+            isOpen={isDeleteProtectionOpen}
+            itemType="Cultivo"
+            itemName={crop.name}
+            onClose={() => setIsDeleteProtectionOpen(false)}
+            onConfirm={executeDeleteCrop}
+          />
+        )
+      }
+
+      <QRCodeModal
+        isOpen={qrModalOpen}
+        value={qrValue}
+        title={qrTitle}
+        onClose={() => setQrModalOpen(false)}
+      />
+
+      {/* Confirm Delete Room Modal */}
+      <ConfirmModal
+        isOpen={confirmOpen}
+        title="Eliminar Sala"
+        message={`¿Estás seguro de que deseas eliminar la sala "${roomToDelete?.name}"? Se perderán todos los datos asociados.`}
+        onClose={() => setConfirmOpen(false)}
+        onConfirm={handleConfirmDeleteRoom}
+        confirmText="Eliminar"
+        isDanger
+        isLoading={isDeletingRoom}
+      />
+
+      {/* Confirm Delete Batch Modal */}
+      <ConfirmModal
+        isOpen={isDeleteBatchConfirmOpen}
+        title="Eliminar Lote"
+        message={`¿Estás seguro de que deseas eliminar el lote "${batchToDelete?.name}"? Esta acción no se puede deshacer.`}
+        onClose={() => setIsDeleteBatchConfirmOpen(false)}
+        onConfirm={executeDeleteBatch}
+        confirmText="Eliminar Lote"
+        isDanger
+      />
+
+      {/* Old Transplant Modal removed */}
+
+      {/* Assign Clone Batch Modal */}
+      {
+        isAssignModalOpen && assignRoom && (
+          <ModalOverlay>
+            <Modal>
+              <ModalHeader>
+                <h3>Asignar Lote a {assignRoom.name}</h3>
+                <CloseButton onClick={() => setIsAssignModalOpen(false)}><FaTimes /></CloseButton>
+              </ModalHeader>
+              <p style={{ color: '#718096', marginBottom: '1.5rem' }}>Selecciona un lote de esquejes disponible para mover a esta sala.</p>
+
+              <FormGroup>
+                <label>Lote de Esquejes</label>
+                <select
+                  value={selectedBatchId}
+                  onChange={e => {
+                    setSelectedBatchId(e.target.value);
+                    const batch = availableCloneBatches.find(b => b.id === e.target.value);
+                    if (batch) setAssignQuantity(batch.quantity);
+                  }}
+                >
+                  <option value="">Seleccionar Lote...</option>
+                  {availableCloneBatches.map(b => (
+                    <option key={b.id} value={b.id}>
+                      {b.name} - {b.genetic?.name || 'Genética Desconocida'} ({b.quantity}u)
+                    </option>
+                  ))}
+                  {availableCloneBatches.length === 0 && <option disabled>No hay lotes de esquejes disponibles</option>}
+                </select>
+              </FormGroup>
+
+              {selectedBatchId && (() => {
+                const batch = availableCloneBatches.find(b => b.id === selectedBatchId);
+                if (!batch) return null;
+                return (
+                  <FormGroup>
+                    <label>Cantidad a Asignar (Total: {batch.quantity})</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max={batch.quantity}
+                      value={assignQuantity}
+                      onChange={e => setAssignQuantity(Math.min(batch.quantity, Math.max(1, parseInt(e.target.value) || 1)))}
+                    />
+                    <div style={{ fontSize: '0.8rem', color: '#718096', marginTop: '0.25rem' }}>
+                      {assignQuantity < batch.quantity
+                        ? `Se moverán ${assignQuantity} esquejes. Quedarán ${batch.quantity - assignQuantity} en el lote original.`
+                        : 'Se moverá todo el lote a la sala.'}
+                    </div>
+                  </FormGroup>
+                );
+              })()}
+
+              <PrimaryButton onClick={handleConfirmAssign} disabled={!selectedBatchId || isAssigning}>
+                {isAssigning ? 'Procesando...' : 'Confirmar Asignación'}
+              </PrimaryButton>
+            </Modal>
+          </ModalOverlay>
+        )
+      }
+
+      {/* Success Modal (for assignment) */}
+      {
+        isSuccessModalOpen && (
+          <ModalOverlay onClick={() => setIsSuccessModalOpen(false)}>
+            <Modal style={{ maxWidth: '400px', textAlign: 'center', padding: '2rem' }}>
+              <div style={{ color: '#48bb78', fontSize: '3rem', marginBottom: '1rem' }}>
+                <FaCheckCircle />
+              </div>
+              <h3 style={{ fontSize: '1.25rem', color: '#2d3748', marginBottom: '0.5rem' }}>¡Éxito!</h3>
+              <p style={{ color: '#718096', marginBottom: '1.5rem' }}>
+                El lote de esquejes ha sido asignado correctamente.
+              </p>
+              <PrimaryButton onClick={() => setIsSuccessModalOpen(false)} style={{ margin: '0 auto', width: 'fit-content', padding: '0.5rem 2rem' }}>
+                Aceptar
+              </PrimaryButton>
+            </Modal>
+          </ModalOverlay>
+        )
+      }
+
+      {/* Error Modal */}
+      {
+        isErrorModalOpen && (
+          <ModalOverlay onClick={() => setIsErrorModalOpen(false)}>
+            <Modal style={{ maxWidth: '400px', textAlign: 'center', padding: '2rem' }}>
+              <div style={{ color: '#e53e3e', fontSize: '3rem', marginBottom: '1rem' }}>
+                <FaTimes />
+              </div>
+              <h3 style={{ fontSize: '1.25rem', color: '#2d3748', marginBottom: '0.5rem' }}>Error</h3>
+              <p style={{ color: '#718096', marginBottom: '1.5rem' }}>
+                {errorMessage}
+              </p>
+              <PrimaryButton onClick={() => setIsErrorModalOpen(false)} style={{ margin: '0 auto', width: 'fit-content', padding: '0.5rem 2rem', background: '#e53e3e' }}>
+                Cerrar
+              </PrimaryButton>
+            </Modal>
+          </ModalOverlay>
+        )
+      }
+
+      {/* Styled Change Stage Confirmation Modal */}
+      {
+        isConfirmModalOpen && pendingStageChange && (
+          <ModalOverlay onClick={() => setIsConfirmModalOpen(false)}>
+            <ConfirmModalContent onClick={e => e.stopPropagation()}>
+              <h3>
+                {pendingStageChange.nextStage === 'flowering' ? '🌺 Pasar a Floración' : '✂️ Pasar a Cosecha'}
+              </h3>
+              <p>
+                ¿Estás seguro que deseas {pendingStageChange.nextStage === 'flowering' ? 'cambiar a fase de Floración' : 'cosechar esta sala'}?
+                <br />
+                Esta acción actualizará el estado y las fechas del ciclo.
+              </p>
+              <div className="actions">
+                <button className="cancel" onClick={() => setIsConfirmModalOpen(false)}>Cancelar</button>
+                <button className="confirm" onClick={executeStageChange}>Confirmar</button>
+              </div>
+            </ConfirmModalContent>
+          </ModalOverlay>
+        )
+      }
+
+      {/* Toast Modal */}
+      <ToastModal
+        isOpen={toastOpen}
+        message={toastMessage}
+        type={toastType}
+        onClose={() => setToastOpen(false)}
+      />
+    </Container >
+  );
 
 
-export default CropDetail;
+  export default CropDetail;
