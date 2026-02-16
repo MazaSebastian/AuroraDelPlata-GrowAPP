@@ -21,19 +21,7 @@ const LoginContainer = styled.div`
   overflow: hidden;
 `;
 
-const BackgroundCircle = styled.div<{ size: string, top?: string, left?: string, right?: string, bottom?: string, color: string }>`
-  position: absolute;
-  width: ${props => props.size};
-  height: ${props => props.size};
-  border-radius: 50%;
-  background: ${props => props.color};
-  top: ${props => props.top};
-  left: ${props => props.left};
-  right: ${props => props.right};
-  bottom: ${props => props.bottom};
-  opacity: 0.1;
-  z-index: 0;
-`;
+
 
 const LoginCard = styled.div`
   background: rgba(255, 255, 255, 0.9);

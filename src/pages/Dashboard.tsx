@@ -3,11 +3,7 @@ import { Link } from 'react-router-dom';
 import { format, differenceInDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { tasksService } from '../services/tasksService';
-import { cropsService } from '../services/cropsService';
-import { roomsService } from '../services/roomsService';
-import { stickiesService } from '../services/stickiesService';
-import { Crop } from '../types';
-import { Room } from '../types/rooms';
+
 
 import styled, { keyframes, css } from 'styled-components';
 

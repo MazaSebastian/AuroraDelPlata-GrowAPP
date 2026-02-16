@@ -153,26 +153,7 @@ const Badge = styled.span<{ variant?: 'green' | 'yellow' | 'gray' }>`
 
 
 
-const CreateButton = styled.button`
-  background: #3182ce;
-  color: white;
-  padding: 0.75rem 1.5rem;
-  border-radius: 0.75rem;
-  border: none;
-  font-weight: 600;
-  font-size: 1rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  cursor: pointer;
-  transition: all 0.2s;
-  box-shadow: 0 4px 6px rgba(49, 130, 206, 0.3);
 
-  &:hover {
-    background: #2b6cb0;
-    transform: translateY(-2px);
-  }
-`;
 
 
 const ModalOverlay = styled.div<{ isClosing?: boolean }>`
