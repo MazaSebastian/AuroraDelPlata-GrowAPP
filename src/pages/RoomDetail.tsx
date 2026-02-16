@@ -1031,15 +1031,7 @@ const RoomDetail: React.FC = () => {
         setSelectedBatchIds(new Set()); // Clear on toggle
     };
 
-    const handleBatchSelection = (batch: Batch) => {
-        const newSet = new Set(selectedBatchIds);
-        if (newSet.has(batch.id)) {
-            newSet.delete(batch.id);
-        } else {
-            newSet.add(batch.id);
-        }
-        setSelectedBatchIds(newSet);
-    };
+
 
     const handleBulkDeleteFirstStep = () => {
         if (selectedBatchIds.size === 0) return;

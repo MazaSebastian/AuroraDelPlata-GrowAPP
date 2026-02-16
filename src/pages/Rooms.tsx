@@ -488,6 +488,13 @@ const Rooms: React.FC = () => {
                 isDanger
                 isLoading={isDeleting}
             />
+            <ToastModal
+                isOpen={toastOpen}
+                message={toastMessage}
+                type={toastType}
+                onClose={() => setToastOpen(false)}
+                animateOverlay={toastAnimate}
+            />
         </Container >
     );
 };
