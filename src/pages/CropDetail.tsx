@@ -3142,4 +3142,5 @@ const CropDetail: React.FC = () => {
   );
 
 
-  export default CropDetail;
+};
+export default CropDetail;
