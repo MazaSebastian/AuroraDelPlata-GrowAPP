@@ -278,7 +278,7 @@ const getRowLabel = (index: number) => {
 // --- Cell Component ---
 // --- Floating Tooltip Component ---
 
-const FloatingTooltipContainer = styled.div`
+const FloatingTooltipContainer = styled.div<{ isVisible: boolean }>`
   position: fixed; /* Fixed to viewport */
   z-index: 9999; /* Highest priority */
   pointer-events: none; /* Do not block mouse events */
@@ -291,12 +291,14 @@ const FloatingTooltipContainer = styled.div`
   max-width: 250px;
   font-size: 0.75rem;
   line-height: 1.4;
-  transition: opacity 0.15s ease-in-out;
+  opacity: ${p => p.isVisible ? 1 : 0};
+  transform: ${p => p.isVisible ? 'translateY(0)' : 'translateY(5px)'};
+  transition: opacity 0.2s ease-out, transform 0.2s ease-out;
   
   /* Arrow managed via dynamic styles or disregarded for floating simple view */
 `;
 
-const FloatingTooltip = ({ batch, x, y }: { batch: Batch, x: number, y: number }) => {
+const FloatingTooltip = ({ batch, x, y, isVisible }: { batch: Batch, x: number, y: number, isVisible: boolean }) => {
     // Determine position relative to viewport to avoid clipping
     // Default: Top-Centered relative to cursor/cell
 
@@ -322,12 +324,12 @@ const FloatingTooltip = ({ batch, x, y }: { batch: Batch, x: number, y: number }
     }
 
     return createPortal(
-        <FloatingTooltipContainer style={{ top: top, left: left }}>
-            <div style={{ fontWeight: 'bold', fontSize: '0.85rem', marginBottom: '0.25rem', borderBottom: '1px solid #4A5568', paddingBottom: '0.25rem', color: '#63B3ED' }}>
+        <FloatingTooltipContainer style={{ top: top, left: left }} isVisible={isVisible}>
+            <div style={{ fontWeight: 'bold', fontSize: '0.85rem', marginBottom: '0.25rem', borderBottom: '1px solid #4A5568', paddingBottom: '0.25rem', color: '#48bb78' }}>
                 {batch.tracking_code || batch.name}
             </div>
             {batch.genetic?.name && (
-                <div style={{ marginBottom: '0.25rem', fontWeight: 600 }}>
+                <div style={{ marginBottom: '0.5rem', fontWeight: 600, fontSize: '0.9rem', color: '#48bb78', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                     🧬 {batch.genetic.name}
                 </div>
             )}
@@ -674,6 +676,7 @@ export const LivingSoilGrid: React.FC<LivingSoilGridProps> = ({ rows, cols, batc
 
     // --- Floating Tooltip Logic ---
     const [hoveredBatch, setHoveredBatch] = useState<{ batch: Batch, x: number, y: number } | null>(null);
+    const [tooltipVisible, setTooltipVisible] = useState(false);
     const tooltipTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     const handleCellEnter = useCallback((e: React.MouseEvent, batch: Batch) => {
@@ -688,16 +691,29 @@ export const LivingSoilGrid: React.FC<LivingSoilGridProps> = ({ rows, cols, batc
         const y = rect.top;
 
         setHoveredBatch({ batch, x, y });
+        // Start hidden, then show next frame to trigger transition
+        setTooltipVisible(false);
+        requestAnimationFrame(() => {
+            setTooltipVisible(true);
+        });
     }, [isDragging]);
 
     const handleCellLeave = useCallback(() => {
-        // Small delay to prevent flickering or weird UX
-        setHoveredBatch(null);
+        // Start fade out
+        setTooltipVisible(false);
+        // Delay clearing the data to allow animation to finish
+        if (tooltipTimeoutRef.current) clearTimeout(tooltipTimeoutRef.current);
+        tooltipTimeoutRef.current = setTimeout(() => {
+            setHoveredBatch(null);
+        }, 200); // Match transition duration
     }, []);
 
     // Hide tooltip on scroll to prevent detached Floating Tooltip
     useEffect(() => {
-        const handleScroll = () => setHoveredBatch(null);
+        const handleScroll = () => {
+            setTooltipVisible(false);
+            setHoveredBatch(null);
+        };
         window.addEventListener('scroll', handleScroll, true); // Capture phase to catch all scrolls
         return () => window.removeEventListener('scroll', handleScroll, true);
     }, []);
@@ -912,7 +928,7 @@ export const LivingSoilGrid: React.FC<LivingSoilGridProps> = ({ rows, cols, batc
             }}
         >
             {/* Tooltip Portal */}
-            {hoveredBatch && <FloatingTooltip batch={hoveredBatch.batch} x={hoveredBatch.x} y={hoveredBatch.y} />}
+            {hoveredBatch && <FloatingTooltip batch={hoveredBatch.batch} x={hoveredBatch.x} y={hoveredBatch.y} isVisible={tooltipVisible} />}
 
             <ControlsContainer onClick={e => e.stopPropagation()}>
                 <ZoomButton onClick={handleZoomOut} title="Alejar"><FaSearchMinus /></ZoomButton>

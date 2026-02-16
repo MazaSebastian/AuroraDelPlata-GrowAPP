@@ -88,6 +88,7 @@ const RoomHeader = styled.div<{ type: string }>`
             case 'vegetation': return '#f0fff4'; // Green
             case 'flowering': return '#fff5f5'; // Red/Pink
             case 'drying': return '#fffaf0'; // Orange
+            case 'curing': return '#fffaf0'; // Orange (Legacy)
             case 'living_soil': return '#e6fffa'; // Teal/Mint
             default: return '#f7fafc';
         }
@@ -111,6 +112,7 @@ const RoomHeader = styled.div<{ type: string }>`
             case 'vegetation': return '#38a169';
             case 'flowering': return '#e53e3e';
             case 'drying': return '#dd6b20';
+            case 'curing': return '#dd6b20';
             case 'living_soil': return '#319795';
             default: return '#718096';
         }
@@ -378,7 +380,7 @@ const Rooms: React.FC = () => {
                             <div className="icon"><FaWarehouse /></div>
                             <div>
                                 <h3>{room.name}</h3>
-                                <span>{room.type === 'living_soil' ? 'Agro/Living Soil' : room.type}</span>
+                                <span>{room.type === 'living_soil' ? 'Agro/Living Soil' : room.type === 'curing' ? 'Secado' : room.type}</span>
                             </div>
                             <Actions>
                                 <ActionButton color="#3182ce" onClick={(e) => handleEdit(e, room)} title="Editar">
@@ -431,7 +433,6 @@ const Rooms: React.FC = () => {
                                 <option value="vegetation">Vegetación</option>
                                 <option value="flowering">Floración</option>
                                 <option value="drying">Secado</option>
-                                <option value="curing">Curado</option>
                                 <option value="clones">Esquejera</option>
                                 <option value="general">General/Mixta</option>
                                 <option value="living_soil">Agro/Living Soil</option>

@@ -358,8 +358,8 @@ border: 1px solid transparent;
   ${p => {
         if (p.stage) {
             return `
-            background: ${p.stage === 'vegetation' ? '#c6f6d5' : p.stage === 'flowering' ? '#fed7d7' : p.stage === 'living_soil' ? '#e6fffa' : '#f7fafc'};
-            color: ${p.stage === 'vegetation' ? '#22543d' : p.stage === 'flowering' ? '#822727' : p.stage === 'living_soil' ? '#319795' : '#718096'};
+            background: ${p.stage === 'vegetation' ? '#c6f6d5' : p.stage === 'flowering' ? '#fed7d7' : (p.stage === 'drying' || p.stage === 'curing') ? '#fffaf0' : p.stage === 'living_soil' ? '#e6fffa' : '#f7fafc'};
+            color: ${p.stage === 'vegetation' ? '#22543d' : p.stage === 'flowering' ? '#822727' : (p.stage === 'drying' || p.stage === 'curing') ? '#c05621' : p.stage === 'living_soil' ? '#319795' : '#718096'};
             ${(p.stage !== 'vegetation' && p.stage !== 'flowering') ? 'border-color: #e2e8f0;' : ''}
           `;
         }
@@ -561,6 +561,33 @@ gap: 0.5rem;
 
 
 
+const HoverButton = styled.button`
+  background: #ed8936;
+  color: white;
+  border: none;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.3rem;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.75rem;
+  margin-right: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+
+  &:hover {
+    transform: scale(1.05);
+    background: #dd6b20;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.15);
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
+`;
+
 const BackButton = styled.button`
 display: flex;
 align-items: center;
@@ -698,7 +725,9 @@ const DraggableStockBatch = ({ batch, onClick }: { batch: Batch, onClick?: () =>
         >
             <div>
                 <div style={{ fontWeight: 'bold', fontSize: '0.8rem', color: '#2d3748' }}>{geneticName}</div>
-                <div style={{ fontSize: '0.7rem', color: '#718096' }}>{batch.tracking_code || batch.name}</div>
+                <div style={{ fontSize: '0.7rem', color: '#718096' }}>
+                    {batch.start_date ? format(new Date(batch.start_date), 'dd/MM/yyyy') : (batch.tracking_code || batch.name)}
+                </div>
             </div>
             <div style={{
                 background: '#ebf8ff', color: '#2b6cb0', fontWeight: 'bold',
@@ -986,6 +1015,16 @@ const RoomDetail: React.FC = () => {
     const [isSelectionMode, setIsSelectionMode] = useState(false);
     const [selectedBatchIds, setSelectedBatchIds] = useState<Set<string>>(new Set());
     const [isBulkDeleteConfirmOpen, setIsBulkDeleteConfirmOpen] = useState(false);
+    const [isClosingBulkDelete, setIsClosingBulkDelete] = useState(false); // Animation State
+    const [isDeletingBulk, setIsDeletingBulk] = useState(false); // Loading state for delete button
+
+    const handleCloseBulkDelete = () => {
+        setIsClosingBulkDelete(true);
+        setTimeout(() => {
+            setIsBulkDeleteConfirmOpen(false);
+            setIsClosingBulkDelete(false);
+        }, 200);
+    };
 
     const handleToggleSelectionMode = () => {
         setIsSelectionMode(!isSelectionMode);
@@ -1008,23 +1047,36 @@ const RoomDetail: React.FC = () => {
     };
 
     const handleBulkDeleteConfirm = async () => {
-        setLoading(true);
+        setIsDeletingBulk(true);
         try {
             const success = await roomsService.deleteBatches(Array.from(selectedBatchIds), 'Eliminación Masiva desde Mapa', user?.id);
             if (success) {
-                setToastState({ isOpen: true, message: 'Lotes eliminados correctamente', type: 'success' });
-                setIsSelectionMode(false);
-                setSelectedBatchIds(new Set());
-                if (id) await loadData(id);
+                // Keep modal open but show success toast after small delay or immediately
+                await new Promise(resolve => setTimeout(resolve, 500)); // Smooth UX
+
+                handleCloseBulkDelete(); // Close Modal with animation
+
+                // Wait for animation to finish BEFORE changing UI state (prevents glitch)
+                setTimeout(async () => {
+                    setToastState({ isOpen: true, message: 'Lotes eliminados correctamente', type: 'success' });
+                    setIsSelectionMode(false);
+                    setSelectedBatchIds(new Set());
+                    // Force refresh room data to remove deleted items visually
+                    if (id) await loadData(id, false, false);
+                }, 200);
             } else {
                 setToastState({ isOpen: true, message: 'Error al eliminar lotes', type: 'error' });
+                // Clear selection
+                setSelectedBatchIds(new Set());
+                setIsBulkDeleteConfirmOpen(false);
+                setIsSelectionMode(false); // Optional: Exit selection mode // Immediate close on error is fine, or use handler
             }
         } catch (error) {
             console.error(error);
             setToastState({ isOpen: true, message: 'Error inesperado', type: 'error' });
-        } finally {
-            setLoading(false);
             setIsBulkDeleteConfirmOpen(false);
+        } finally {
+            setIsDeletingBulk(false);
         }
     };
     // --- END BULK SELECTION ---
@@ -1052,7 +1104,7 @@ const RoomDetail: React.FC = () => {
             setSelectedBatchIds(new Set());
             setIsStageModalOpen(false);
 
-            if (id) await loadData(id);
+            if (id) await loadData(id, false, false);
 
         } catch (error) {
             console.error(error);
@@ -1375,12 +1427,22 @@ const RoomDetail: React.FC = () => {
     });
 
 
-    // Auto-Assign Modal State
-    const [assignModal, setAssignModal] = useState<{ isOpen: boolean; batch: Batch | null; quantity: number | string }>({
+    // State for Map Assignment Modal
+    const [assignModal, setAssignModal] = useState<{ isOpen: boolean; batch: Batch | null; quantity: string | number }>({
         isOpen: false,
         batch: null,
         quantity: 1
     });
+    const [isAssignModalClosing, setIsAssignModalClosing] = useState(false);
+    const [isAutoAssigning, setIsAutoAssigning] = useState(false);
+
+    const handleCloseAssignModal = () => {
+        setIsAssignModalClosing(true);
+        setTimeout(() => {
+            setAssignModal({ ...assignModal, isOpen: false });
+            setIsAssignModalClosing(false);
+        }, 300);
+    };
 
     // Plant Detail Modal State (Individual Clone on Map)
     const [plantDetailModal, setPlantDetailModal] = useState<{ isOpen: boolean; batch: Batch | null }>({
@@ -1436,6 +1498,8 @@ const RoomDetail: React.FC = () => {
             return next;
         });
     };
+
+    const activeMap = cloneMaps.find(m => m.id === activeMapId);
 
     const handleOpenEditBatch = (batch: Batch) => {
         setEditBatchForm({
@@ -1522,17 +1586,29 @@ const RoomDetail: React.FC = () => {
 
     // FINALIZE DRYING BATCH HANDLER
     const [finalizeBatch, setFinalizeBatch] = useState<{ id: string, name: string, quantity: number } | null>(null);
+    const [finalizeBatches, setFinalizeBatches] = useState<Batch[] | null>(null); // For group finalization
     const [finalWeight, setFinalWeight] = useState('');
     const [finalNotes, setFinalNotes] = useState('');
+    const [isClosingFinalize, setIsClosingFinalize] = useState(false);
+    const [isFinalizing, setIsFinalizing] = useState(false);
 
     const handleOpenFinalize = (batch: Batch) => {
         setFinalizeBatch({ id: batch.id, name: batch.genetic?.name || batch.name, quantity: batch.quantity });
+        setFinalizeBatches(null);
+        setFinalWeight('');
+        setFinalNotes('');
+    };
+
+    const handleOpenGroupFinalize = (e: React.MouseEvent, batches: Batch[]) => {
+        e.stopPropagation();
+        setFinalizeBatches(batches);
+        setFinalizeBatch(null);
         setFinalWeight('');
         setFinalNotes('');
     };
 
     const handleConfirmFinalize = async () => {
-        if (!finalizeBatch) return;
+        if (!finalizeBatch && !finalizeBatches) return;
 
         const weight = parseFloat(finalWeight);
         if (isNaN(weight) || weight < 0) {
@@ -1540,18 +1616,60 @@ const RoomDetail: React.FC = () => {
             return;
         }
 
+        setIsFinalizing(true);
+
         try {
-            const success = await roomsService.finalizeBatch(finalizeBatch.id, weight, finalNotes);
-            if (success) {
-                showToast("Lote finalizado y enviado a stock", 'success');
-                setFinalizeBatch(null);
-                if (id) await loadData(id);
-            } else {
-                showToast("Error al finalizar el lote", 'error');
+            if (finalizeBatches) {
+                // Group Finalization Logic
+                const totalPlants = finalizeBatches.reduce((acc, b) => acc + b.quantity, 0);
+                if (totalPlants === 0) {
+                    alert("No hay plantas para finalizar en este grupo.");
+                    setIsFinalizing(false);
+                    return;
+                }
+
+                const weightPerPlant = weight / totalPlants;
+                const promises = finalizeBatches.map(batch => {
+                    const batchWeight = weightPerPlant * batch.quantity;
+                    return roomsService.finalizeBatch(batch.id, batchWeight, finalNotes);
+                });
+
+                await Promise.all(promises);
+
+                // Animate Close
+                setIsClosingFinalize(true);
+                setTimeout(async () => {
+                    showToast(`Grupo finalizado: ${finalizeBatches.length} lotes enviados a stock`, 'success');
+                    setFinalizeBatches(null);
+                    setIsClosingFinalize(false);
+                    // Silent refresh to avoid flicker
+                    if (id) await loadData(id, false);
+                    setIsFinalizing(false);
+                }, 200);
+
+            } else if (finalizeBatch) {
+                // Single Batch Finalization Logic
+                const success = await roomsService.finalizeBatch(finalizeBatch.id, weight, finalNotes);
+                if (success) {
+                    // Animate Close
+                    setIsClosingFinalize(true);
+                    setTimeout(async () => {
+                        showToast("Lote finalizado y enviado a stock", 'success');
+                        setFinalizeBatch(null);
+                        setIsClosingFinalize(false);
+                        // Silent refresh to avoid flicker
+                        if (id) await loadData(id, false);
+                        setIsFinalizing(false);
+                    }, 200);
+                } else {
+                    showToast("Error al finalizar el lote", 'error');
+                    setIsFinalizing(false);
+                }
             }
         } catch (error) {
             console.error(error);
             showToast("Error al finalizar", 'error');
+            setIsFinalizing(false);
         }
     };
 
@@ -1561,7 +1679,7 @@ const RoomDetail: React.FC = () => {
         try {
             // 1. Move Singles (Existing Logic)
             if (singles.length > 0) {
-                await roomsService.moveBatches(singles, destinationRoomId, 'Transplante Individual');
+                await roomsService.moveBatches(singles, destinationRoomId, ''); // Clean notes: No label
             }
 
             // 2. Process Groups (Merge Logic)
@@ -1587,21 +1705,15 @@ const RoomDetail: React.FC = () => {
                                     batchId,
                                     room.id,
                                     destinationRoomId,
-                                    `Transplante(Grupo: ${group.name})` // Add group context to history
+                                    'Transplante' // Clean history, no group label
                                 );
-
-                                // Update notes to persist the user's organization intent without destroying known ID.
-                                const currentNotes = batch.notes || '';
-                                // Avoid duplicate group notes if moved multiple times
-                                const newNoteLine = `[Grupo: ${group.name}]`;
-                                const newNotes = currentNotes.includes(newNoteLine) ? currentNotes : (currentNotes ? `${currentNotes} \n${newNoteLine} ` : newNoteLine);
 
                                 await roomsService.updateBatch(batchId, {
                                     stage: 'vegetation',
-                                    notes: newNotes,
-                                    current_room_id: destinationRoomId, // CORRECT: Move to destination
-                                    clone_map_id: null, // CORRECT: Remove from source map
-                                    grid_position: null // CORRECT: Remove from source grid
+                                    notes: '', // CLEAR: Ensure batch has no label ("LIMPIO")
+                                    current_room_id: destinationRoomId,
+                                    clone_map_id: null,
+                                    grid_position: null
                                 }, user?.id, 'Transplante: Inicio de Vegetación');
                             })());
                         }
@@ -1681,7 +1793,7 @@ const RoomDetail: React.FC = () => {
 
     const handleCreateMap = async () => {
         if (!newMapName || !newMapRows || !newMapCols) {
-            alert("Por favor completa todos los campos.");
+            showToast("Por favor completa todos los campos.", 'error');
             return;
         }
 
@@ -1816,9 +1928,10 @@ const RoomDetail: React.FC = () => {
 
             closeDeleteMapModal();
             setMapIdToDelete(null);
+            showToast("Mapa eliminado correctamente!", 'success');
         } catch (error) {
             console.error("Error deleting map", error);
-            alert("Error al eliminar el mapa.");
+            showToast("Error al eliminar el mapa.", 'error');
         } finally {
             setIsDeletingMap(false);
         }
@@ -2131,7 +2244,14 @@ const RoomDetail: React.FC = () => {
             closeDeleteConfirm();
             if (id) {
                 // Silent refresh if possible
+                // Silent refresh if possible
                 await loadData(id, false, false);
+                // Remove from selection if present
+                if (selectedBatchIds.has(batch.id)) {
+                    const newSet = new Set(selectedBatchIds);
+                    newSet.delete(batch.id);
+                    setSelectedBatchIds(newSet);
+                }
             }
         } catch (error) {
             console.error("Error deleting single plant", error);
@@ -2196,7 +2316,7 @@ const RoomDetail: React.FC = () => {
             for (let c = 0; c < map.grid_columns; c++) {
                 if (assignedCount >= qty) break;
                 const rowLabel = String.fromCharCode(65 + r);
-                const pos = `${rowLabel}${c + 1} `; // Fixed space trimming
+                const pos = `${rowLabel}${c + 1}`; // Fixed: Removed trailing space
 
                 if (!occupiedPositions.has(pos)) {
                     targetPositions.push(pos);
@@ -2210,7 +2330,7 @@ const RoomDetail: React.FC = () => {
             return;
         }
 
-        setLoading(true);
+        setIsAutoAssigning(true); // Local loading
         try {
             // Check if we are assigning a group (qty > 1 and batch has siblings in room)
             // Or just multiple batches from a group
@@ -2243,7 +2363,7 @@ const RoomDetail: React.FC = () => {
 
                 if (totalAvailableUnits < qty) {
                     alert(`No se encontraron suficientes lotes disponibles.Solicitados: ${qty}, Disponibles: ${totalAvailableUnits} `);
-                    setLoading(false);
+                    setIsAutoAssigning(false);
                     return;
                 }
 
@@ -2271,17 +2391,19 @@ const RoomDetail: React.FC = () => {
                 const updatedRoom = await roomsService.getRoomById(id);
                 if (updatedRoom) setRoom(updatedRoom);
             }
-            setAssignModal({ isOpen: false, batch: null, quantity: 1 });
+            handleCloseAssignModal();
+            // Wait for modal to close partially before resetting
+            setTimeout(() => setAssignModal({ isOpen: false, batch: null, quantity: 1 }), 300);
+
             showToast("Lotes asignados correctamente", 'success');
 
         } catch (error) {
             console.error("Auto assign error", error);
             showToast("Error asignando lotes", 'error');
         } finally {
-            setLoading(false);
+            setIsAutoAssigning(false);
         }
     };
-
     // DnD Sensors
     const sensors = useSensors(
         useSensor(MouseSensor, { activationConstraint: { distance: 10 } }),
@@ -2793,7 +2915,16 @@ const RoomDetail: React.FC = () => {
 
     // --- Observation Feature State ---
     const [isObservationModalOpen, setIsObservationModalOpen] = useState(false);
+    const [isClosingObservation, setIsClosingObservation] = useState(false); // Animation State
     const [observationText, setObservationText] = useState('');
+
+    const handleCloseObservation = () => {
+        setIsClosingObservation(true);
+        setTimeout(() => {
+            setIsObservationModalOpen(false);
+            setIsClosingObservation(false);
+        }, 200);
+    };
 
     const handleRegisterObservation = async () => {
         if (!selectedBatchIds.size) return;
@@ -2867,7 +2998,7 @@ const RoomDetail: React.FC = () => {
         // Prefix logic
         const prefix = (selectedGenetic?.name || 'GEN').substring(0, 3).toUpperCase().replace(/[^A-Z]/g, '');
 
-        let batchName = `${prefix} -${format(new Date(), 'yyMMdd')} `;
+        let batchName = `${prefix} - ${format(new Date(), 'dd/MM/yy')}`;
 
         // Determine Stage based on Room Type
         let stage: 'seedling' | 'vegetation' | 'flowering' | 'drying' | 'curing' = 'vegetation';
@@ -2875,7 +3006,7 @@ const RoomDetail: React.FC = () => {
         const rType = (room?.type || '').toLowerCase();
         if (['germinacion', 'germinación', 'germination', 'semillero'].includes(rType)) {
             stage = 'seedling';
-            batchName = `SEM - ${prefix} -${format(new Date(), 'yyMMdd')} `;
+            batchName = `SEM - ${prefix} - ${format(new Date(), 'dd/MM/yy')}`;
         } else if (['clones', 'esquejes', 'esquejera'].includes(rType)) {
             stage = 'vegetation';
         }
@@ -3051,8 +3182,9 @@ const RoomDetail: React.FC = () => {
     // Memoized selection for Transplant Modal to prevent infinite loops
     // We must declare this at the top level, not conditionally
     const memoizedTransplantBatchIds = useMemo(() => {
-        return transplantForm.batchId ? [transplantForm.batchId] : [];
-    }, [transplantForm.batchId]);
+        if (transplantForm.batchId) return [transplantForm.batchId];
+        return Array.from(selectedBatchIds);
+    }, [transplantForm.batchId, selectedBatchIds]);
 
     // Calendar Rendering Logic
 
@@ -3066,7 +3198,7 @@ const RoomDetail: React.FC = () => {
             <div className="no-print" style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                     <BackButton onClick={() => navigate(-1)}><FaArrowLeft /> Volver</BackButton>
-                    <Title>{room?.name} <Badge stage={room?.type}>{room?.type === 'vegetation' ? 'Vegetación' : room?.type === 'flowering' ? 'Floración' : room?.type === 'drying' ? 'Secando' : room?.type === 'living_soil' ? 'Agro/Living Soil' : room?.type}</Badge></Title>
+                    <Title>{room?.name} <Badge stage={room?.type}>{room?.type === 'vegetation' ? 'Vegetación' : room?.type === 'flowering' ? 'Floración' : (room?.type === 'drying' || room?.type === 'curing') ? 'Secado' : room?.type === 'living_soil' ? 'Agro/Living Soil' : room?.type}</Badge></Title>
                 </div>
 
             </div>
@@ -3291,6 +3423,246 @@ const RoomDetail: React.FC = () => {
                         </div>
 
                         {/* DndContext WRAPPER FOR BOTH VIEWS */}
+                        {/* Moved Map Header (Toolbar) Here for Full Width */}
+                        {
+                            activeMapId && activeMap && (
+                                <div className="no-print-map-header" style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    marginBottom: '1rem',
+                                    background: 'white',
+                                    padding: '0.75rem 1rem',
+                                    borderRadius: '0.75rem',
+                                    border: '1px solid #e2e8f0',
+                                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                                    height: '80px',
+                                    width: '100%',
+                                    boxSizing: 'border-box'
+                                }}>
+                                    {/* LEFT: Map Title & Info */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexShrink: 0, overflow: 'hidden' }}>
+                                        <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#2d3748', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                            {activeMap.name}
+                                        </h3>
+                                        <span style={{ background: '#c6f6d5', color: '#2f855a', padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                                            {activeMap.grid_rows} x {activeMap.grid_columns}
+                                        </span>
+                                    </div>
+
+                                    {/* CENTER: Selection Status (New) */}
+                                    <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                                        {isSelectionMode && selectedBatchIds.size > 0 && (
+                                            <span style={{
+                                                fontSize: '0.9rem',
+                                                color: '#2f855a', // Dark Green
+                                                fontWeight: 700,
+                                                whiteSpace: 'nowrap',
+                                                background: '#c6f6d5', // Light Green
+                                                padding: '0.35rem 1rem',
+                                                borderRadius: '999px',
+                                                border: '1px solid #9ae6b4',
+                                                transition: 'all 0.2s',
+                                                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                                            }}>
+                                                {selectedBatchIds.size} seleccionados
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    {/* RIGHT: Actions Toolbar */}
+                                    <div className="no-print-map-controls" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 1, height: '100%', justifyContent: 'flex-end' }}>
+
+                                        {/* 1. SELECTION ACTIONS */}
+                                        {isSelectionMode && selectedBatchIds.size > 0 && (
+                                            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '0.5rem', paddingRight: '0.5rem', borderRight: '1px solid #e2e8f0', flexShrink: 0 }}>
+
+                                                {/* BULK ACTIONS DROPDOWN */}
+                                                <div style={{ position: 'relative' }}>
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); setIsBulkActionsOpen(!isBulkActionsOpen); }}
+                                                        style={{
+                                                            background: '#48bb78', // Green
+                                                            color: 'white',
+                                                            border: 'none',
+                                                            borderRadius: '0.375rem',
+                                                            padding: '0.5rem 1rem',
+                                                            fontSize: '0.85rem',
+                                                            fontWeight: 600,
+                                                            cursor: 'pointer',
+                                                            boxShadow: '0 2px 4px rgba(72, 187, 120, 0.3)',
+                                                            display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                                            transition: 'background 0.2s'
+                                                        }}
+                                                    >
+                                                        Acciones <FaChevronDown size={10} />
+                                                    </button>
+
+                                                    {isBulkActionsOpen && (
+                                                        <div style={{
+                                                            position: 'absolute',
+                                                            top: '120%',
+                                                            right: 0,
+                                                            background: 'white',
+                                                            border: '1px solid #e2e8f0',
+                                                            borderRadius: '0.5rem',
+                                                            boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+                                                            zIndex: 50,
+                                                            minWidth: '220px',
+                                                            overflow: 'hidden',
+                                                            animation: 'fadeIn 0.1s ease-out'
+                                                        }}>
+                                                            <div style={{ padding: '0.75rem 1rem', background: '#f7fafc', borderBottom: '1px solid #edf2f7' }}>
+                                                                <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#a0aec0', letterSpacing: '0.05em' }}>ACCIONES DE LOTE</div>
+                                                            </div>
+
+                                                            {/* 1. EDITAR */}
+                                                            <button
+                                                                onClick={() => {
+                                                                    setIsBulkActionsOpen(false);
+                                                                    if (selectedBatchIds.size === 1) {
+                                                                        const batchId = Array.from(selectedBatchIds)[0];
+                                                                        const batch = room?.batches?.find(b => b.id === batchId);
+                                                                        if (batch) handleOpenEditBatch(batch);
+                                                                    } else {
+                                                                        // Bulk Edit
+                                                                        setBulkEditForm({ stage: '', notes: '' });
+                                                                        setIsBulkEditModalOpen(true);
+                                                                    }
+                                                                }}
+                                                                style={{ width: '100%', textAlign: 'left', padding: '0.75rem 1rem', background: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#2d3748', fontSize: '0.9rem', transition: 'background 0.1s' }}
+                                                                onMouseEnter={e => e.currentTarget.style.background = '#f0fff4'}
+                                                                onMouseLeave={e => e.currentTarget.style.background = 'white'}
+                                                            >
+                                                                <div style={{ background: '#c6f6d5', padding: '0.4rem', borderRadius: '0.375rem', color: '#2f855a', display: 'flex' }}><FaEdit size={12} /></div>
+                                                                <span>Editar</span>
+                                                            </button>
+
+                                                            {/* 2. REUBICAR */}
+                                                            <button
+                                                                onClick={() => {
+                                                                    setIsBulkActionsOpen(false);
+                                                                    // Reset form for fresh bulk move
+                                                                    setTransplantForm({ batchId: '', quantity: 1 });
+                                                                    setIsTransplantModalOpen(true);
+                                                                }}
+                                                                style={{ width: '100%', textAlign: 'left', padding: '0.75rem 1rem', background: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#2d3748', fontSize: '0.9rem', transition: 'background 0.1s' }}
+                                                                onMouseEnter={e => e.currentTarget.style.background = '#ebf8ff'}
+                                                                onMouseLeave={e => e.currentTarget.style.background = 'white'}
+                                                            >
+                                                                <div style={{ background: '#bee3f8', padding: '0.4rem', borderRadius: '0.375rem', color: '#3182ce', display: 'flex' }}><FaExchangeAlt size={12} /></div>
+                                                                <span>Reubicar</span>
+                                                            </button>
+
+                                                            {/* 3. OBSERVACION */}
+                                                            <button
+                                                                onClick={() => {
+                                                                    setIsBulkActionsOpen(false);
+                                                                    const firstSelectedBatch = room?.batches?.find(b => selectedBatchIds.has(b.id) && b.notes);
+                                                                    setObservationText(firstSelectedBatch?.notes || '');
+                                                                    setIsObservationModalOpen(true);
+                                                                }}
+                                                                style={{ width: '100%', textAlign: 'left', padding: '0.75rem 1rem', background: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#2d3748', fontSize: '0.9rem', transition: 'background 0.1s' }}
+                                                                onMouseEnter={e => e.currentTarget.style.background = '#fffaf0'}
+                                                                onMouseLeave={e => e.currentTarget.style.background = 'white'}
+                                                            >
+                                                                <div style={{ background: '#fefcbf', padding: '0.4rem', borderRadius: '0.375rem', color: '#d69e2e', display: 'flex' }}><FaExclamationTriangle size={12} /></div>
+                                                                <span>Observación</span>
+                                                            </button>
+
+                                                            <div style={{ borderTop: '1px solid #edf2f7', margin: '0.25rem 0' }}></div>
+
+                                                            {/* 4. ELIMINAR */}
+                                                            <button
+                                                                onClick={() => { setIsBulkActionsOpen(false); handleBulkDeleteFirstStep(); }}
+                                                                style={{ width: '100%', textAlign: 'left', padding: '0.75rem 1rem', background: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#e53e3e', fontSize: '0.9rem', transition: 'background 0.1s' }}
+                                                                onMouseEnter={e => e.currentTarget.style.background = '#fff5f5'}
+                                                                onMouseLeave={e => e.currentTarget.style.background = 'white'}
+                                                            >
+                                                                <div style={{ background: '#fed7d7', padding: '0.4rem', borderRadius: '0.375rem', color: '#e53e3e', display: 'flex' }}><FaTrash size={12} /></div>
+                                                                <span>Eliminar Selección</span>
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Overlay for Dropdown */}
+                                        {isBulkActionsOpen && (
+                                            <div
+                                                style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 40 }}
+                                                onClick={() => setIsBulkActionsOpen(false)}
+                                            />
+                                        )}
+
+                                        {/* 2. PERSISTENT ACTIONS */}
+                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                            {isSelectionMode && (
+                                                <button
+                                                    onClick={() => handleToggleSelectionMode()}
+                                                    title="Cancelar Selección"
+                                                    style={{
+                                                        background: 'white',
+                                                        border: '1px solid #e2e8f0',
+                                                        borderRadius: '0.375rem',
+                                                        padding: '0.5rem',
+                                                        cursor: 'pointer',
+                                                        color: '#718096',
+                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                        transition: 'all 0.2s',
+                                                    }}
+                                                >
+                                                    <FaTimes />
+                                                </button>
+                                            )}
+
+                                            <button
+                                                onClick={() => {
+                                                    document.body.classList.add('printing-map');
+                                                    window.print();
+                                                    document.body.classList.remove('printing-map');
+                                                }}
+                                                title="Imprimir Mapa"
+                                                style={{
+                                                    background: 'white',
+                                                    border: '1px solid #e2e8f0',
+                                                    borderRadius: '0.375rem',
+                                                    padding: '0.5rem 0.75rem',
+                                                    fontSize: '0.85rem',
+                                                    cursor: 'pointer',
+                                                    color: '#4a5568',
+                                                    fontWeight: 600,
+                                                    display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                                }}
+                                            >
+                                                <FaPrint />
+                                            </button>
+
+                                            <button
+                                                onClick={() => setActiveMapId(null)}
+                                                style={{
+                                                    background: '#edf2f7',
+                                                    border: 'none',
+                                                    padding: '0.5rem 0.75rem',
+                                                    borderRadius: '0.5rem',
+                                                    color: '#4a5568',
+                                                    fontWeight: 600,
+                                                    cursor: 'pointer',
+                                                    display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                                    transition: 'background 0.2s'
+                                                }}
+                                                onMouseEnter={e => e.currentTarget.style.background = '#e2e8f0'}
+                                                onMouseLeave={e => e.currentTarget.style.background = '#edf2f7'}
+                                            >
+                                                <FaArrowLeft /> Volver
+                                            </button>
+                                        </div>
+
+                                    </div>
+                                </div >
+                            )
+                        }
                         <DndContext sensors={sensors} collisionDetection={pointerWithin} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
                             <div style={{ display: 'flex', gap: '2rem', alignItems: 'flex-start' }}>
 
@@ -3444,216 +3816,30 @@ const RoomDetail: React.FC = () => {
                                             );
                                             return (
                                                 <div className="active-map-container">
-
-                                                    <div style={{
-                                                        display: 'flex',
-                                                        justifyContent: 'space-between',
-                                                        alignItems: 'center',
-                                                        marginBottom: '1rem',
-                                                        background: 'white',
-                                                        padding: '0.75rem 1rem',
-                                                        borderRadius: '0.75rem',
-                                                        border: '1px solid #e2e8f0',
-                                                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-                                                    }}>
-                                                        {/* LEFT: Map Title & Info */}
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                                            <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#2d3748' }}>
-                                                                {activeMap.name}
-                                                            </h3>
-                                                            <span style={{ background: '#c6f6d5', color: '#2f855a', padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 700 }}>
-                                                                {activeMap.grid_rows} x {activeMap.grid_columns}
-                                                            </span>
-                                                        </div>
-
-                                                        {/* RIGHT: Actions Toolbar */}
-                                                        <div className="no-print-map-controls" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-
-                                                            {/* 1. SELECTION STATE CONTROLS */}
-                                                            {isSelectionMode && selectedBatchIds.size > 0 && (
-                                                                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '0.5rem', paddingRight: '0.5rem', borderRight: '1px solid #e2e8f0' }}>
-                                                                    <span style={{ fontSize: '0.85rem', color: '#718096', fontWeight: 600 }}>
-                                                                        {selectedBatchIds.size} seleccionados
-                                                                    </span>
-
-                                                                    {/* BULK ACTIONS DROPDOWN */}
-                                                                    <div style={{ position: 'relative' }}>
-                                                                        <button
-                                                                            onClick={(e) => { e.stopPropagation(); setIsBulkActionsOpen(!isBulkActionsOpen); }}
-                                                                            style={{
-                                                                                background: '#3182ce',
-                                                                                color: 'white',
-                                                                                border: 'none',
-                                                                                borderRadius: '0.375rem',
-                                                                                padding: '0.5rem 1rem',
-                                                                                fontSize: '0.85rem',
-                                                                                fontWeight: 600,
-                                                                                cursor: 'pointer',
-                                                                                boxShadow: '0 2px 4px rgba(49, 130, 206, 0.3)',
-                                                                                display: 'flex', alignItems: 'center', gap: '0.5rem',
-                                                                                transition: 'background 0.2s'
-                                                                            }}
-                                                                        >
-                                                                            Acciones <FaChevronDown size={10} />
-                                                                        </button>
-
-                                                                        {isBulkActionsOpen && (
-                                                                            <div style={{
-                                                                                position: 'absolute',
-                                                                                top: '120%',
-                                                                                right: 0,
-                                                                                background: 'white',
-                                                                                border: '1px solid #e2e8f0',
-                                                                                borderRadius: '0.5rem',
-                                                                                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-                                                                                zIndex: 50,
-                                                                                minWidth: '220px',
-                                                                                overflow: 'hidden',
-                                                                                animation: 'fadeIn 0.1s ease-out'
-                                                                            }}>
-                                                                                <div style={{ padding: '0.75rem 1rem', background: '#f7fafc', borderBottom: '1px solid #edf2f7' }}>
-                                                                                    <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#a0aec0', letterSpacing: '0.05em' }}>ACCIONES DE LOTE</div>
-                                                                                </div>
-
-                                                                                {room?.type === 'living_soil' && (
-                                                                                    <>
-                                                                                        <button
-                                                                                            onClick={() => { setIsBulkActionsOpen(false); setIsStageModalOpen(true); }}
-                                                                                            style={{ width: '100%', textAlign: 'left', padding: '0.75rem 1rem', background: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#2d3748', fontSize: '0.9rem', transition: 'background 0.1s' }}
-                                                                                            onMouseEnter={e => e.currentTarget.style.background = '#ebf8ff'}
-                                                                                            onMouseLeave={e => e.currentTarget.style.background = 'white'}
-                                                                                        >
-                                                                                            <div style={{ background: '#bee3f8', padding: '0.4rem', borderRadius: '0.375rem', color: '#3182ce', display: 'flex' }}><FaExchangeAlt size={12} /></div>
-                                                                                            <span>Cambiar Fase / Etapa</span>
-                                                                                        </button>
-                                                                                        <button
-                                                                                            onClick={() => {
-                                                                                                setIsBulkActionsOpen(false);
-                                                                                                const firstSelectedBatch = room?.batches?.find(b => selectedBatchIds.has(b.id) && b.notes);
-                                                                                                setObservationText(firstSelectedBatch?.notes || '');
-                                                                                                setIsObservationModalOpen(true);
-                                                                                            }}
-                                                                                            style={{ width: '100%', textAlign: 'left', padding: '0.75rem 1rem', background: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#2d3748', fontSize: '0.9rem', transition: 'background 0.1s' }}
-                                                                                            onMouseEnter={e => e.currentTarget.style.background = '#fffaf0'}
-                                                                                            onMouseLeave={e => e.currentTarget.style.background = 'white'}
-                                                                                        >
-                                                                                            <div style={{ background: '#fefcbf', padding: '0.4rem', borderRadius: '0.375rem', color: '#d69e2e', display: 'flex' }}><FaExclamationTriangle size={12} /></div>
-                                                                                            <span>Registrar Observación</span>
-                                                                                        </button>
-                                                                                    </>
-                                                                                )}
-
-                                                                                <div style={{ borderTop: '1px solid #edf2f7', margin: '0.25rem 0' }}></div>
-
-                                                                                <button
-                                                                                    onClick={() => { setIsBulkActionsOpen(false); handleBulkDeleteFirstStep(); }}
-                                                                                    style={{ width: '100%', textAlign: 'left', padding: '0.75rem 1rem', background: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#e53e3e', fontSize: '0.9rem', transition: 'background 0.1s' }}
-                                                                                    onMouseEnter={e => e.currentTarget.style.background = '#fff5f5'}
-                                                                                    onMouseLeave={e => e.currentTarget.style.background = 'white'}
-                                                                                >
-                                                                                    <div style={{ background: '#fed7d7', padding: '0.4rem', borderRadius: '0.375rem', color: '#e53e3e', display: 'flex' }}><FaTrash size={12} /></div>
-                                                                                    <span>Eliminar Selección</span>
-                                                                                </button>
-                                                                            </div>
-                                                                        )}
-                                                                    </div>
-                                                                </div>
-                                                            )}
-
-                                                            {/* Overlay for Dropdown */}
-                                                            {isBulkActionsOpen && (
-                                                                <div
-                                                                    style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 40 }}
-                                                                    onClick={() => setIsBulkActionsOpen(false)}
-                                                                />
-                                                            )}
-
-                                                            {/* 2. PERSISTENT ACTIONS */}
-                                                            <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                                                {isSelectionMode && (
-                                                                    <button
-                                                                        onClick={() => handleToggleSelectionMode()}
-                                                                        title="Cancelar Selección"
-                                                                        style={{
-                                                                            background: 'white',
-                                                                            border: '1px solid #e2e8f0',
-                                                                            borderRadius: '0.375rem',
-                                                                            padding: '0.5rem',
-                                                                            cursor: 'pointer',
-                                                                            color: '#718096',
-                                                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                                            transition: 'all 0.2s',
-                                                                        }}
-                                                                    >
-                                                                        <FaTimes />
-                                                                    </button>
-                                                                )}
-
-                                                                <button
-                                                                    onClick={() => {
-                                                                        document.body.classList.add('printing-map');
-                                                                        window.print();
-                                                                        document.body.classList.remove('printing-map');
-                                                                    }}
-                                                                    title="Imprimir Mapa"
-                                                                    style={{
-                                                                        background: 'white',
-                                                                        border: '1px solid #e2e8f0',
-                                                                        borderRadius: '0.375rem',
-                                                                        padding: '0.5rem 0.75rem',
-                                                                        fontSize: '0.85rem',
-                                                                        cursor: 'pointer',
-                                                                        color: '#4a5568',
-                                                                        fontWeight: 600,
-                                                                        display: 'flex', alignItems: 'center', gap: '0.5rem',
-                                                                    }}
-                                                                >
-                                                                    <FaPrint />
-                                                                </button>
-
-                                                                <button
-                                                                    onClick={() => setActiveMapId(null)}
-                                                                    style={{
-                                                                        background: '#edf2f7',
-                                                                        border: 'none',
-                                                                        padding: '0.5rem 0.75rem',
-                                                                        borderRadius: '0.5rem',
-                                                                        color: '#4a5568',
-                                                                        fontWeight: 600,
-                                                                        cursor: 'pointer',
-                                                                        display: 'flex', alignItems: 'center', gap: '0.5rem',
-                                                                        transition: 'background 0.2s'
-                                                                    }}
-                                                                    onMouseEnter={e => e.currentTarget.style.background = '#e2e8f0'}
-                                                                    onMouseLeave={e => e.currentTarget.style.background = '#edf2f7'}
-                                                                >
-                                                                    <FaArrowLeft /> Volver
-                                                                </button>
-                                                            </div>
-
-                                                        </div>
+                                                    {/* Print-only title since toolbar is hidden on print */}
+                                                    <div className="printable-map-details" style={{ marginBottom: '1rem', textAlign: 'center' }}>
+                                                        <h2>{activeMap?.name}</h2>
+                                                        <p>{activeMap?.grid_rows} x {activeMap?.grid_columns}</p>
                                                     </div>
 
                                                     <div className="printable-map-grid">
-                                                        <div className="printable-map-grid">
-                                                            <LivingSoilGrid
-                                                                rows={(() => {
-                                                                    const activeMap = cloneMaps.find(m => m.id === activeMapId);
-                                                                    return activeMap?.grid_rows || 20;
-                                                                })()}
-                                                                cols={(() => {
-                                                                    const activeMap = cloneMaps.find(m => m.id === activeMapId);
-                                                                    return activeMap?.grid_columns || 10;
-                                                                })()}
-                                                                batches={livingSoilBatches}
-                                                                mapId={activeMapId || undefined}
-                                                                onBatchClick={handleBatchClick}
-                                                                selectedBatchIds={selectedBatchIds}
-                                                                isSelectionMode={isSelectionMode}
-                                                                onToggleSelectionMode={setIsSelectionMode}
-                                                                onSelectionChange={(newSet) => setSelectedBatchIds(newSet)}
-                                                            />
-                                                        </div>
+                                                        <LivingSoilGrid
+                                                            rows={(() => {
+                                                                const activeMap = cloneMaps.find(m => m.id === activeMapId);
+                                                                return activeMap?.grid_rows || 20;
+                                                            })()}
+                                                            cols={(() => {
+                                                                const activeMap = cloneMaps.find(m => m.id === activeMapId);
+                                                                return activeMap?.grid_columns || 10;
+                                                            })()}
+                                                            batches={livingSoilBatches}
+                                                            mapId={activeMapId || undefined}
+                                                            onBatchClick={handleBatchClick}
+                                                            selectedBatchIds={selectedBatchIds}
+                                                            isSelectionMode={isSelectionMode}
+                                                            onToggleSelectionMode={setIsSelectionMode}
+                                                            onSelectionChange={(newSet) => setSelectedBatchIds(newSet)}
+                                                        />
 
                                                         {/* SOWING MODAL */}
                                                         {isSowingModalOpen && (
@@ -3820,7 +4006,7 @@ const RoomDetail: React.FC = () => {
                             </DragOverlay>
                         </DndContext >
                     </div >
-                ) : ['drying', 'secado'].includes((room?.type || '').toLowerCase()) ? (
+                ) : ['drying', 'secado', 'curing', 'curado'].includes((room?.type || '').toLowerCase()) ? (
                     /* DRYING ROOM VIEW */
                     <div className="no-print">
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -3863,7 +4049,7 @@ const RoomDetail: React.FC = () => {
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                                                 <div style={{
                                                     width: '24px', height: '24px', borderRadius: '50%',
-                                                    background: '#3182ce', color: 'white',
+                                                    background: '#48bb78', color: 'white',
                                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                                                     fontSize: '0.8rem'
                                                 }}>
@@ -3874,43 +4060,68 @@ const RoomDetail: React.FC = () => {
                                                     <span style={{ fontSize: '0.9rem', color: '#718096' }}>{totalQty} plantas en total</span>
                                                 </div>
                                             </div>
-                                            <Badge stage="drying">Secado</Badge>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                <HoverButton
+                                                    onClick={(e) => handleOpenGroupFinalize(e, [root, ...children])}
+                                                >
+                                                    Finalizar Grupo
+                                                </HoverButton>
+                                                <Badge stage="drying">Secado</Badge>
+                                            </div>
                                         </div>
 
-                                        {/* Expanded Content: Individual Batches */}
-                                        {isExpanded && (
-                                            <div style={{ padding: '1rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem', background: '#f7fafc' }}>
-                                                {[root, ...children].map(b => {
-                                                    const daysInDrying = differenceInDays(new Date(), new Date(b.created_at));
-                                                    return (
-                                                        <div key={b.id} style={{
-                                                            background: 'white', border: '1px solid #e2e8f0', borderRadius: '0.5rem',
-                                                            padding: '0.75rem', position: 'relative'
-                                                        }}>
-                                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                                                                <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#4a5568' }}>{b.tracking_code || 'S/C'}</span>
-                                                                <span style={{ fontSize: '0.75rem', color: '#718096' }}>{format(new Date(b.created_at), 'd MMM', { locale: es })}</span>
-                                                            </div>
-                                                            <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.95rem', color: '#2d3748' }}>{b.name}</h4>
+                                        {/* Expanded Content: Individual Batches - SMOOTH ANIMATION */}
+                                        <ExpandableContainer $expanded={isExpanded}>
+                                            <ExpandableInner>
+                                                <div style={{
+                                                    padding: '0.75rem', // Reduced padding
+                                                    display: 'grid',
+                                                    gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', // Smaller cards
+                                                    gap: '0.75rem', // Reduced gap
+                                                    background: '#f7fafc',
+                                                    opacity: isExpanded ? 1 : 0,
+                                                    transition: 'opacity 0.4s ease-in-out'
+                                                }}>
+                                                    {[root, ...children].map(b => {
+                                                        const daysInDrying = differenceInDays(new Date(), new Date(b.created_at));
+                                                        return (
+                                                            <div key={b.id} style={{
+                                                                background: 'white', border: '1px solid #e2e8f0', borderRadius: '0.5rem',
+                                                                padding: '0.5rem', // Compact padding
+                                                                position: 'relative',
+                                                                display: 'flex', flexDirection: 'column', gap: '0.25rem' // Tight layout
+                                                            }}>
+                                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#4a5568' }}>{b.tracking_code || 'S/C'}</span>
+                                                                    <span style={{ fontSize: '0.7rem', color: '#a0aec0' }}>{format(new Date(b.created_at), 'd MMM', { locale: es })}</span>
+                                                                </div>
 
-                                                            <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.85rem', color: '#4a5568', marginBottom: '0.75rem' }}>
-                                                                <span><strong>{b.quantity}</strong> u.</span>
-                                                                <span><strong>{daysInDrying}</strong> días</span>
-                                                            </div>
+                                                                <h4 style={{ margin: 0, fontSize: '0.85rem', color: '#2d3748', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={b.name}>{b.name}</h4>
 
-                                                            <button style={{
-                                                                width: '100%',
-                                                                background: '#ed8936', color: 'white', border: 'none',
-                                                                padding: '0.4rem', borderRadius: '0.3rem', cursor: 'pointer',
-                                                                fontWeight: 600, fontSize: '0.8rem'
-                                                            }} onClick={(e) => { e.stopPropagation(); handleOpenFinalize(b); }}>
-                                                                Finalizar / A Stock
-                                                            </button>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        )}
+                                                                <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.75rem', color: '#718096' }}>
+                                                                    <span><strong>{b.quantity}</strong> u.</span>
+                                                                    <span><strong>{daysInDrying}</strong> días</span>
+                                                                </div>
+
+                                                                <button style={{
+                                                                    width: '100%',
+                                                                    marginTop: '0.25rem',
+                                                                    background: '#ed8936', color: 'white', border: 'none',
+                                                                    padding: '0.25rem', borderRadius: '0.25rem', cursor: 'pointer',
+                                                                    fontWeight: 600, fontSize: '0.75rem',
+                                                                    transition: 'background 0.2s'
+                                                                }}
+                                                                    onMouseEnter={e => e.currentTarget.style.background = '#dd6b20'}
+                                                                    onMouseLeave={e => e.currentTarget.style.background = '#ed8936'}
+                                                                    onClick={(e) => { e.stopPropagation(); handleOpenFinalize(b); }}>
+                                                                    Finalizar
+                                                                </button>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </ExpandableInner>
+                                        </ExpandableContainer>
                                     </div>
                                 );
                             })}
@@ -3931,7 +4142,7 @@ const RoomDetail: React.FC = () => {
 
             {/* Calendar Section (Hidden for Clones/Germination) */}
             {
-                !['clones', 'esquejes', 'esquejera', 'drying', 'secado', 'germination'].includes((room?.type as string)?.toLowerCase()) && (
+                !['clones', 'esquejes', 'esquejera', 'drying', 'secado', 'curing', 'curado', 'germination'].includes((room?.type as string)?.toLowerCase()) && (
                     <div className="no-print" style={{ background: 'white', borderRadius: '1rem', padding: '1.5rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
                         {/* Calendar Header */}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
@@ -4962,8 +5173,8 @@ const RoomDetail: React.FC = () => {
 
             {
                 assignModal.isOpen && assignModal.batch && (
-                    <PortalModalOverlay>
-                        <ModalContent>
+                    <PortalModalOverlay isClosing={isAssignModalClosing}>
+                        <ModalContent isClosing={isAssignModalClosing}>
                             <h3>Asignar Lote al Mapa</h3>
                             <p style={{ marginBottom: '1rem', color: '#718096' }}>
                                 Lote: <strong>{(assignModal.batch as any)._displayName || assignModal.batch.name}</strong><br />
@@ -4989,9 +5200,28 @@ const RoomDetail: React.FC = () => {
                             </FormGroup>
 
                             <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
-                                <CancelButton onClick={() => setAssignModal({ ...assignModal, isOpen: false })}>Cancelar</CancelButton>
-                                <ActionButton onClick={handleAutoAssign} disabled={Number(assignModal.quantity) < 1 || Number(assignModal.quantity) > ((assignModal.batch as any)._totalQuantity || assignModal.batch.quantity)}>
-                                    Asignar Automáticamente
+                                <CancelButton onClick={handleCloseAssignModal}>Cancelar</CancelButton>
+                                <ActionButton
+                                    onClick={handleAutoAssign}
+                                    $variant="success"
+                                    disabled={
+                                        Number(assignModal.quantity) < 1 ||
+                                        Number(assignModal.quantity) > ((assignModal.batch as any)._totalQuantity || assignModal.batch.quantity) ||
+                                        isAutoAssigning
+                                    }
+                                    style={{
+                                        opacity: isAutoAssigning ? 0.7 : 1,
+                                        cursor: isAutoAssigning ? 'not-allowed' : 'pointer',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem'
+                                    }}
+                                >
+                                    {isAutoAssigning ? (
+                                        <>
+                                            <FaSpinner className="icon-spin" /> Asignando...
+                                        </>
+                                    ) : (
+                                        'Asignar Automáticamente'
+                                    )}
                                 </ActionButton>
                             </div>
                         </ModalContent>
@@ -5650,20 +5880,27 @@ const RoomDetail: React.FC = () => {
 
             {/* FINALIZE MODAL */}
             {
-                finalizeBatch && (
-                    <div style={{
-                        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                        background: 'rgba(0,0,0,0.5)', zIndex: 2000,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center'
-                    }}>
-                        <div style={{ background: 'white', padding: '2rem', borderRadius: '1rem', width: '90%', maxWidth: '400px' }}>
-                            <h2 style={{ marginBottom: '1rem', color: '#2d3748' }}>Finalizar Secado</h2>
+                (finalizeBatch || finalizeBatches || isClosingFinalize) && (
+                    <PortalModalOverlay isClosing={isClosingFinalize}>
+                        <ModalContent isClosing={isClosingFinalize} style={{ maxWidth: '400px' }}>
+                            <h2 style={{ marginBottom: '1rem', color: '#2d3748' }}>
+                                {finalizeBatches ? 'Finalizar Grupo Completo' : 'Finalizar Secado'}
+                            </h2>
                             <p style={{ marginBottom: '1rem', color: '#4a5568' }}>
-                                Estás enviando <strong>{finalizeBatch.name}</strong> ({finalizeBatch.quantity} plantas) a Stock.
+                                {finalizeBatches ? (
+                                    <>
+                                        Estás enviando <strong>{finalizeBatches.length} lotes</strong> ({finalizeBatches.reduce((acc, b) => acc + b.quantity, 0)} plantas) a Stock.
+                                        <br /><span style={{ fontSize: '0.85rem', color: '#718096' }}>El peso total se distribuirá proporcionalmente.</span>
+                                    </>
+                                ) : (
+                                    <>Estás enviando <strong>{finalizeBatch?.name}</strong> ({finalizeBatch?.quantity} plantas) a Stock.</>
+                                )}
                             </p>
 
                             <div style={{ marginBottom: '1rem' }}>
-                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Peso Seco Final (g)</label>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>
+                                    {finalizeBatches ? 'Peso Seco TOTAL del Grupo (g)' : 'Peso Seco Final (g)'}
+                                </label>
                                 <input
                                     type="number"
                                     autoFocus
@@ -5687,23 +5924,45 @@ const RoomDetail: React.FC = () => {
 
                             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
                                 <button
-                                    onClick={() => setFinalizeBatch(null)}
+                                    onClick={() => {
+                                        setIsClosingFinalize(true);
+                                        setTimeout(() => {
+                                            setFinalizeBatch(null);
+                                            setFinalizeBatches(null);
+                                            setIsClosingFinalize(false);
+                                        }, 200);
+                                    }}
                                     style={{ background: 'white', border: '1px solid #e2e8f0', padding: '0.5rem 1rem', borderRadius: '0.5rem', cursor: 'pointer' }}
                                 >
                                     Cancelar
                                 </button>
                                 <button
-                                    onClick={handleConfirmFinalize}
-                                    style={{ background: '#38a169', color: 'white', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 600 }}
+                                    onClick={async () => {
+                                        await handleConfirmFinalize();
+                                    }}
+                                    disabled={isFinalizing}
+                                    style={{
+                                        background: isFinalizing ? '#9ae6b4' : '#38a169',
+                                        color: 'white',
+                                        border: 'none',
+                                        padding: '0.5rem 1rem',
+                                        borderRadius: '0.5rem',
+                                        cursor: isFinalizing ? 'not-allowed' : 'pointer',
+                                        fontWeight: 600,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem'
+                                    }}
                                 >
-                                    Confirmar y Enviar
+                                    {isFinalizing && <FaCircleNotch className="spin" />}
+                                    {isFinalizing ? 'Enviando...' : 'Confirmar y Enviar'}
                                 </button>
                             </div>
-                        </div>
-                    </div >
+                        </ModalContent>
+                    </PortalModalOverlay>
                 )
             }
-            <ConfirmationModal
+            < ConfirmationModal
                 isOpen={isDistributionConfirmOpen}
                 isClosing={isClosingDistribution}
                 isLoading={loading}
@@ -5792,10 +6051,11 @@ const RoomDetail: React.FC = () => {
             />
 
             {/* OBSEVATION MODAL */}
+            {/* OBSEVATION MODAL */}
             {
-                isObservationModalOpen && (
-                    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <div style={{ background: 'white', padding: '1.5rem', borderRadius: '0.5rem', width: '90%', maxWidth: '400px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}>
+                (isObservationModalOpen || isClosingObservation) && (
+                    <PortalModalOverlay isClosing={isClosingObservation}>
+                        <ModalContent isClosing={isClosingObservation} style={{ maxWidth: '400px' }}>
                             <h3 style={{ marginTop: 0, color: '#2d3748', marginBottom: '0.5rem' }}>Registrar Observación</h3>
                             <p style={{ color: '#718096', fontSize: '0.9rem', marginBottom: '1rem' }}>
                                 Esto agregará una nota y una alerta a los {selectedBatchIds.size} lotes seleccionados.
@@ -5821,20 +6081,24 @@ const RoomDetail: React.FC = () => {
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
                                 <button
-                                    onClick={() => setIsObservationModalOpen(false)}
-                                    style={{ padding: '0.5rem 1rem', background: 'white', border: '1px solid #cbd5e0', borderRadius: '0.375rem', cursor: 'pointer', color: '#4a5568' }}
+                                    onClick={handleCloseObservation}
+                                    style={{ padding: '0.5rem 1rem', background: 'white', border: '1px solid #e2e8f0', borderRadius: '0.375rem', cursor: 'pointer', color: '#4a5568', transition: 'background 0.2s' }}
+                                    onMouseEnter={e => e.currentTarget.style.background = '#f7fafc'}
+                                    onMouseLeave={e => e.currentTarget.style.background = 'white'}
                                 >
                                     Cancelar
                                 </button>
                                 <button
                                     onClick={handleRegisterObservation}
-                                    style={{ padding: '0.5rem 1rem', background: '#d69e2e', border: 'none', borderRadius: '0.375rem', cursor: 'pointer', color: 'white', fontWeight: 600 }}
+                                    style={{ padding: '0.5rem 1rem', background: '#48bb78', border: 'none', borderRadius: '0.375rem', cursor: 'pointer', color: 'white', fontWeight: 600, transition: 'background 0.2s', boxShadow: '0 2px 4px rgba(72, 187, 120, 0.3)' }}
+                                    onMouseEnter={e => e.currentTarget.style.background = '#38a169'}
+                                    onMouseLeave={e => e.currentTarget.style.background = '#48bb78'}
                                 >
                                     Guardar Observación
                                 </button>
                             </div>
-                        </div>
-                    </div>
+                        </ModalContent>
+                    </PortalModalOverlay>
                 )
             }
             <ToastModal
@@ -5844,17 +6108,22 @@ const RoomDetail: React.FC = () => {
                 onClose={() => setToastState(prev => ({ ...prev, isOpen: false }))}
             />
             {/* Bulk Delete Config Modal */}
-            <ConfirmationModal
-                isOpen={isBulkDeleteConfirmOpen}
-                onCancel={() => setIsBulkDeleteConfirmOpen(false)}
-                onConfirm={handleBulkDeleteConfirm}
-                title="Confirmar Eliminación Masiva"
-                message={`¿Estás seguro de que deseas eliminar ${selectedBatchIds.size} lotes seleccionados ? Esta acción no se puede deshacer.`}
-                confirmText="Eliminar Lotes"
-                cancelText="Cancelar"
-                isDestructive={true}
-            />
-            {/* CREATE BATCH MODAL */}
+            {
+                (isBulkDeleteConfirmOpen || isClosingBulkDelete) && (
+                    <ConfirmationModal
+                        isOpen={isBulkDeleteConfirmOpen}
+                        onCancel={handleCloseBulkDelete}
+                        onConfirm={handleBulkDeleteConfirm}
+                        title="Confirmar Eliminación Masiva"
+                        message={`¿Estás seguro de que deseas eliminar ${selectedBatchIds.size} lotes seleccionados ? Esta acción no se puede deshacer.`}
+                        confirmText="Eliminar Lotes"
+                        cancelText="Cancelar"
+                        isDestructive={true}
+                        isLoading={isDeletingBulk}
+                        isClosing={isClosingBulkDelete}
+                    />
+                )
+            } {/* CREATE BATCH MODAL */}
             {
                 (isCreateBatchModalOpen || isClosingCreateBatch) && (
                     <PortalModalOverlay isClosing={isClosingCreateBatch}>

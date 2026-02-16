@@ -88,9 +88,9 @@ export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
     <Overlay $fullScreen={fullScreen}>
       <SpinnerContainer>
         {/* Base semi-transparent logo */}
-        <BaseImage src="/LOGOAPIDCARGA.PNG" alt="Cargando base" />
+        <BaseImage src="/LOGOAPIDCARGA.png" alt="Cargando base" />
         {/* Animated filling logo */}
-        <FillImage src="/LOGOAPIDCARGA.PNG" alt="Cargando fill" $duration={duration} />
+        <FillImage src="/LOGOAPIDCARGA.png" alt="Cargando fill" $duration={duration} />
       </SpinnerContainer>
       <LoadingText>{text}</LoadingText>
     </Overlay>

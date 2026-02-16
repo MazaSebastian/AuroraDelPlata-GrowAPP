@@ -482,8 +482,8 @@ const VisualStageBadge = styled.div<{ $type: string }>`
   text-transform: uppercase;
   font-size: 0.85rem;
   letter-spacing: 0.05em;
-  background: ${p => p.$type === 'vegetation' ? '#c6f6d5' : p.$type === 'flowering' ? '#fbd38d' : p.$type === 'mother' ? '#e9d8fd' : p.$type === 'clones' ? '#b2f5ea' : p.$type === 'germination' ? '#feebc8' : p.$type === 'living_soil' ? '#d4edda' : '#e2e8f0'};
-  color: ${p => p.$type === 'vegetation' ? '#22543d' : p.$type === 'flowering' ? '#975a16' : p.$type === 'mother' ? '#553c9a' : p.$type === 'clones' ? '#234e52' : p.$type === 'germination' ? '#7b341e' : p.$type === 'living_soil' ? '#155724' : '#4a5568'};
+  background: ${p => p.$type === 'vegetation' ? '#c6f6d5' : p.$type === 'flowering' ? '#fbd38d' : (p.$type === 'drying' || p.$type === 'curing') ? '#fffaf0' : p.$type === 'mother' ? '#e9d8fd' : p.$type === 'clones' ? '#b2f5ea' : p.$type === 'germination' ? '#feebc8' : p.$type === 'living_soil' ? '#d4edda' : '#e2e8f0'};
+  color: ${p => p.$type === 'vegetation' ? '#22543d' : p.$type === 'flowering' ? '#975a16' : (p.$type === 'drying' || p.$type === 'curing') ? '#c05621' : p.$type === 'mother' ? '#553c9a' : p.$type === 'clones' ? '#234e52' : p.$type === 'germination' ? '#7b341e' : p.$type === 'living_soil' ? '#155724' : '#4a5568'};
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
   z-index: 5;
 
@@ -2530,7 +2530,7 @@ const CropDetail: React.FC = () => {
                     { value: "vegetation", label: "Vegetación" },
                     { value: "flowering", label: "Floración" },
 
-                    { value: "curing", label: "Curado" },
+                    { value: "curing", label: "Secado" },
                     { value: "clones", label: "Esquejera/Clones" },
                     { value: "living_soil", label: "Agro/Living Soil" }
                   ]}

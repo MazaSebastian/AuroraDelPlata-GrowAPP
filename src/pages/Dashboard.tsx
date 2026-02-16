@@ -189,7 +189,7 @@ const CountdownCard = styled.div<CountdownCardProps>`
   border-radius: 1rem;
   padding: 1.5rem;
   border: 1px solid #e2e8f0;
-  border-left: 5px solid ${p => p.stage === 'vegetation' ? '#48bb78' : p.stage === 'flowering' ? '#ed8936' : '#cbd5e0'};
+  border-left: 5px solid ${p => p.stage === 'vegetation' ? '#48bb78' : p.stage === 'flowering' ? '#ed8936' : (p.stage === 'drying' || p.stage === 'curing') ? '#dd6b20' : '#cbd5e0'};
   box-shadow: 0 2px 4px rgba(0,0,0,0.05);
   transition: all 0.3s ease;
 
@@ -213,8 +213,8 @@ const CountdownCard = styled.div<CountdownCardProps>`
 
   .stage-badge { 
     font-size: 0.75rem; font-weight: 700; text-transform: uppercase; padding: 0.25rem 0.5rem; border-radius: 999px;
-    background: ${p => p.stage === 'vegetation' ? '#c6f6d5' : p.stage === 'flowering' ? '#bee3f8' : '#edf2f7'}; // Note: flowering usually warm colors, but let's distinguish.
-    color: ${p => p.stage === 'vegetation' ? '#22543d' : p.stage === 'flowering' ? '#2c5282' : '#4a5568'};
+    background: ${p => p.stage === 'vegetation' ? '#c6f6d5' : p.stage === 'flowering' ? '#bee3f8' : (p.stage === 'drying' || p.stage === 'curing') ? '#fffaf0' : '#edf2f7'}; // Note: flowering usually warm colors, but let's distinguish.
+    color: ${p => p.stage === 'vegetation' ? '#22543d' : p.stage === 'flowering' ? '#2c5282' : (p.stage === 'drying' || p.stage === 'curing') ? '#c05621' : '#4a5568'};
   }
 
   // Level 1 Alert: Red Badge for "Days Remaining"
@@ -224,14 +224,14 @@ const CountdownCard = styled.div<CountdownCardProps>`
   }
   
   .countdown { font-size: 1.25rem; font-weight: 600; color: #4a5568; display: flex; align-items: center; gap: 0.5rem; }
-  .days { font-size: 1.5rem; font-weight: 800; color: ${p => p.stage === 'vegetation' ? '#38a169' : '#dd6b20'}; margin: 0 4px; }
+  .days { font-size: 1.5rem; font-weight: 800; color: ${p => p.stage === 'vegetation' ? '#38a169' : p.stage === 'flowering' ? '#dd6b20' : (p.stage === 'drying' || p.stage === 'curing') ? '#c05621' : '#718096'}; margin: 0 4px; }
   
   .progress-bar {
     height: 6px; background: #edf2f7; border-radius: 3px; margin-top: 1rem; overflow: hidden;
   }
   .progress-fill {
     height: 100%; 
-    background: ${p => p.stage === 'vegetation' ? '#48bb78' : '#ed8936'};
+    background: ${p => p.stage === 'vegetation' ? '#48bb78' : p.stage === 'flowering' ? '#ed8936' : (p.stage === 'drying' || p.stage === 'curing') ? '#dd6b20' : '#cbd5e0'};
     border-radius: 3px;
   }
 `;

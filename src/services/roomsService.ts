@@ -805,7 +805,8 @@ export const roomsService = {
         let currentCol = startCol;
 
         const newBatchesToInsert: any[] = [];
-        const sourceBatchIdsToUpdate: string[] = [];
+        const sourceBatchIdsToDiscard: string[] = []; // Renamed from sourceBatchIdsToUpdate
+        const batchesToUpdatePosition: { id: string, mapId: string, pos: string, roomId: string | null }[] = [];
 
         // Pre-fetch genetics info if needed for naming
         const geneticIds = batches.map(b => b.genetic_id).filter((v: any, i: number, a: any[]) => a.indexOf(v) === i);
@@ -851,109 +852,142 @@ export const roomsService = {
 
         for (const batch of batches) {
             if (batch.quantity <= 0) continue;
-            sourceBatchIdsToUpdate.push(batch.id);
 
-            const prefix = geneticMap.get(batch.genetic_id) || 'GEN';
-            let currentSeq = trackingCodeMap.get(batch.genetic_id) || 1;
+            // CHECK: Is this a single batch that should preserved?
+            // Criteria: Quantity is 1 AND it has a tracking code (it's not a bulk seed pack being split)
+            const isSinglePreserved = batch.quantity === 1 && batch.tracking_code;
 
-            for (let i = 0; i < batch.quantity; i++) {
-                // Find next free position
+            if (isSinglePreserved) {
+                // MOVE (UPDATE) Logic
                 const pos = getNextFreePosition();
-
                 if (!pos) {
-                    console.warn("Map full during bulk distribution");
-                    break; // Stop distributing if full
+                    console.warn("Map full during bulk distribution (Move)");
+                    break;
                 }
 
-                // Tracking
-                const trackingCode = `${prefix}-${String(currentSeq).padStart(3, '0')}`;
-                currentSeq++;
-
-                newBatchesToInsert.push({
-                    name: `${trackingCode}`,
-                    quantity: 1,
-                    stage: batch.stage,
-                    genetic_id: batch.genetic_id,
-                    start_date: batch.start_date,
-                    current_room_id: batch.current_room_id,
-                    clone_map_id: mapId,
-                    grid_position: pos,
-                    parent_batch_id: batch.parent_batch_id || batch.id,
-                    tracking_code: trackingCode,
-                    notes: batch.notes?.match(/\[Grupo:.*?\]/)?.[0] || ''
+                batchesToUpdatePosition.push({
+                    id: batch.id,
+                    mapId: mapId,
+                    pos: pos,
+                    roomId: batch.current_room_id // Keep room or ensure it's set correctly? Usually keeps current room if just placing on map.
                 });
-            }
-            // Update seq for next batch of same genetic
-            trackingCodeMap.set(batch.genetic_id, currentSeq);
-        }
 
-        if (newBatchesToInsert.length === 0) return false;
+            } else {
+                // SPLIT / CREATE NEW Logic (Old behavior)
+                sourceBatchIdsToDiscard.push(batch.id);
+
+                const prefix = geneticMap.get(batch.genetic_id) || 'GEN';
+                let currentSeq = trackingCodeMap.get(batch.genetic_id) || 1;
+
+                for (let i = 0; i < batch.quantity; i++) {
+                    // Find next free position
+                    const pos = getNextFreePosition();
+
+                    if (!pos) {
+                        console.warn("Map full during bulk distribution");
+                        break; // Stop distributing if full
+                    }
+
+                    // Tracking
+                    const trackingCode = `${prefix}-${String(currentSeq).padStart(3, '0')}`;
+                    currentSeq++;
+
+                    newBatchesToInsert.push({
+                        name: `${trackingCode}`,
+                        quantity: 1,
+                        stage: batch.stage,
+                        genetic_id: batch.genetic_id,
+                        start_date: batch.start_date,
+                        current_room_id: batch.current_room_id,
+                        clone_map_id: mapId,
+                        grid_position: pos,
+                        parent_batch_id: batch.parent_batch_id || batch.id,
+                        tracking_code: trackingCode,
+                        notes: batch.notes?.match(/\[Grupo:.*?\]/)?.[0] || ''
+                    });
+                }
+                // Update seq for next batch of same genetic
+                trackingCodeMap.set(batch.genetic_id, currentSeq);
+            }
+        }
 
         // 2. Perform Batch Operations
 
-        // A. Insert new batches
-        const { data: insertedBatches, error: insertError } = await getClient()
-            .from('batches')
-            .insert(newBatchesToInsert)
-            .select('id, tracking_code');
-
-        if (insertError) {
-            console.error("Bulk insert failed", insertError);
-            return false;
+        // A. Update Existing Singles (Sequential updates for now, or minimal parallel)
+        if (batchesToUpdatePosition.length > 0) {
+            const updatePromises = batchesToUpdatePosition.map(b =>
+                getClient()
+                    .from('batches')
+                    .update({
+                        clone_map_id: b.mapId,
+                        grid_position: b.pos
+                        // We don't change room here? Assuming they are already in the room.
+                        // If they came from "Available" in the SAME room, this is correct.
+                    })
+                    .eq('id', b.id)
+            );
+            await Promise.all(updatePromises);
         }
 
-        // B. Mark sources as discarded
-        const { error: updateError } = await getClient()
-            .from('batches')
-            .update({
-                discarded_at: new Date().toISOString(),
-                discard_reason: 'Distribuido en Mapa (Bulk)',
-                quantity: 0,
-                current_room_id: null,
-                notes: `Distribuido en mapa ${mapId} como parte de grupo. Log: ${userId || 'No User'}`
-            })
-            .in('id', sourceBatchIdsToUpdate);
+        // B. Insert new batches (if any)
+        if (newBatchesToInsert.length > 0) {
+            const { data: insertedBatches, error: insertError } = await getClient()
+                .from('batches')
+                .insert(newBatchesToInsert)
+                .select('id, tracking_code');
 
-        if (updateError) {
-            console.error("Bulk update source failed", updateError);
-            return false;
+            if (insertError) {
+                console.error("Bulk insert failed", insertError);
+                return false;
+            }
+
+            // C. Mark sources as discarded (Only for splits)
+            if (sourceBatchIdsToDiscard.length > 0) {
+                const { error: updateError } = await getClient()
+                    .from('batches')
+                    .update({
+                        discarded_at: new Date().toISOString(),
+                        discard_reason: 'Distribuido en Mapa (Bulk)',
+                        quantity: 0,
+                        current_room_id: null,
+                        notes: `Distribuido en mapa ${mapId} como parte de grupo. Log: ${userId || 'No User'}`
+                    })
+                    .in('id', sourceBatchIdsToDiscard);
+
+                if (updateError) {
+                    console.error("Bulk update source failed", updateError);
+                    // Non-fatal?
+                }
+            }
+
+            // D. Log Distribution for NEW items
+            // ... (Logging logic for new items)
+            if (insertedBatches && insertedBatches.length > 0) {
+                const movementsWithRooms = newBatchesToInsert.map((nb, idx) => ({
+                    batch_id: insertedBatches[idx].id,
+                    from_room_id: nb.current_room_id,
+                    to_room_id: nb.current_room_id,
+                    notes: `Distribución Masiva: ${insertedBatches[idx].tracking_code}`,
+                    created_by: userId
+                }));
+
+                await getClient().from('batch_movements').insert(movementsWithRooms);
+            }
         }
 
-        // C. Log Distribution
-        if (insertedBatches && insertedBatches.length > 0) {
-            const movements = insertedBatches.map(b => ({
+        // Log movements for UPDATED items?
+        // Technically they just "moved to map" within the room.
+        // We could add a log if needed, but 'batch_movements' is room-to-room usually.
+        // If we want detailed tracking:
+        if (batchesToUpdatePosition.length > 0) {
+            const movements = batchesToUpdatePosition.map(b => ({
                 batch_id: b.id,
-                from_room_id: null, // Source was from various rooms? Or same map context?
-                // Usually bulk distribute comes from "Available Batches" in the room.
-                // But batches might have 'current_room_id' set.
-                // For now, let's use null or try to infer.
-                // Actually, we can just say "Distribucion Masiva".
-                // Ideally we should know the room.
-                to_room_id: null, // It stays in the room technically? Or map specific?
-                // The batches table has 'current_room_id'.
-                // The new batches have 'current_room_id' set from source.
-                // Let's rely on that.
-                notes: `Distribución Masiva en Mapa: ${b.tracking_code}`,
+                from_room_id: b.roomId,
+                to_room_id: b.roomId,
+                notes: `Asignado a Mapa ${mapId} en ${b.pos}`,
                 created_by: userId
             }));
-
-            // Note: batch_movements usually requires valid room IDs for filtering history.
-            // If from/to are null, history might not show it.
-            // We should use the room ID from the source batches.
-            // But we don't have it easily here without fetching or passing.
-            // 'distributeBatchesToMap' doesn't take roomId?
-            // Actually newBatchesToInsert has 'current_room_id'.
-            // Let's use that.
-
-            const movementsWithRooms = newBatchesToInsert.map((nb, idx) => ({
-                batch_id: insertedBatches[idx].id,
-                from_room_id: nb.current_room_id,
-                to_room_id: nb.current_room_id,
-                notes: `Distribución Masiva: ${insertedBatches[idx].tracking_code}`,
-                created_by: userId
-            }));
-
-            await getClient().from('batch_movements').insert(movementsWithRooms);
+            await getClient().from('batch_movements').insert(movements);
         }
 
         return true;

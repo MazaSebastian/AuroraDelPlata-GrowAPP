@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import styled, { keyframes, css } from 'styled-components';
 import { Batch, Room } from '../../types/rooms';
-import { FaTimes, FaCut, FaCheck } from 'react-icons/fa';
+import { FaTimes, FaCut, FaCheck, FaLeaf, FaBoxOpen } from 'react-icons/fa';
 import { CustomSelect } from '../CustomSelect';
 
 interface HarvestModalProps {
@@ -90,27 +90,41 @@ const BatchList = styled.div`
 `;
 
 const GeneticGroup = styled.div`
-  margin-bottom: 1rem;
+  margin-bottom: 0.5rem;
 `;
 
 const GroupHeader = styled.div`
-  font-weight: 700; color: #4a5568; margin-bottom: 0.5rem;
+  font-weight: 700; color: #2d3748; margin-bottom: 0.75rem;
   display: flex; align-items: center; justify-content: space-between;
-  background: #edf2f7; padding: 0.5rem; border-radius: 0.5rem;
-`;
-
-const BatchItem = styled.div<{ $selected: boolean }>`
-  display: flex; align-items: center; gap: 0.75rem;
-  padding: 0.75rem;
-  background: ${p => p.$selected ? '#f0fff4' : 'white'};
-  border: 1px solid ${p => p.$selected ? '#48bb78' : '#e2e8f0'};
-  border-radius: 0.5rem;
+  background: #f7fafc; padding: 0.75rem 1rem; border-radius: 0.75rem;
+  border: 1px solid #edf2f7;
   cursor: pointer;
   transition: all 0.2s;
 
   &:hover {
+    background: #edf2f7;
+  }
+`;
+
+const BatchItem = styled.div<{ $selected: boolean }>`
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  padding: 0.5rem 1rem;
+  background: ${p => p.$selected ? '#f0fff4' : 'white'};
+  border: 1px solid ${p => p.$selected ? '#48bb78' : '#edf2f7'};
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: all 0.1s ease;
+  user-select: none; /* Important for Shift+Click to avoid text selection */
+
+  &:hover {
+    background: ${p => p.$selected ? '#e6fffa' : '#f7fafc'};
     border-color: #48bb78;
   }
+`;
+
+const Chevron = styled(FaLeaf) <{ $expanded: boolean }>`
+  transform: ${p => p.$expanded ? 'rotate(90deg)' : 'rotate(0deg)'};
+  transition: transform 0.2s;
 `;
 
 const Checkbox = styled.div<{ $checked: boolean }>`
@@ -124,6 +138,8 @@ const Checkbox = styled.div<{ $checked: boolean }>`
 
 export const HarvestModal: React.FC<HarvestModalProps> = ({ isOpen, isClosing, onClose, batches, rooms, onConfirm, overrideGroupName }) => {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
+    const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set()); // Track expanded groups
     const [targetRoomId, setTargetRoomId] = useState<string>('');
     const [loading, setLoading] = useState(false);
 
@@ -134,9 +150,12 @@ export const HarvestModal: React.FC<HarvestModalProps> = ({ isOpen, isClosing, o
         }
     }, [isOpen, batches]);
 
-    // Filter Drying Rooms
+    // Filter Drying Rooms (Expanded for Curing)
     const dryingRooms = useMemo(() => {
-        return rooms.filter(r => ['drying', 'secado'].includes((r.type || '').toLowerCase()));
+        return rooms.filter(r => {
+            const t = (r.type || '').toLowerCase();
+            return ['drying', 'secado', 'curing', 'curado'].some(type => t.includes(type));
+        });
     }, [rooms]);
 
     // Prepare Options for CustomSelect
@@ -181,7 +200,8 @@ export const HarvestModal: React.FC<HarvestModalProps> = ({ isOpen, isClosing, o
         });
     };
 
-    const toggleGroup = (batchIds: string[]) => {
+    const toggleGroupSelection = (batchIds: string[], e: React.MouseEvent) => {
+        e.stopPropagation(); // Prevent toggling expansion
         const allSelected = batchIds.every(id => selectedIds.has(id));
         setSelectedIds(prev => {
             const next = new Set(prev);
@@ -191,6 +211,38 @@ export const HarvestModal: React.FC<HarvestModalProps> = ({ isOpen, isClosing, o
             });
             return next;
         });
+    };
+
+    const toggleGroupExpansion = (groupName: string) => {
+        setExpandedGroups(prev => {
+            const next = new Set(prev);
+            if (next.has(groupName)) next.delete(groupName);
+            else next.add(groupName);
+            return next;
+        });
+    };
+
+    const handleBatchClick = (id: string, e: React.MouseEvent) => {
+        if (e.shiftKey && lastSelectedId) {
+            // Range Selection
+            const allBatches = Object.values(groupedBatches).flat();
+            const currentIndex = allBatches.findIndex(b => b.id === id);
+            const lastIndex = allBatches.findIndex(b => b.id === lastSelectedId);
+
+            if (currentIndex !== -1 && lastIndex !== -1) {
+                const start = Math.min(currentIndex, lastIndex);
+                const end = Math.max(currentIndex, lastIndex);
+                const range = allBatches.slice(start, end + 1).map(b => b.id);
+
+                const newSet = new Set(selectedIds);
+                range.forEach(rid => newSet.add(rid));
+                setSelectedIds(newSet);
+            }
+        } else {
+            // Standard Toggle
+            toggleBatch(id);
+        }
+        setLastSelectedId(id);
     };
 
     const handleConfirm = async () => {
@@ -240,37 +292,49 @@ export const HarvestModal: React.FC<HarvestModalProps> = ({ isOpen, isClosing, o
                             const groupIds = groupBatches.map(b => b.id);
                             const allSelected = groupIds.every(id => selectedIds.has(id));
                             const someSelected = groupIds.some(id => selectedIds.has(id));
+                            const isExpanded = expandedGroups.has(genName);
 
                             return (
                                 <GeneticGroup key={genName}>
-                                    <GroupHeader onClick={() => toggleGroup(groupIds)} style={{ cursor: 'pointer' }}>
-                                        <span>{genName} ({groupBatches.length})</span>
-                                        <Checkbox $checked={allSelected}>
-                                            {allSelected && <FaCheck />}
-                                            {!allSelected && someSelected && <div style={{ width: 8, height: 2, background: 'white' }} />}
-                                        </Checkbox>
+                                    <GroupHeader onClick={() => toggleGroupExpansion(genName)} style={{ cursor: 'pointer' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                            <span style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s', display: 'inline-block' }}>▶</span>
+                                            <span>{genName} ({groupBatches.length})</span>
+                                        </div>
+                                        <div onClick={(e) => toggleGroupSelection(groupIds, e)}>
+                                            <Checkbox $checked={allSelected}>
+                                                {allSelected && <FaCheck />}
+                                                {!allSelected && someSelected && <div style={{ width: 8, height: 2, background: 'white' }} />}
+                                            </Checkbox>
+                                        </div>
                                     </GroupHeader>
-                                    <div style={{ paddingLeft: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                        {groupBatches.map(batch => (
-                                            <BatchItem
-                                                key={batch.id}
-                                                $selected={selectedIds.has(batch.id)}
-                                                onClick={() => toggleBatch(batch.id)}
-                                            >
-                                                <Checkbox $checked={selectedIds.has(batch.id)}>
-                                                    <FaCheck />
-                                                </Checkbox>
-                                                <div style={{ flex: 1 }}>
-                                                    <div style={{ fontWeight: 600, color: '#2d3748' }}>
-                                                        {batch.tracking_code || batch.name}
+                                    {isExpanded && (
+                                        <div style={{ paddingLeft: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                            {groupBatches.map(batch => (
+                                                <BatchItem
+                                                    key={batch.id}
+                                                    $selected={selectedIds.has(batch.id)}
+                                                    onClick={(e) => handleBatchClick(batch.id, e)}
+                                                >
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1 }}>
+                                                        <Checkbox $checked={selectedIds.has(batch.id)}>
+                                                            <FaCheck />
+                                                        </Checkbox>
+                                                        <div style={{ fontWeight: 600, color: '#2d3748', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                            <FaLeaf color="#48bb78" size={12} />
+                                                            {batch.tracking_code || batch.name}
+                                                        </div>
                                                     </div>
-                                                    <div style={{ fontSize: '0.85rem', color: '#718096' }}>
-                                                        {batch.quantity} plantas • Etapa: {batch.stage}
+
+                                                    <div style={{ fontSize: '0.85rem', color: '#718096', display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                                                        <span><strong>{batch.quantity}</strong> p.</span>
+                                                        <span style={{ color: '#cbd5e0' }}>|</span>
+                                                        <span>{batch.stage}</span>
                                                     </div>
-                                                </div>
-                                            </BatchItem>
-                                        ))}
-                                    </div>
+                                                </BatchItem>
+                                            ))}
+                                        </div>
+                                    )}
                                 </GeneticGroup>
                             );
                         })}

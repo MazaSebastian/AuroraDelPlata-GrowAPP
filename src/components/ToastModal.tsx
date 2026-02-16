@@ -12,7 +12,17 @@ const scaleIn = keyframes`
   to { transform: scale(1); opacity: 1; }
 `;
 
-const Overlay = styled.div<{ $animate: boolean }>`
+const fadeOut = keyframes`
+  from { opacity: 1; }
+  to { opacity: 0; }
+`;
+
+const scaleOut = keyframes`
+  from { transform: scale(1); opacity: 1; }
+  to { transform: scale(0.95); opacity: 0; }
+`;
+
+const Overlay = styled.div<{ $animate: boolean; $isClosing?: boolean }>`
   position: fixed;
   top: 0;
   left: 0;
@@ -22,24 +32,28 @@ const Overlay = styled.div<{ $animate: boolean }>`
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 2500;
+  z-index: 11000;
   backdrop-filter: blur(4px);
-  animation: ${p => p.$animate ? css`${fadeIn} 0.2s ease-out` : 'none'};
+  animation: ${p => p.$isClosing
+    ? css`${fadeOut} 0.2s ease-in forwards`
+    : p.$animate ? css`${fadeIn} 0.2s ease-out` : 'none'};
 `;
 
-const Content = styled.div`
+const Content = styled.div<{ $isClosing?: boolean }>`
   background: white;
   padding: 1.5rem 2rem;
   border-radius: 1rem;
   width: 90%;
   max-width: 380px;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-  animation: ${scaleIn} 0.2s ease-out;
+  animation: ${p => p.$isClosing ? css`${scaleOut} 0.2s ease-in forwards` : css`${scaleIn} 0.2s ease-out`};
   text-align: center;
   display: flex;
   flex-direction: column;
   align-items: center;
 `;
+
+// ... existing code ...
 
 const IconWrapper = styled.div<{ type: 'success' | 'error' | 'info' }>`
   font-size: 2.5rem;
@@ -87,26 +101,41 @@ export const ToastModal: React.FC<ToastModalProps> = ({
   type = 'info',
   animateOverlay = true
 }) => {
+  const [isClosing, setIsClosing] = React.useState(false);
+
+  // Reset closing state when opening
+  useEffect(() => {
+    if (isOpen) setIsClosing(false);
+  }, [isOpen]);
+
+  const handleClose = () => {
+    setIsClosing(true);
+    setTimeout(() => {
+      onClose();
+      setIsClosing(false);
+    }, 200); // 0.2s matches animation duration
+  };
+
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
-      if (isOpen && e.key === 'Escape') onClose();
+      if (isOpen && e.key === 'Escape') handleClose();
     };
     window.addEventListener('keydown', handleEsc);
     return () => window.removeEventListener('keydown', handleEsc);
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose]); // Dependencies updated indirectly
 
-  if (!isOpen) return null;
+  if (!isOpen && !isClosing) return null;
 
   return (
-    <Overlay onClick={onClose} $animate={animateOverlay}>
-      <Content onClick={e => e.stopPropagation()}>
+    <Overlay onClick={handleClose} $animate={animateOverlay} $isClosing={isClosing}>
+      <Content onClick={e => e.stopPropagation()} $isClosing={isClosing}>
         <IconWrapper type={type}>
           {type === 'success' && <FaCheckCircle />}
           {type === 'error' && <FaExclamationCircle />}
           {type === 'info' && <FaInfoCircle />}
         </IconWrapper>
         <Message>{message}</Message>
-        <Button onClick={onClose} type={type}>
+        <Button onClick={handleClose} type={type}>
           Aceptar
         </Button>
       </Content>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import styled, { keyframes } from 'styled-components';
 import { Room, Batch, CloneMap } from '../../types/rooms';
 import { FaExchangeAlt, FaMap, FaPlus, FaTrash, FaCheckSquare, FaRegSquare, FaPrint } from 'react-icons/fa';
@@ -111,23 +112,29 @@ const Step = styled.div<{ $active: boolean; $completed: boolean }>`
   display: flex; align-items: center; gap: 0.5rem;
 `;
 
-const TextActionButton = styled.button`
-  background: none;
-  border: none;
-  color: #38a169;
+const SelectAllButton = styled.button`
+  background: white;
+  border: 1px solid #cbd5e0;
+  color: #4a5568;
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.5rem;
-  border-radius: 0.25rem;
+  padding: 0.4rem 0.8rem;
+  border-radius: 0.375rem;
   transition: all 0.2s;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 
   &:hover {
-    background: #ebf8ff;
-    color: #2b6cb0;
+    background: #f7fafc;
+    border-color: #a0aec0;
+    color: #2d3748;
+  }
+
+  &:active {
+    transform: translateY(1px);
   }
 `;
 
@@ -199,7 +206,13 @@ export const TransplantModal: React.FC<TransplantModalProps> = ({ isOpen, onClos
     useEffect(() => {
         if (isOpen) {
             if (initialMapId) setActiveMapId(initialMapId);
-            if (initialSelectedBatchIds) setSelectedBatchIds(new Set(initialSelectedBatchIds));
+            if (initialSelectedBatchIds) {
+                // Filter out IDs that don't exist in currentRoom (e.g. recently deleted)
+                const validIds = initialSelectedBatchIds.filter(id =>
+                    currentRoom.batches?.some(b => b.id === id)
+                );
+                setSelectedBatchIds(new Set(validIds));
+            }
             setStep(1); // Reset to first step
             setGroups([]);
             setSingles([]);
@@ -264,7 +277,12 @@ export const TransplantModal: React.FC<TransplantModalProps> = ({ isOpen, onClos
         });
     };
 
-    const handleSelectAll = (mapId: string) => {
+    const handleSelectAll = (mapId: string, e?: React.MouseEvent) => {
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
         const map = cloneMaps.find(m => m.id === mapId);
         if (!map) return;
 
@@ -274,17 +292,25 @@ export const TransplantModal: React.FC<TransplantModalProps> = ({ isOpen, onClos
         // Check if all valid batches in this map are already selected
         const allSelected = mapBatchIds.length > 0 && mapBatchIds.every(id => selectedBatchIds.has(id));
 
+        console.log('[TransplantModal] Select All Clicked', { allSelected, mapBatchIds: mapBatchIds.length });
+
         setSelectedBatchIds(prev => {
             const next = new Set(prev);
             if (allSelected) {
                 // Deselect all from this map
+                console.log('[TransplantModal] Deselecting all');
                 mapBatchIds.forEach(id => next.delete(id));
             } else {
                 // Select all from this map
+                console.log('[TransplantModal] Selecting all');
                 mapBatchIds.forEach(id => next.add(id));
             }
             return next;
         });
+    };
+
+    const handleSelectionChange = (newSelectedIds: Set<string>) => {
+        setSelectedBatchIds(newSelectedIds);
     };
 
     const handleNextStep = () => {
@@ -579,10 +605,10 @@ export const TransplantModal: React.FC<TransplantModalProps> = ({ isOpen, onClos
                                         return (
                                             <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
                                                 <div style={{ marginBottom: '0.5rem', display: 'flex', justifyContent: 'flex-end' }}>
-                                                    <TextActionButton onClick={() => handleSelectAll(map.id)}>
+                                                    <SelectAllButton onClick={(e) => handleSelectAll(map.id, e)} type="button">
                                                         {allSelected ? <FaRegSquare /> : <FaCheckSquare />}
                                                         {allSelected ? 'Desmarcar Todos' : 'Seleccionar Todos'}
-                                                    </TextActionButton>
+                                                    </SelectAllButton>
                                                 </div>
                                                 <div style={{
                                                     border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.5rem',
@@ -592,6 +618,7 @@ export const TransplantModal: React.FC<TransplantModalProps> = ({ isOpen, onClos
                                                         rows={map.grid_rows} cols={map.grid_columns}
                                                         batches={currentRoom.batches?.filter(b => b.clone_map_id === map.id) || []}
                                                         onBatchClick={handleBatchClick} selectedBatchIds={selectedBatchIds} selectionMode={true}
+                                                        onSelectionChange={handleSelectionChange}
                                                     />
                                                 </div>
                                             </div>
@@ -631,7 +658,8 @@ export const TransplantModal: React.FC<TransplantModalProps> = ({ isOpen, onClos
                                         <div style={{ flex: 1, overflowY: 'auto', paddingRight: '0.5rem' }}>
                                             <DroppableContainer id="singles">
                                                 {/* Selection Box Visual */}
-                                                {selectionBox && (
+                                                {/* Selection Box Visual - Rendered via Portal to avoid transform issues */}
+                                                {selectionBox && createPortal(
                                                     <div style={{
                                                         position: 'fixed',
                                                         left: Math.min(selectionBox.startX, selectionBox.currentX),
@@ -642,7 +670,8 @@ export const TransplantModal: React.FC<TransplantModalProps> = ({ isOpen, onClos
                                                         border: '1px solid #3182ce',
                                                         pointerEvents: 'none',
                                                         zIndex: 9999
-                                                    }} />
+                                                    }} />,
+                                                    document.body
                                                 )}
 
                                                 <div
@@ -654,7 +683,11 @@ export const TransplantModal: React.FC<TransplantModalProps> = ({ isOpen, onClos
                                                         // Group singles by genetic
                                                         const grouped = singles.reduce((acc, id) => {
                                                             const batch = getBatch(id);
-                                                            const geneticName = batch?.genetic?.name || 'Desconocida';
+                                                            if (!batch) return acc; // Skip invalid/ghost IDs
+
+                                                            // Better fallback: Genetic Name -> Batch Name -> "Sin Nombre"
+                                                            const geneticName = batch.genetic?.name || batch.name || 'Sin Nombre';
+
                                                             if (!acc[geneticName]) acc[geneticName] = [];
                                                             acc[geneticName].push(id);
                                                             return acc;

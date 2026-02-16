@@ -50,13 +50,30 @@ const GridContainer = styled.div<{ rows: number; cols: number; cellSize: number 
   display: grid;
   grid-template-columns: 40px repeat(${p => p.cols}, ${p => p.cellSize}px);
   grid-template-rows: 40px repeat(${p => p.rows}, ${p => p.cellSize}px);
-  gap: 0.5rem;
+  gap: ${p => p.cellSize < 40 ? '1px' : '4px'};
   overflow: auto;
   max-width: 100%;
   padding: 1rem;
   background: #f8fafc;
   border-radius: 1rem;
   border: 1px solid #e2e8f0;
+  
+  /* Custom Scrollbar to match LivingSoilGrid */
+  &::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  &::-webkit-scrollbar-track {
+    background: #edf2f7;
+    border-radius: 4px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: #cbd5e0;
+    border-radius: 4px;
+    &:hover {
+      background: #a0aec0;
+    }
+  }
 `;
 
 const HeaderCell = styled.div<{ cellSize: number }>`
@@ -66,14 +83,27 @@ const HeaderCell = styled.div<{ cellSize: number }>`
   font-weight: 700;
   color: #718096;
   background: #edf2f7;
-  border-radius: 0.5rem;
-  font-size: ${p => p.cellSize < 60 ? '0.7rem' : '1rem'};
+  border-radius: ${p => p.cellSize < 40 ? '1px' : '0.375rem'};
+  font-size: ${p => p.cellSize < 40 ? '0.6rem' : '0.85rem'};
+  width: 100%;
+  height: 100%;
 `;
 
-const CellStyled = styled.div<{ $isOver?: boolean; $isOccupied?: boolean; $geneticColor?: string; $isPainting?: boolean; $isSelected?: boolean }>`
-  background: ${p => p.$isSelected ? '#48bb78' : p.$isOccupied ? (p.$geneticColor || '#c6f6d5') : p.$isOver ? '#ebf8ff' : 'white'};
-  border: ${p => p.$isSelected ? '2px solid #000' : p.$isOccupied ? '1px solid rgba(0,0,0,0.1)' : '1px solid #e2e8f0'};
-  border-radius: 0.5rem;
+const CellStyled = styled.div<{ $isOver?: boolean; $isOccupied?: boolean; $geneticColor?: string; $isPainting?: boolean; $isSelected?: boolean; cellSize: number }>`
+  background: ${p => p.$isSelected ? '#9ae6b4' : p.$isOccupied ? (p.$geneticColor || '#c6f6d5') : p.$isOver ? '#ebf8ff' : 'white'};
+  
+  /* Border Logic matching LivingSoilGrid */
+  border: ${p => p.$isSelected
+        ? '2px solid #2f855a'
+        : p.cellSize < 40
+            ? '1px solid ' + (p.$isOccupied ? 'rgba(0,0,0,0.1)' : '#e2e8f0')
+            : '2px ' + (p.$isOccupied ? 'solid rgba(0,0,0,0.1)' : 'dashed #e2e8f0')
+    };
+
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  border-radius: 0.375rem;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -81,11 +111,12 @@ const CellStyled = styled.div<{ $isOver?: boolean; $isOccupied?: boolean; $genet
   position: relative;
   transition: all 0.2s;
   cursor: ${p => p.$isOccupied || p.$isPainting ? 'pointer' : 'default'};
+  overflow: hidden;
 
   &:hover {
     border-color: ${p => p.$isPainting && !p.$isOccupied ? '#48bb78' : '#3182ce'};
     background: ${p => p.$isPainting && !p.$isOccupied ? '#f0fff4' : p.$isOccupied ? (p.$geneticColor || '#c6f6d5') : p.$isOver ? '#ebf8ff' : 'white'};
-    transform: ${p => p.$isOccupied || (p.$isPainting && !p.$isOccupied) ? 'scale(1.05)' : 'none'};
+    transform: ${p => p.$isOccupied || (p.$isPainting && !p.$isOccupied) ? 'scale(1.02)' : 'none'};
     z-index: 10;
     box-shadow: ${p => p.$isOccupied ? '0 4px 6px rgba(0,0,0,0.1)' : 'none'};
   }
@@ -232,6 +263,8 @@ const GridCell = ({ row, col, batch, onClick, isPainting, isSelected, renderActi
         data: { type: 'grid-cell', position: positionId }
     });
 
+    const isSmallView = cellSize >= 30 && cellSize < 60;
+
     return (
         <CellStyled
             ref={setNodeRef}
@@ -239,15 +272,32 @@ const GridCell = ({ row, col, batch, onClick, isPainting, isSelected, renderActi
             $isOccupied={!!batch}
             $geneticColor={batch ? getGeneticColor(batch.genetic?.name || batch.name).bg : undefined}
             $isSelected={isSelected}
+            cellSize={cellSize}
             onClick={() => {
                 // In selection mode, click propagates up.
                 if (batch || isSelected === false) onClick(batch || null); // Pass null if empty
             }}
             title={batch ? `${batch.tracking_code || batch.name} (${batch.genetic?.name || 'Desconocida'})` : `Vacío: ${positionId}`}
         >
-            {/* Position Label (Top-Left) */}
-            {cellSize >= 60 && (
-                <span style={{ position: 'absolute', top: 2, left: 4, fontSize: '0.6rem', color: '#a0aec0', fontWeight: 'bold' }}>
+            {/* Position Label Logic matching LivingSoilGrid */}
+            {cellSize >= 30 && (
+                <span style={isSmallView ? {
+                    width: '100%',
+                    textAlign: 'center',
+                    fontSize: '0.8em',
+                    fontWeight: '800',
+                    color: '#2d3748',
+                    opacity: 0.9,
+                    pointerEvents: 'none'
+                } : {
+                    position: 'absolute',
+                    top: 2,
+                    left: 4,
+                    fontSize: '0.6rem',
+                    color: '#718096',
+                    fontWeight: 'bold',
+                    opacity: 0.7
+                }}>
                     {positionId}
                 </span>
             )}
