@@ -1948,6 +1948,21 @@ const RoomDetail: React.FC = () => {
 
 
 
+
+    const handleOpenHistory = async () => {
+        if (!room) return;
+        setHistoryLoading(true);
+        setIsHistoryModalOpen(true);
+        try {
+            const history = await roomsService.getRoomMovements(room.id);
+            setRoomHistory(history);
+        } catch (error) {
+            console.error("Error loading history", error);
+        } finally {
+            setHistoryLoading(false);
+        }
+    };
+
     // Click-to-Fill Handler & Plant Detail Trigger
     const handleEditBatchClick = (e: React.MouseEvent, batch: Batch) => {
         e.stopPropagation();
