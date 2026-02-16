@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import styled from 'styled-components';
+
 // import LiveChat from './components/LiveChat'; // Disabling LiveChat for CRM cleanup
 import Dashboard from './pages/Dashboard';
 import Crops from './pages/Crops';
@@ -24,7 +24,7 @@ import Patients from './pages/Patients';
 import ClinicalFollowUp from './pages/ClinicalFollowUp';
 import { notificationService } from './services/notificationService';
 import Login from './pages/Login';
-import { useAuth, AuthProvider } from './context/AuthContext';
+import { useAuth } from './context/AuthContext';
 import { DataProvider } from './context/DataContext';
 import './App.css';
 

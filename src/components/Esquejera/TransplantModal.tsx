@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import styled, { keyframes } from 'styled-components';
 import { Room, Batch, CloneMap } from '../../types/rooms';
-import { FaExchangeAlt, FaMap, FaPlus, FaTrash, FaCheckSquare, FaRegSquare, FaPrint } from 'react-icons/fa';
+import { FaExchangeAlt, FaPlus, FaTrash, FaCheckSquare, FaRegSquare, FaPrint } from 'react-icons/fa';
 
 
 import { EsquejeraGrid } from './EsquejeraGrid';
@@ -92,7 +92,7 @@ const Title = styled.h2`
 
 const Section = styled.div` margin-bottom: 1.5rem; `;
 const Label = styled.label` display: block; font-weight: 600; color: #4a5568; margin-bottom: 0.5rem; `;
-const Select = styled.select` width: 100%; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 0.5rem; font-size: 1rem; color: #2d3748; background: white; `;
+
 
 const TabContainer = styled.div` display: flex; gap: 0.5rem; margin-bottom: 1rem; border-bottom: 1px solid #e2e8f0; `;
 const Tab = styled.button<{ $active: boolean }>`
@@ -217,7 +217,7 @@ export const TransplantModal: React.FC<TransplantModalProps> = ({ isOpen, onClos
             setGroups([]);
             setSingles([]);
         }
-    }, [isOpen, initialMapId, initialSelectedBatchIds]);
+    }, [isOpen, initialMapId, initialSelectedBatchIds, currentRoom.batches]);
 
     // Step 2: Grouping (Organization)
     const [groups, setGroups] = useState<{ id: string, name: string, batchIds: string[] }[]>([]);
@@ -259,13 +259,7 @@ export const TransplantModal: React.FC<TransplantModalProps> = ({ isOpen, onClos
         return r.type === 'vegetation' || r.type === 'flowering';
     });
 
-    // Group by Crop (Spot)
-    const roomsByCrop = targetRooms.reduce((acc, room) => {
-        const cropName = room.spot?.name || 'Otro / Sin Cultivo';
-        if (!acc[cropName]) acc[cropName] = [];
-        acc[cropName].push(room);
-        return acc;
-    }, {} as Record<string, Room[]>);
+
 
     const handleBatchClick = (batch: Batch | null) => {
         if (!batch) return;

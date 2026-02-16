@@ -75,13 +75,7 @@ const InfoRow = styled.div`
   font-size: 0.9rem; color: #4a5568;
 `;
 
-const NotesArea = styled.textarea`
-  width: 100%; min-height: 80px;
-  padding: 0.5rem;
-  border: 1px solid #e2e8f0; border-radius: 0.5rem;
-  margin-bottom: 1rem;
-  font-family: inherit;
-`;
+
 
 const ActionRow = styled.div`
   display: flex; justify-content: flex-end; gap: 1rem; margin-top: 1rem;

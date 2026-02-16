@@ -1,7 +1,7 @@
 import React from 'react';
 import DatePicker, { registerLocale } from 'react-datepicker';
 import "react-datepicker/dist/react-datepicker.css";
-import styled, { createGlobalStyle } from 'styled-components';
+import styled from 'styled-components';
 import { es } from 'date-fns/locale';
 
 // Register locale for Spanish
@@ -107,34 +107,34 @@ const Wrapper = styled.div`
 `;
 
 interface CustomDatePickerProps {
-    selected: Date | null;
-    onChange: (date: Date | null) => void;
-    placeholderText?: string;
-    dateFormat?: string;
-    minDate?: Date;
-    maxDate?: Date;
+  selected: Date | null;
+  onChange: (date: Date | null) => void;
+  placeholderText?: string;
+  dateFormat?: string;
+  minDate?: Date;
+  maxDate?: Date;
 }
 
 export const CustomDatePicker: React.FC<CustomDatePickerProps> = ({
-    selected,
-    onChange,
-    placeholderText = "Seleccionar fecha",
-    dateFormat = "dd/MM/yyyy",
-    minDate,
-    maxDate
+  selected,
+  onChange,
+  placeholderText = "Seleccionar fecha",
+  dateFormat = "dd/MM/yyyy",
+  minDate,
+  maxDate
 }) => {
-    return (
-        <Wrapper>
-            <DatePicker
-                selected={selected}
-                onChange={onChange}
-                placeholderText={placeholderText}
-                dateFormat={dateFormat}
-                minDate={minDate}
-                maxDate={maxDate}
-                locale="es"
-                showPopperArrow={false}
-            />
-        </Wrapper>
-    );
+  return (
+    <Wrapper>
+      <DatePicker
+        selected={selected}
+        onChange={onChange}
+        placeholderText={placeholderText}
+        dateFormat={dateFormat}
+        minDate={minDate}
+        maxDate={maxDate}
+        locale="es"
+        showPopperArrow={false}
+      />
+    </Wrapper>
+  );
 };

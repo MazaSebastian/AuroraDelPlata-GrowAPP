@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import styled, { keyframes, css } from 'styled-components';
+import styled, { keyframes } from 'styled-components';
 import { Batch, Room } from '../../types/rooms';
-import { FaTimes, FaCut, FaCheck, FaLeaf, FaBoxOpen } from 'react-icons/fa';
+import { FaTimes, FaCut, FaCheck, FaLeaf } from 'react-icons/fa';
 import { CustomSelect } from '../CustomSelect';
 
 interface HarvestModalProps {
@@ -122,10 +122,7 @@ const BatchItem = styled.div<{ $selected: boolean }>`
   }
 `;
 
-const Chevron = styled(FaLeaf) <{ $expanded: boolean }>`
-  transform: ${p => p.$expanded ? 'rotate(90deg)' : 'rotate(0deg)'};
-  transition: transform 0.2s;
-`;
+
 
 const Checkbox = styled.div<{ $checked: boolean }>`
   width: 20px; height: 20px;
