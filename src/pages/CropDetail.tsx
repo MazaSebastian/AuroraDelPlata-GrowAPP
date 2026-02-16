@@ -10,11 +10,10 @@ import {
   // eachMonthOfInterval removed
   // startOfYear removed
   // endOfYear removed
-import {
-    differenceInWeeks,
-    addWeeks,
-    differenceInDays
-  } from 'date-fns';
+  differenceInWeeks,
+  addWeeks,
+  differenceInDays
+} from 'date-fns';
 import { roomsService } from '../services/roomsService';
 import { dispensaryService } from '../services/dispensaryService';
 import { cropsService } from '../services/cropsService';
