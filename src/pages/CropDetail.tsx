@@ -3142,6 +3142,6 @@ return (
     />
   </Container >
 );
-};
+
 
 export default CropDetail;
