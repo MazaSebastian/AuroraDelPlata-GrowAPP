@@ -17,6 +17,7 @@ import {
 import { roomsService } from '../services/roomsService';
 import { dispensaryService } from '../services/dispensaryService';
 import { cropsService } from '../services/cropsService';
+import { geneticsService } from '../services/geneticsService';
 import es from 'date-fns/locale/es';
 import {
   FaArrowLeft,
@@ -1025,7 +1026,7 @@ const CropDetail: React.FC = () => {
     if (!targetRoomId || !batchIds || batchIds.length === 0) return;
 
     try {
-      const { roomsService } = await import('../services/roomsService');
+
 
       // Loop move for now (simplest implementation without backend changes)
       for (const bId of batchIds) {
@@ -1047,7 +1048,7 @@ const CropDetail: React.FC = () => {
   useEffect(() => {
     // Load genetics for the modal
     const fetchGenetics = async () => {
-      const { geneticsService } = await import('../services/geneticsService');
+
       const data = await geneticsService.getGenetics();
       setGenetics(data);
     };
@@ -1085,7 +1086,7 @@ const CropDetail: React.FC = () => {
     setIsLoadingRooms(true);
     const start = Date.now();
 
-    const { roomsService } = await import('../services/roomsService');
+
     const data = await roomsService.getRooms(spotId);
 
     // Calculate remaining time
@@ -1167,7 +1168,7 @@ const CropDetail: React.FC = () => {
         return;
       }
 
-      const { roomsService } = await import('../services/roomsService');
+
       const newRoom = await roomsService.createRoom({
         name: roomForm.name,
         type: roomForm.type as any,
@@ -1345,7 +1346,7 @@ const CropDetail: React.FC = () => {
     if (!roomToDelete) return;
 
     setIsDeletingRoom(true);
-    const { roomsService } = await import('../services/roomsService');
+
     const success = await roomsService.deleteRoom(roomToDelete.id);
     setIsDeletingRoom(false);
 
@@ -1379,7 +1380,7 @@ const CropDetail: React.FC = () => {
     if (!editData || !newName.trim()) return;
 
     if (editType === 'room') {
-      const { roomsService } = await import('../services/roomsService');
+
       const success = await roomsService.updateRoom(editData.id, { name: newName });
       if (success) {
         if (id) loadRooms(id);
@@ -1484,7 +1485,7 @@ const CropDetail: React.FC = () => {
   const executeDeleteBatch = async () => {
     if (!batchToDelete) return;
 
-    const { roomsService } = await import('../services/roomsService');
+
     const success = await roomsService.deleteBatch(batchToDelete.id);
 
     if (success) {
@@ -1525,7 +1526,7 @@ const CropDetail: React.FC = () => {
       return;
     }
 
-    const { roomsService } = await import('../services/roomsService');
+
 
     // Notes can include the medium info
     const notes = `Transplante a ${transplantForm.medium}`;
