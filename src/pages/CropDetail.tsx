@@ -16,6 +16,7 @@ import {
 } from 'date-fns';
 import es from 'date-fns/locale/es';
 import {
+  FaArrowLeft,
   FaCalendarAlt,
   FaSeedling,
   FaTint,
