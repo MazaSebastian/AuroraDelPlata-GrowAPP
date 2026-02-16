@@ -15,6 +15,7 @@ import { es } from 'date-fns/locale';
 import { roomsService } from '../services/roomsService';
 import { tasksService } from '../services/tasksService';
 import { stickiesService } from '../services/stickiesService';
+import { usersService } from '../services/usersService';
 import { Room } from '../types/rooms';
 import { Task, StickyNote, RecurrenceConfig } from '../types';
 
@@ -1861,7 +1862,8 @@ const RoomDetail: React.FC = () => {
     const loadData = React.useCallback(async (roomId: string, isInitial = false, showLoading = true) => {
         if (showLoading) setLoading(true);
         try {
-            const { usersService } = await import('../services/usersService');
+            // const { usersService } = await import('../services/usersService');
+            // usersService is now imported statically
 
             const loadPromise = async () => {
                 const [roomData, tasksData, usersData, stickiesData, mapsData, metricsResult, geneticsData] = await Promise.all([
