@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import styled from 'styled-components';
 import { useDroppable } from '@dnd-kit/core';
 import { Batch, BatchStage } from '../../types/rooms';
-import { FaSeedling, FaLeaf, FaCannabis, FaCheckCircle, FaExclamationTriangle, FaSearchPlus, FaSearchMinus } from 'react-icons/fa';
+import { FaSearchPlus, FaSearchMinus } from 'react-icons/fa';
 import { getGeneticColor } from '../../utils/geneticColors';
 import { useGridSelection } from '../../hooks/useGridSelection';
 

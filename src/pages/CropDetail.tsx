@@ -16,11 +16,8 @@ import {
 } from 'date-fns';
 import es from 'date-fns/locale/es';
 import {
-  FaArrowLeft,
   FaCalendarAlt,
-  FaCircleNotch,
   FaSeedling,
-  FaMapMarkerAlt,
   FaTint,
   FaTemperatureHigh,
   // FaChevronLeft removed

@@ -108,13 +108,13 @@ export const ToastModal: React.FC<ToastModalProps> = ({
     if (isOpen) setIsClosing(false);
   }, [isOpen]);
 
-  const handleClose = () => {
+  const handleClose = React.useCallback(() => {
     setIsClosing(true);
     setTimeout(() => {
       onClose();
       setIsClosing(false);
     }, 200); // 0.2s matches animation duration
-  };
+  }, [onClose]);
 
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
@@ -122,7 +122,7 @@ export const ToastModal: React.FC<ToastModalProps> = ({
     };
     window.addEventListener('keydown', handleEsc);
     return () => window.removeEventListener('keydown', handleEsc);
-  }, [isOpen, onClose]); // Dependencies updated indirectly
+  }, [isOpen, handleClose]);
 
   if (!isOpen && !isClosing) return null;
 
