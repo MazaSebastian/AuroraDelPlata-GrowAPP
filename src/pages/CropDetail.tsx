@@ -65,7 +65,7 @@ import {
 } from '@dnd-kit/core';
 import {
   SortableContext,
-  verticalListSortingStrategy,
+  rectSortingStrategy,
   useSortable,
   arrayMove
 } from '@dnd-kit/sortable';
@@ -111,6 +111,8 @@ const CreateCard = styled.div`
   opacity: 0.8;
   color: #a0aec0;
   width: 100%;
+  break-inside: avoid;
+  margin-bottom: 1.5rem;
 
   &:hover {
     border-color: #48bb78;
@@ -354,17 +356,11 @@ const FormGroup = styled.div`
   textarea { min-height: 100px; resize: vertical; }
 `;
 
-const MasonryContainer = styled.div`
-  column-count: 1;
-  column-gap: 1.5rem;
-
-  @media (min-width: 768px) {
-    column-count: 2;
-  }
-
-  @media (min-width: 1200px) {
-    column-count: 3;
-  }
+const GridContainer = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 1.5rem;
+  align-items: start;
 `;
 
 const PrimaryButton = styled.button`
@@ -587,14 +583,10 @@ const DraggableBatchRow = ({ batch, isSelected, onToggleSelect, children }: { ba
 };
 
 
-const DroppableRoomCard = ({ room, children, $alertLevel }: { room: any, children: React.ReactNode, $alertLevel?: number }) => {
-  const { setNodeRef, isOver } = useDroppable({
-    id: room.id,
-    data: { type: 'room', room }
-  });
-
+// Simplified Room Card Component (No generic UseDroppable, relies on parent Sortable or is passed props)
+const RoomCardContainer = ({ room, children, isOver, $alertLevel }: { room: any, children: React.ReactNode, isOver?: boolean, $alertLevel?: number }) => {
   return (
-    <div ref={setNodeRef} style={{ borderRadius: '1rem', overflow: 'hidden', breakInside: 'avoid', marginBottom: '1.5rem' }}>
+    <div style={{ borderRadius: '1rem', overflow: 'hidden', breakInside: 'avoid', marginBottom: '1.5rem' }}>
       <RoomCard
         $type={room.type}
         $alertLevel={$alertLevel}
@@ -603,6 +595,11 @@ const DroppableRoomCard = ({ room, children, $alertLevel }: { room: any, childre
           backgroundColor: isOver ? '#ebf8ff' : undefined,
           transition: 'background-color 0.2s, border-color 0.2s'
         }}
+        onClick={(e) => {
+          // Navigate to room (handled in children or separate logic?)
+          // navigate(`/rooms/${room.id}`);
+          // Prevent default?
+        }}
       >
         {children}
       </RoomCard>
@@ -610,7 +607,6 @@ const DroppableRoomCard = ({ room, children, $alertLevel }: { room: any, childre
   );
 };
 
-// --- SORTABLE ROOM ITEM ---
 const SortableRoomItem = ({ room, children }: { room: any, children: React.ReactNode }) => {
   const {
     attributes,
@@ -618,7 +614,8 @@ const SortableRoomItem = ({ room, children }: { room: any, children: React.React
     setNodeRef,
     transform,
     transition,
-    isDragging
+    isDragging,
+    isOver // Sortable also acts as droppable
   } = useSortable({ id: room.id, data: { type: 'room', room } });
 
   const style = {
@@ -645,14 +642,7 @@ const SortableRoomItem = ({ room, children }: { room: any, children: React.React
           padding: '0.5rem',
           background: 'white',
           borderRadius: '50%',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: '2rem',
-          height: '2rem',
           color: '#4a5568',
-          border: '1px solid #e2e8f0',
           transition: 'all 0.2s',
         }}
         className="drag-handle"
@@ -660,6 +650,8 @@ const SortableRoomItem = ({ room, children }: { room: any, children: React.React
           e.currentTarget.style.transform = 'scale(1.1)';
           e.currentTarget.style.borderColor = '#3182ce';
           e.currentTarget.style.color = '#3182ce';
+          e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+          e.currentTarget.style.border = '1px solid #e2e8f0';
         }}
         onMouseLeave={(e) => {
           e.currentTarget.style.transform = 'scale(1)';
@@ -670,9 +662,9 @@ const SortableRoomItem = ({ room, children }: { room: any, children: React.React
         <FaExchangeAlt size={16} style={{ transform: 'rotate(90deg)' }} />
       </div>
 
-      <DroppableRoomCard room={room}>
+      <RoomCardContainer room={room} isOver={isOver}>
         {children}
-      </DroppableRoomCard>
+      </RoomCardContainer>
     </div>
   );
 };
@@ -932,6 +924,7 @@ const CropDetail: React.FC = () => {
   const [genetics, setGenetics] = useState<any[]>([]);
 
   // --- DnD State ---
+  const [activeDragRoom, setActiveDragRoom] = useState<any | null>(null);
   const [activeDragBatch, setActiveDragBatch] = useState<any | null>(null);
   const [selectedBatchIds, setSelectedBatchIds] = useState<Set<string>>(new Set());
 
@@ -966,6 +959,12 @@ const CropDetail: React.FC = () => {
 
   const handleDragStart = (event: DragStartEvent) => {
     const { active } = event;
+
+    if (active.data.current?.type === 'room') {
+      setActiveDragRoom(active.data.current.room);
+      return;
+    }
+
     const batch = active.data.current?.batch;
     setActiveDragBatch(batch || null);
 
@@ -989,17 +988,18 @@ const CropDetail: React.FC = () => {
 
     // --- REORDERING ROOMS ---
     if (active.data.current?.type === 'room') {
+      setActiveDragRoom(null);
       if (active.id !== over.id) {
-        setRooms((items) => {
-          const oldIndex = items.findIndex(item => item.id === active.id);
-          const newIndex = items.findIndex(item => item.id === over.id);
-          const newOrder = arrayMove(items, oldIndex, newIndex);
+        // Calculate new order logic extracted from setState to avoid side effects
+        const oldIndex = rooms.findIndex(item => item.id === active.id);
+        const newIndex = rooms.findIndex(item => item.id === over.id);
 
-          // Persist new order
-          roomsService.updateRoomOrder(newOrder); // Fire and forget (or handle error)
-
-          return newOrder;
-        });
+        if (oldIndex !== -1 && newIndex !== -1) {
+          const newOrder = arrayMove(rooms, oldIndex, newIndex);
+          setRooms(newOrder);
+          // Persist order
+          roomsService.updateRoomOrder(newOrder).catch(err => console.error("Failed to update order", err));
+        }
       }
       return;
     }
@@ -1804,8 +1804,8 @@ const CropDetail: React.FC = () => {
               </div>
             ) : (
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-                <SortableContext items={rooms.map(r => r.id)} strategy={verticalListSortingStrategy}>
-                  <MasonryContainer>
+                <SortableContext items={rooms.map((r: any) => r.id)} strategy={rectSortingStrategy}>
+                  <GridContainer>
                     {rooms.map(room => {
                       // Calculate logic
                       let weekInfo = "";
@@ -2296,10 +2296,56 @@ const CropDetail: React.FC = () => {
                       </DashedCircle>
                       <span style={{ fontWeight: 600, fontSize: '1rem', color: 'inherit' }}>Haz click aquí para crear una nueva sala</span>
                     </CreateCard>
-                  </MasonryContainer>
+                  </GridContainer>
                 </SortableContext>
                 <DragOverlay>
-                  {activeDragBatch ? (
+                  {activeDragRoom ? (
+                    <div style={{ transform: 'scale(1.05)', cursor: 'grabbing' }}>
+                      <RoomCardContainer room={activeDragRoom}>
+                        {/* Re-render content? Or just basic card? 
+                               We need to render the content to make it look like the actual card being dragged.
+                               Ideally we'd extract the card content to a component, but for now we can't easily replicate
+                               the distinct children logic (Drag batches etc) without refactoring properly.
+                               However, the SortableRoomItem usually wraps the content.
+                               
+                               Wait, the children of RoomCardContainer in the main loop contains the batch list.
+                               If we don't render that, the drag overlay will be empty/different. 
+    
+                               For now, let's render a "Collapsed" version or just the Title/Header style 
+                               because dragging a huge list is heavy. 
+                               But the user expects the card.
+                           */}
+                        <div style={{ padding: '1rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#2d3748' }}>{activeDragRoom.name}</h3>
+                            </div>
+                            {(() => {
+                              const typeStyles: Record<string, { label: string, color: string, bg: string }> = {
+                                vegetation: { label: 'VEGETACIÓN', color: '#22543d', bg: '#c6f6d5' },
+                                flowering: { label: 'FLORA', color: '#975a16', bg: '#fbd38d' },
+                                drying: { label: 'SECADO', color: '#c05621', bg: '#fffaf0' },
+                                curing: { label: 'CURADO', color: '#c05621', bg: '#fffaf0' },
+                                mother: { label: 'MADRES', color: '#553c9a', bg: '#e9d8fd' },
+                                clones: { label: 'ESQUEJERA', color: '#234e52', bg: '#b2f5ea' },
+                                germination: { label: 'GERMINACIÓN', color: '#7b341e', bg: '#feebc8' },
+                                living_soil: { label: 'LIVING SOIL', color: '#155724', bg: '#d4edda' },
+                              };
+                              const style = typeStyles[activeDragRoom.type] || { label: activeDragRoom.type?.toUpperCase() || 'SALA', color: '#4a5568', bg: '#e2e8f0' };
+                              return (
+                                <span style={{ fontSize: '0.8rem', fontWeight: 800, padding: '0.2rem 0.5rem', borderRadius: '0.2rem', background: style.bg, color: style.color }}>
+                                  {style.label}
+                                </span>
+                              );
+                            })()}
+                          </div>
+                          <div style={{ fontSize: '0.9rem', color: '#718096' }}>
+                            <FaClock style={{ marginRight: '0.4rem' }} /> Arrastra y soltá para reordenar las salas
+                          </div>
+                        </div>
+                      </RoomCardContainer>
+                    </div>
+                  ) : activeDragBatch ? (
                     <div style={{
                       padding: '0.5rem', background: 'white', border: '1px solid #3182ce',
                       borderRadius: '0.5rem', boxShadow: '0 5px 10px rgba(0,0,0,0.2)',
