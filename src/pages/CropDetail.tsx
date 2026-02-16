@@ -1207,6 +1207,108 @@ const CropDetail: React.FC = () => {
 
 
 
+  const handleOpenFinishModal = (e: React.MouseEvent, room: any) => {
+    e.stopPropagation();
+    setRoomToFinish(room);
+
+    // Initialize yields for each batch
+    const yields: Record<string, number> = {};
+    if (room.batches) {
+      room.batches.forEach((b: any) => {
+        yields[b.id] = 0;
+      });
+    }
+    setHarvestForm({
+      date: new Date().toISOString().split('T')[0],
+      totalWeight: 0,
+      notes: '',
+      dryingDays: 14,
+      dryingConditions: '20°C / 55% HR',
+      batchYields: yields,
+      unit: 'g'
+    });
+    setHarvestPhoto(null);
+    setIsFinishModalOpen(true);
+  };
+
+  const handleConfirmFinish = async () => {
+    if (!roomToFinish || !crop) return;
+
+    // Validate
+    if (Object.values(harvestForm.batchYields).some(v => v < 0)) {
+      alert("Los pesos no pueden ser negativos.");
+      return;
+    }
+
+    try {
+      setIsFinishing(true);
+      const { roomsService } = await import('../services/roomsService');
+      const { dispensaryService } = await import('../services/dispensaryService');
+      const { cropsService } = await import('../services/cropsService');
+
+      let uploadedPhotoUrl = undefined;
+      if (harvestPhoto) {
+        uploadedPhotoUrl = await dispensaryService.uploadHarvestPhoto(harvestPhoto);
+      }
+
+      const batches = roomToFinish.batches || [];
+
+      // Process each batch
+      for (const batch of batches) {
+        const amount = harvestForm.batchYields[batch.id];
+        // Logic handles if amount is missing or invalid in loop
+        if (!amount || amount < 0) continue;
+
+        // 1. Log Harvest
+        const harvestLogId = await cropsService.logHarvest({
+          cropId: crop.id,
+          roomName: roomToFinish.name,
+          amount: amount,
+          unit: harvestForm.unit || 'g',
+          notes: `${harvestForm.notes} - Lote: ${batch.name} (${batch.genetic?.name || 'Unknown'})`
+        });
+
+        if (harvestLogId) {
+          // 2. Create Dispensary Batch
+          try {
+            await dispensaryService.createFromHarvest({
+              cropId: crop.id,
+              harvestLogId: harvestLogId,
+              strainName: batch.genetic?.name || batch.name || 'Unknown Strain',
+              amount: amount,
+              unit: harvestForm.unit || 'g',
+              originalBatchCode: batch.name,
+              photoUrl: uploadedPhotoUrl || undefined
+            });
+
+            // 3. Delete Batch
+            await roomsService.deleteBatch(batch.id);
+          } catch (err) {
+            console.error(`Error creating dispensary batch for ${batch.name}:`, err);
+          }
+        }
+      }
+
+      // Finish Room (Delete)
+      const success = await roomsService.deleteRoom(roomToFinish.id);
+
+      if (success) {
+        setRoomToFinish(null);
+        setIsFinishModalOpen(false); // Close first
+        if (id) await loadRooms(id, 2000); // Wait 2s
+      } else {
+        alert("Error al finalizar la sala.");
+      }
+
+    } catch (error) {
+      console.error("Error finishing room:", error);
+      alert("Error al finalizar la sala.");
+    } finally {
+      setIsFinishing(false);
+    }
+  };
+
+  const [isFinishing, setIsFinishing] = useState(false);
   const [roomToFinish, setRoomToFinish] = useState<any>(null);
   const [isFinishModalOpen, setIsFinishModalOpen] = useState(false);
   const [harvestPhoto, setHarvestPhoto] = useState<File | null>(null);
