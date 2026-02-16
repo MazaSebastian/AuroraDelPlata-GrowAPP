@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import styled from 'styled-components';
 import { tuyaService, TuyaDevice } from '../services/tuyaService';
+import { supabase } from '../services/supabaseClient';
 import { FaLightbulb, FaPlug, FaThermometerHalf, FaTint, FaPowerOff, FaSync, FaExclamationTriangle } from 'react-icons/fa';
 // import { LoadingSpinner } from './LoadingSpinner';
 import { DeviceDetailModal } from './DeviceDetailModal';
@@ -179,7 +180,7 @@ export const TuyaManager: React.FC<TuyaManagerProps> = ({ mode = 'full', roomId,
 
 
     const loadSettings = async () => {
-        const { data } = await import('../services/supabaseClient').then(m => m.supabase!.from('tuya_device_settings').select('*'));
+        const { data } = await supabase!.from('tuya_device_settings').select('*');
         if (data) {
             const map: Record<string, any> = {};
             data.forEach((s: any) => map[s.device_id] = s);

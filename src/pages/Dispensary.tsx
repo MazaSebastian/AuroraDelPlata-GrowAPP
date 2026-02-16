@@ -275,7 +275,7 @@ const Dispensary: React.FC = () => {
     const [editDispensaryModalOpen, setEditDispensaryModalOpen] = useState(false);
     const [batchToEditDispensary, setBatchToEditDispensary] = useState<DispensaryBatch | null>(null);
 
-    const [patients, setPatients] = useState<import('../services/patientsService').Patient[]>([]);
+    const [patients, setPatients] = useState<any[]>([]);
     const [consumptionStats, setConsumptionStats] = useState<{ current: number, limit: number } | null>(null);
     const [genetics, setGenetics] = useState<Genetic[]>([]);
 

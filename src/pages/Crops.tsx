@@ -337,7 +337,7 @@ const Crops: React.FC = () => {
     await Promise.all(cropsData.map(async (crop) => {
       // Fetch tasks and logs in parallel for this crop
       const [tasks, logs] = await Promise.all([
-        import('../services/tasksService').then(m => m.tasksService.getTasksByCropId(crop.id)),
+        tasksService.getTasksByCropId(crop.id),
         dailyLogsService.getLogsByCropId(crop.id)
       ]);
 
