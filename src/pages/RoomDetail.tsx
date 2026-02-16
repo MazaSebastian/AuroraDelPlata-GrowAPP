@@ -1862,8 +1862,7 @@ const RoomDetail: React.FC = () => {
     const loadData = React.useCallback(async (roomId: string, isInitial = false, showLoading = true) => {
         if (showLoading) setLoading(true);
         try {
-            // const { usersService } = await import('../services/usersService');
-            // usersService is now imported statically
+
 
             const loadPromise = async () => {
                 const [roomData, tasksData, usersData, stickiesData, mapsData, metricsResult, geneticsData] = await Promise.all([
