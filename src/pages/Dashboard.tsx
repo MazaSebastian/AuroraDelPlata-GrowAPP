@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { format, differenceInDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { tasksService } from '../services/tasksService';
+import { stickiesService } from '../services/stickiesService';
 
 
 import styled, { keyframes, css } from 'styled-components';
