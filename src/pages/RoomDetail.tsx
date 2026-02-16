@@ -3371,7 +3371,7 @@ const RoomDetail: React.FC = () => {
                                     </StyledActionButton>
                                 )}
                                 <StyledActionButton
-                                    onClick={() => setIsHistoryModalOpen(true)}
+                                    onClick={handleOpenHistory}
                                     $variant="secondary"
                                 >
                                     <FaHistory /> Historial
