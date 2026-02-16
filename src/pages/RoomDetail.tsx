@@ -1730,7 +1730,7 @@ const RoomDetail: React.FC = () => {
             // Artificial delay for UX
             const minDelay = new Promise(resolve => setTimeout(resolve, 800));
 
-            const [result] = await Promise.all([
+            await Promise.all([
                 roomsService.updateBatch(editBatchForm.id, {
                     name: editBatchForm.name,
                     quantity: Number(editBatchForm.quantity),
@@ -1946,19 +1946,7 @@ const RoomDetail: React.FC = () => {
         }
     };
 
-    const handleOpenHistory = async () => {
-        if (!room) return;
-        setHistoryLoading(true);
-        setIsHistoryModalOpen(true);
-        try {
-            const history = await roomsService.getRoomMovements(room.id);
-            setRoomHistory(history);
-        } catch (error) {
-            console.error("Error loading history", error);
-        } finally {
-            setHistoryLoading(false);
-        }
-    };
+
 
     // Click-to-Fill Handler & Plant Detail Trigger
     const handleEditBatchClick = (e: React.MouseEvent, batch: Batch) => {
@@ -2228,7 +2216,7 @@ const RoomDetail: React.FC = () => {
             // Artificial delay for UX
             const minDelay = new Promise(resolve => setTimeout(resolve, 800));
 
-            const [result] = await Promise.all([
+            await Promise.all([
                 roomsService.deleteBatch(batch.id),
                 minDelay
             ]);
