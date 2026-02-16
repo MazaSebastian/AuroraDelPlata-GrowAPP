@@ -10,10 +10,14 @@ import {
   // eachMonthOfInterval removed
   // startOfYear removed
   // endOfYear removed
-  differenceInWeeks,
-  addWeeks,
-  differenceInDays
-} from 'date-fns';
+import {
+    differenceInWeeks,
+    addWeeks,
+    differenceInDays
+  } from 'date-fns';
+import { roomsService } from '../services/roomsService';
+import { dispensaryService } from '../services/dispensaryService';
+import { cropsService } from '../services/cropsService';
 import es from 'date-fns/locale/es';
 import {
   FaArrowLeft,
@@ -1244,9 +1248,6 @@ const CropDetail: React.FC = () => {
 
     try {
       setIsFinishing(true);
-      const { roomsService } = await import('../services/roomsService');
-      const { dispensaryService } = await import('../services/dispensaryService');
-      const { cropsService } = await import('../services/cropsService');
 
       let uploadedPhotoUrl = undefined;
       if (harvestPhoto) {
@@ -1416,7 +1417,6 @@ const CropDetail: React.FC = () => {
   const executeStageChange = async () => {
     if (!pendingStageChange) return;
     const { room, nextStage } = pendingStageChange;
-    const { roomsService } = await import('../services/roomsService');
     const success = await roomsService.updateRoom(room.id, { type: nextStage as any });
 
     if (success) {
@@ -1461,7 +1461,6 @@ const CropDetail: React.FC = () => {
   };
 
   const handleSaveBatchEdit = async () => {
-    const { roomsService } = await import('../services/roomsService');
     const success = await roomsService.updateBatch(batchEditForm.id, {
       name: batchEditForm.name,
       quantity: Number(batchEditForm.quantity),
