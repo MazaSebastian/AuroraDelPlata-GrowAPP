@@ -268,66 +268,18 @@ export const TuyaManager: React.FC<TuyaManagerProps> = ({ mode = 'full', roomId,
                 </Header>
             )}
 
-            {error ? (
-                <div style={{ color: '#e53e3e', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <FaExclamationTriangle /> {error}
-                </div>
-            ) : (
-                <DeviceGrid style={compact ? { gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.5rem' } : undefined}>
-                    {filteredDevices.map(device => {
-                        const switchStatus = device.status.find(s => s.code.startsWith('switch'));
-                        const isSwitch = !!switchStatus;
-                        const isOn = switchStatus ? switchStatus.value : false;
-                        const { temp, hum } = getSensorData(device.status);
-                        const isSensor = temp || hum;
-                        const alert = getAlertStatus(device);
-                        const showControls = mode !== 'sensors';
+            <DeviceGrid style={compact ? { gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.5rem' } : undefined}>
+                {filteredDevices.map(device => {
+                    const switchStatus = device.status.find(s => s.code.startsWith('switch'));
+                    const isSwitch = !!switchStatus;
+                    const isOn = switchStatus ? switchStatus.value : false;
+                    const { temp, hum } = getSensorData(device.status);
+                    const isSensor = temp || hum;
+                    const alert = getAlertStatus(device);
+                    const showControls = mode !== 'sensors';
 
-                        // Compact Card Rendering
-                        if (compact) {
-                            return (
-                                <DeviceCard
-                                    key={device.id}
-                                    $online={device.online}
-                                    onClick={() => isSensor && setSelectedDevice(device)}
-                                    style={{
-                                        cursor: isSensor ? 'pointer' : 'default',
-                                        border: alert ? '1px solid #e53e3e' : '1px solid #e2e8f0',
-                                        background: alert ? '#fff5f5' : 'white',
-                                        flexDirection: 'row',
-                                        alignItems: 'center',
-                                        padding: '0.75rem',
-                                        gap: '1rem',
-                                        minHeight: 'auto'
-                                    }}
-                                >
-                                    <StatusBadge $online={device.online} style={{ top: '0.25rem', right: '0.25rem' }} />
-                                    <div style={{ fontSize: '1.5rem', color: '#4a5568' }}>
-                                        {isSensor ? <FaThermometerHalf /> : isSwitch ? <FaPlug /> : <FaLightbulb />}
-                                    </div>
-                                    <div style={{ flex: 1 }}>
-                                        <div style={{ fontWeight: 'bold', fontSize: '0.9rem', color: '#2d3748', marginBottom: '0.25rem' }}>{device.name}</div>
-                                        {isSensor && (
-                                            <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.85rem' }}>
-                                                {temp && (
-                                                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: '#e53e3e', fontWeight: '600' }}>
-                                                        <FaThermometerHalf /> {typeof temp.value === 'number' ? (temp.value / 10).toFixed(1) : temp.value}°C
-                                                    </span>
-                                                )}
-                                                {hum && (
-                                                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: '#3182ce', fontWeight: '600' }}>
-                                                        <FaTint /> {hum.value}%
-                                                    </span>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-                                    {alert && <FaExclamationTriangle style={{ color: '#e53e3e' }} title={alert} />}
-                                </DeviceCard>
-                            );
-                        }
-
-                        // Full Card Rendering (Existing)
+                    // Compact Card Rendering
+                    if (compact) {
                         return (
                             <DeviceCard
                                 key={device.id}
@@ -335,71 +287,114 @@ export const TuyaManager: React.FC<TuyaManagerProps> = ({ mode = 'full', roomId,
                                 onClick={() => isSensor && setSelectedDevice(device)}
                                 style={{
                                     cursor: isSensor ? 'pointer' : 'default',
-                                    border: alert ? '2px solid #e53e3e' : undefined,
-                                    background: alert ? '#fff5f5' : undefined
+                                    border: alert ? '1px solid #e53e3e' : '1px solid #e2e8f0',
+                                    background: alert ? '#fff5f5' : 'white',
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    padding: '0.75rem',
+                                    gap: '1rem',
+                                    minHeight: 'auto'
                                 }}
                             >
-                                <StatusBadge $online={device.online} />
-                                <DeviceIcon>
+                                <StatusBadge $online={device.online} style={{ top: '0.25rem', right: '0.25rem' }} />
+                                <div style={{ fontSize: '1.5rem', color: '#4a5568' }}>
                                     {isSensor ? <FaThermometerHalf /> : isSwitch ? <FaPlug /> : <FaLightbulb />}
-                                </DeviceIcon>
-                                <DeviceName title={device.name}>{device.name}</DeviceName>
-                                <DeviceInfo>{device.product_name}</DeviceInfo>
-
-                                {/* Sensor Data Display */}
-                                {isSensor && (
-                                    <div style={{ marginTop: '0.5rem' }}>
-                                        {temp && (
-                                            <SensorValue>
-                                                <FaThermometerHalf color="#e53e3e" />
-                                                <span>{(typeof temp.value === 'number') ? (temp.value / 10).toFixed(1) : temp.value}°C</span>
-                                            </SensorValue>
-                                        )}
-                                        {hum && (
-                                            <SensorValue>
-                                                <FaTint color="#3182ce" />
-                                                <span>{hum.value}%</span>
-                                            </SensorValue>
-                                        )}
-                                        {alert && (
-                                            <div style={{
-                                                marginTop: '0.5rem',
-                                                color: '#e53e3e',
-                                                fontSize: '0.8rem',
-                                                fontWeight: 'bold',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: '0.25rem'
-                                            }}>
-                                                <FaExclamationTriangle /> {alert}
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-
-                                {/* Switch Control */}
-                                {isSwitch && showControls && (
-                                    <ControlButton
-                                        $isOn={isOn}
-                                        onClick={(e) => { e.stopPropagation(); handleToggle(device); }}
-                                        disabled={!device.online}
-                                    >
-                                        <FaPowerOff /> {isOn ? 'Encendido' : 'Apagado'}
-                                    </ControlButton>
-                                )}
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                    <div style={{ fontWeight: 'bold', fontSize: '0.9rem', color: '#2d3748', marginBottom: '0.25rem' }}>{device.name}</div>
+                                    {isSensor && (
+                                        <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.85rem' }}>
+                                            {temp && (
+                                                <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: '#e53e3e', fontWeight: '600' }}>
+                                                    <FaThermometerHalf /> {typeof temp.value === 'number' ? (temp.value / 10).toFixed(1) : temp.value}°C
+                                                </span>
+                                            )}
+                                            {hum && (
+                                                <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: '#3182ce', fontWeight: '600' }}>
+                                                    <FaTint /> {hum.value}%
+                                                </span>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                                {alert && <FaExclamationTriangle style={{ color: '#e53e3e' }} title={alert} />}
                             </DeviceCard>
                         );
-                    })}
-                    {filteredDevices.length === 0 && !loading && (
-                        <div style={{ gridColumn: '1/-1', textAlign: 'center', color: '#a0aec0', padding: '1rem', border: '1px dashed #cbd5e0', borderRadius: '0.5rem' }}>
-                            {roomId
-                                ? 'No hay sensor asignado a esta sala.'
-                                : (mode === 'sensors' ? 'No hay sensores disponibles.' : 'No se encontraron dispositivos.')
-                            }
-                        </div>
-                    )}
-                </DeviceGrid>
-            )}
+                    }
+
+                    // Full Card Rendering (Existing)
+                    return (
+                        <DeviceCard
+                            key={device.id}
+                            $online={device.online}
+                            onClick={() => isSensor && setSelectedDevice(device)}
+                            style={{
+                                cursor: isSensor ? 'pointer' : 'default',
+                                border: alert ? '2px solid #e53e3e' : undefined,
+                                background: alert ? '#fff5f5' : undefined
+                            }}
+                        >
+                            <StatusBadge $online={device.online} />
+                            <DeviceIcon>
+                                {isSensor ? <FaThermometerHalf /> : isSwitch ? <FaPlug /> : <FaLightbulb />}
+                            </DeviceIcon>
+                            <DeviceName title={device.name}>{device.name}</DeviceName>
+                            <DeviceInfo>{device.product_name}</DeviceInfo>
+
+                            {/* Sensor Data Display */}
+                            {isSensor && (
+                                <div style={{ marginTop: '0.5rem' }}>
+                                    {temp && (
+                                        <SensorValue>
+                                            <FaThermometerHalf color="#e53e3e" />
+                                            <span>{(typeof temp.value === 'number') ? (temp.value / 10).toFixed(1) : temp.value}°C</span>
+                                        </SensorValue>
+                                    )}
+                                    {hum && (
+                                        <SensorValue>
+                                            <FaTint color="#3182ce" />
+                                            <span>{hum.value}%</span>
+                                        </SensorValue>
+                                    )}
+                                    {alert && (
+                                        <div style={{
+                                            marginTop: '0.5rem',
+                                            color: '#e53e3e',
+                                            fontSize: '0.8rem',
+                                            fontWeight: 'bold',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '0.25rem'
+                                        }}>
+                                            <FaExclamationTriangle /> {alert}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Switch Control */}
+                            {isSwitch && showControls && (
+                                <ControlButton
+                                    $isOn={isOn}
+                                    onClick={(e) => { e.stopPropagation(); handleToggle(device); }}
+                                    disabled={!device.online}
+                                >
+                                    <FaPowerOff /> {isOn ? 'Encendido' : 'Apagado'}
+                                </ControlButton>
+                            )}
+                        </DeviceCard>
+                    );
+                })}
+                {filteredDevices.length === 0 && !loading && !error && (
+                    <div style={{ gridColumn: '1/-1', textAlign: 'center', color: '#a0aec0', padding: '1rem', border: '1px dashed #cbd5e0', borderRadius: '0.5rem' }}>
+                        {roomId
+                            ? 'No hay sensor asignado a esta sala.'
+                            : (mode === 'sensors' ? 'No hay sensores disponibles.' : 'No se encontraron dispositivos.')
+                        }
+                    </div>
+                )}
+            </DeviceGrid>
+
 
             {/* Modal */}
             {selectedDevice && (

@@ -251,8 +251,8 @@ const Sidebar: React.FC = () => {
           <StyledNavLink to="/genetics">
             <FaDna /> Madres
           </StyledNavLink>
-          <StyledNavLink to="/extractions">
-            <FaFlask /> Extracciones
+          <StyledNavLink to="/laboratory">
+            <FaFlask /> Laboratorio
           </StyledNavLink>
 
           <SectionTitle>Gestión</SectionTitle>

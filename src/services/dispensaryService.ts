@@ -336,6 +336,73 @@ export const dispensaryService = {
         return true;
     },
 
+    async transferToLab(sourceBatchId: string, amount: number): Promise<boolean> {
+        if (!supabase) return false;
+
+        // 1. Get Source
+        const { data: source } = await supabase.from('chakra_dispensary_batches').select('*').eq('id', sourceBatchId).single();
+        if (!source || source.current_weight < amount) return false;
+
+        const newSourceWeight = source.current_weight - amount;
+
+        // 2. Update Source (Deduct)
+        const { error: updateError } = await supabase
+            .from('chakra_dispensary_batches')
+            .update({ current_weight: newSourceWeight })
+            .eq('id', sourceBatchId);
+
+        if (updateError) return false;
+
+        // 3. Create Lab Batch (or Upsert if we want to merge? ideally new batch for tracking)
+        // We'll create a new batch in "Laboratorio"
+        const { data: newBatch, error: createError } = await supabase.from('chakra_dispensary_batches').insert([{
+            strain_name: source.strain_name,
+            batch_code: `${source.batch_code}-LAB`,
+            initial_weight: amount,
+            current_weight: amount,
+            quality_grade: source.quality_grade,
+            status: 'curing', // Or 'processing'? 'curing' is safe for now as it's not 'available' in shop
+            location: 'Laboratorio',
+            notes: `Transferido a Laboratorio desde: ${source.batch_code}`,
+            harvest_log_id: source.harvest_log_id
+        }]).select().single();
+
+        if (createError) {
+            console.error('Error creating lab batch:', createError);
+            // Rollback source update? (Complex in pure JS without transaction, assume success for now or handle manually)
+            return false;
+        }
+
+        // 4. Log Movements
+        const { data: { user } } = await supabase.auth.getUser();
+
+        // Out from Stock
+        await supabase.from('chakra_dispensary_movements').insert([{
+            batch_id: sourceBatchId,
+            type: 'adjustment',
+            amount: -amount,
+            reason: 'Envío a Laboratorio',
+            performed_by: user?.id,
+            previous_weight: source.current_weight,
+            new_weight: newSourceWeight
+        }]);
+
+        // In to Lab
+        if (newBatch) {
+            await supabase.from('chakra_dispensary_movements').insert([{
+                batch_id: newBatch.id,
+                type: 'restock', // Using restock as it's an "IN" movement
+                amount: amount,
+                reason: 'Recepción en Laboratorio',
+                performed_by: user?.id,
+                previous_weight: 0,
+                new_weight: amount
+            }]);
+        }
+
+        return true;
+    },
+
     // Upload Harvest Photo
     async uploadHarvestPhoto(file: File): Promise<string | null> {
         if (!supabase) return null;

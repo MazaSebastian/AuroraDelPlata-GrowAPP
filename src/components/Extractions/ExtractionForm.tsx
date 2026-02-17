@@ -9,9 +9,10 @@ interface ExtractionFormProps {
     onClose: () => void;
     onSuccess: () => void;
     initialData?: Extraction;
+    preselectedBatch?: DispensaryBatch;
 }
 
-export const ExtractionForm: React.FC<ExtractionFormProps> = ({ onClose, onSuccess, initialData }) => {
+export const ExtractionForm: React.FC<ExtractionFormProps> = ({ onClose, onSuccess, initialData, preselectedBatch }) => {
     const [sources, setSources] = useState<DispensaryBatch[]>([]);
     // const [loading, setLoading] = useState(true);
 
@@ -45,8 +46,13 @@ export const ExtractionForm: React.FC<ExtractionFormProps> = ({ onClose, onSucce
                 potency: initialData.ratings?.potency || 0,
                 color: initialData.ratings?.color || 0
             });
+        } else if (preselectedBatch) {
+            setSourceId(preselectedBatch.id);
+            // Default input weight to visible/available weight? Or 0?
+            // Maybe convenient to set it to current weight, assuming full processing.
+            setInputWeight(preselectedBatch.current_weight);
         }
-    }, [initialData]);
+    }, [initialData, preselectedBatch]);
 
     const loadSources = async () => {
         try {

@@ -1,8 +1,8 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import styled from 'styled-components';
 import { FaExclamationTriangle } from 'react-icons/fa';
 
-const Overlay = styled.div`
+const Overlay = styled.div<{ $visible: boolean }>`
   position: fixed;
   top: 0;
   left: 0;
@@ -14,28 +14,22 @@ const Overlay = styled.div`
   justify-content: center;
   z-index: 2000;
   backdrop-filter: blur(4px);
-  animation: fadeIn 0.2s ease-out;
-
-  @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
+  opacity: ${p => p.$visible ? 1 : 0};
+  transition: opacity 0.3s ease-in-out;
+  pointer-events: ${p => p.$visible ? 'auto' : 'none'};
 `;
 
-const Content = styled.div`
+const Content = styled.div<{ $visible: boolean }>`
   background: white;
   padding: 2rem;
   border-radius: 1rem;
   width: 90%;
   max-width: 400px;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-  animation: scaleIn 0.2s ease-out;
   text-align: center;
-
-  @keyframes scaleIn {
-    from { transform: scale(0.95); opacity: 0; }
-    to { transform: scale(1); opacity: 1; }
-  }
+  transform: ${p => p.$visible ? 'scale(1)' : 'scale(0.95)'};
+  opacity: ${p => p.$visible ? 1 : 0};
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
   h3 {
     margin-top: 1rem;
@@ -110,6 +104,21 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   isDanger = false,
   isLoading = false
 }) => {
+  const [shouldRender, setShouldRender] = useState(isOpen);
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setShouldRender(true);
+      // Small delay to allow render before transition
+      setTimeout(() => setIsVisible(true), 50);
+    } else {
+      setIsVisible(false);
+      // Wait for transition to finish before unmounting
+      const timer = setTimeout(() => setShouldRender(false), 300);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen]);
 
   // Close on Escape key
   useEffect(() => {
@@ -120,11 +129,11 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
     return () => window.removeEventListener('keydown', handleEsc);
   }, [isOpen, onClose, isLoading]);
 
-  if (!isOpen) return null;
+  if (!shouldRender) return null;
 
   return (
-    <Overlay>
-      <Content>
+    <Overlay $visible={isVisible} onClick={onClose}>
+      <Content $visible={isVisible} onClick={e => e.stopPropagation()}>
         <IconWrapper>
           <FaExclamationTriangle />
         </IconWrapper>
