@@ -24,6 +24,7 @@ import { GroupDetailModal } from '../components/GroupDetailModal';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 
 import { EsquejeraGrid } from '../components/Esquejera/EsquejeraGrid';
+import { PrintableMapReport } from '../components/Esquejera/PrintableMapReport';
 import { LivingSoilGrid } from '../components/LivingSoil/LivingSoilGrid';
 import { LivingSoilBatchModal } from '../components/LivingSoil/LivingSoilBatchModal';
 import { StageSelectionModal } from '../components/LivingSoil/StageSelectionModal';
@@ -68,30 +69,9 @@ const GlobalPrintStyles = createGlobalStyle`
         display: none !important;
     }
 
-    /* DEFAULT: HIDE EVERYTHING to start clean */
-    body * {
-        visibility: hidden;
-    }
-
-    /* ==========================================================================
-       CASE 1: DEFAULT PRINT (Cmd+P or Room Report)
-       Show .printable-report
-       ========================================================================== */
-    .printable-report, .printable-report * {
-        visibility: visible;
-    }
-
-    .printable-report {
-        display: block !important;
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        margin: 0;
-        padding: 0;
-        z-index: 20000;
-        background: white;
-    }
+    /* NOTE: We removed the aggressive 'body * { visibility: hidden }' 
+       because PrintableMapReport now uses a Portal and handles its own isolation 
+       by hiding siblings. This prevents the blank page issue. */
 
     /* ==========================================================================
        CASE 2: MAP PRINT (Triggered by "Imprimir Mapa" button -> class .printing-map)
@@ -6723,73 +6703,15 @@ const RoomDetail: React.FC = () => {
                 currentStage={undefined}
                 count={selectedBatchIds.size}
             />
-            {/* PRINTABLE REPORT SECTION (VISIBLE ONLY ON PRINT, HIDDEN IF PRINTING MAP) */}
+            {/* REPLACE INLINE PRINT LOGIC WITH ROBUST COMPONENT */}
             {!isPrintingMap && (
-                <div className="printable-report">
-                    <style>
-                        {`
-@media print {
-                        .printable-report table { page -break-inside: auto; }
-                        .printable-report tr { page -break-inside: avoid; page -break-after: auto; }
-                        .printable-report thead { display: table-header-group; }
-                        .printable-report tfoot { display: table-footer-group; }
-}
-`}
-                    </style>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '2px solid #000', paddingBottom: '0.5rem' }}>
-                        <h2 style={{ margin: 0 }}>Reporte: {room?.name}</h2>
-                        <div><strong>Fecha:</strong> {new Date().toLocaleDateString()}</div>
-                    </div>
-
-
-
-                    {/* DATA GRID */}
-                    <div>
-                        <h3 style={{ fontSize: '1rem', borderBottom: '1px solid #000', paddingBottom: '0.25rem', marginTop: 0 }}>Detalle de Lotes Activos</h3>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9pt' }}>
-                            <thead>
-                                <tr style={{ background: '#f0f0f0', borderBottom: '1px solid #000' }}>
-                                    <th style={{ padding: '4px', textAlign: 'left', border: '1px solid #ccc' }}>Pos</th>
-                                    <th style={{ padding: '4px', textAlign: 'left', border: '1px solid #ccc' }}>Genética / Lote</th>
-                                    <th style={{ padding: '4px', textAlign: 'center', border: '1px solid #ccc' }}>Cant.</th>
-                                    <th style={{ padding: '4px', textAlign: 'center', border: '1px solid #ccc' }}>Fase</th>
-                                    <th style={{ padding: '4px', textAlign: 'center', border: '1px solid #ccc' }}>Estado</th>
-                                    <th style={{ padding: '4px', textAlign: 'left', border: '1px solid #ccc' }}>Notas / Observaciones</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {(room?.batches || [])
-                                    .filter(b => b.quantity > 0 && (!activeMapId || b.clone_map_id === activeMapId))
-                                    .sort((a, b) => {
-                                        const posA = a.grid_position || "";
-                                        const posB = b.grid_position || "";
-                                        return posA.localeCompare(posB, undefined, { numeric: true, sensitivity: 'base' });
-                                    })
-                                    .map((b, idx) => (
-                                        <tr key={b.id} style={{ borderBottom: '1px solid #eee', background: idx % 2 === 0 ? 'white' : '#f9f9f9' }}>
-                                            <td style={{ padding: '4px', border: '1px solid #ccc', fontWeight: 'bold' }}>{b.grid_position}</td>
-                                            <td style={{ padding: '4px', border: '1px solid #ccc' }}>
-                                                <div style={{ fontWeight: '600' }}>{b.genetic?.name || b.name}</div>
-                                                {b.tracking_code && <div style={{ fontSize: '0.85em', color: '#666' }}>{b.tracking_code}</div>}
-                                            </td>
-                                            <td style={{ padding: '4px', textAlign: 'center', border: '1px solid #ccc' }}>
-                                                {b.quantity}
-                                            </td>
-                                            <td style={{ padding: '4px', textAlign: 'center', border: '1px solid #ccc' }}>
-                                                {b.stage === 'vegetation' ? 'VEG' : 'FLOR'}
-                                            </td>
-                                            <td style={{ padding: '4px', textAlign: 'center', border: '1px solid #ccc' }}>
-                                                {b.has_alert ? '⚠️' : 'OK'}
-                                            </td>
-                                            <td style={{ padding: '4px', border: '1px solid #ccc', maxWidth: '300px', wordWrap: 'break-word' }}>
-                                                {b.notes || ''}
-                                            </td>
-                                        </tr>
-                                    ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
+                <PrintableMapReport
+                    roomName={room?.name || 'Sala'}
+                    mapName={activeMapId ? (cloneMaps.find(m => m.id === activeMapId)?.name || 'Mapa') : 'General'}
+                    rows={activeMapId ? (cloneMaps.find(m => m.id === activeMapId)?.grid_rows || 0) : (room?.grid_rows || 0)}
+                    cols={activeMapId ? (cloneMaps.find(m => m.id === activeMapId)?.grid_columns || 0) : (room?.grid_columns || 0)}
+                    batches={(room?.batches || []).filter(b => b.quantity > 0 && (!activeMapId || b.clone_map_id === activeMapId))}
+                />
             )}
 
         </Container >
