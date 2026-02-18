@@ -5,6 +5,7 @@ import { Batch } from '../../types/rooms';
 import { FaLeaf, FaSearchPlus, FaSearchMinus } from 'react-icons/fa';
 import { getGeneticColor } from '../../utils/geneticColors';
 import { useGridSelection } from '../../hooks/useGridSelection';
+import { createPortal } from 'react-dom';
 
 
 // --- Styled Components ---
@@ -74,6 +75,33 @@ const GridContainer = styled.div<{ rows: number; cols: number; cellSize: number 
       background: #a0aec0;
     }
   }
+
+  @media print {
+    overflow: visible !important;
+    border: 2px solid #000 !important; /* Outer border for the whole grid */
+    box-shadow: none;
+    max-width: none !important;
+    display: grid !important;
+    height: auto !important;
+    width: 100% !important;
+    margin: 0 auto !important;
+    background: transparent !important; /* Allow background to show */
+    padding: 0 !important;
+    
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    
+    /* Force grid to fit page width */
+    grid-template-columns: 30px repeat(${p => p.cols}, 1fr) !important;
+    grid-template-rows: 30px repeat(${p => p.rows}, minmax(30px, auto)) !important;
+    gap: 0 !important;
+    
+    /* Force children to be visible */
+    & > * {
+      visibility: visible !important;
+      /* display: block !important; - Removed to preserve flex on HeaderCell */
+    }
+  }
 `;
 
 const HeaderCell = styled.div<{ cellSize: number }>`
@@ -87,6 +115,14 @@ const HeaderCell = styled.div<{ cellSize: number }>`
   font-size: ${p => p.cellSize < 40 ? '0.6rem' : '0.85rem'};
   width: 100%;
   height: 100%;
+
+  @media print {
+    border: 1px solid #000 !important;
+    color: #000 !important;
+    background: #e2e8f0 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 `;
 
 const CellStyled = styled.div<{ $isOver?: boolean; $isOccupied?: boolean; $geneticColor?: string; $isPainting?: boolean; $isSelected?: boolean; cellSize: number }>`
@@ -112,6 +148,22 @@ const CellStyled = styled.div<{ $isOver?: boolean; $isOccupied?: boolean; $genet
   transition: all 0.2s;
   cursor: ${p => p.$isOccupied || p.$isPainting ? 'pointer' : 'default'};
   overflow: hidden;
+
+  @media print {
+    border: 1px solid #000 !important;
+    color: #000 !important;
+    background: ${p => p.$isOccupied ? (p.$geneticColor || '#ffffff') : '#ffffff'} !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    overflow: visible !important;
+    
+    /* Ensure content inside doesn't disappear */
+    * {
+      color: #000 !important;
+      text-shadow: none !important;
+      visibility: visible !important;
+    }
+  }
 
   &:hover {
     border-color: ${p => p.$isPainting && !p.$isOccupied ? '#48bb78' : '#3182ce'};
@@ -175,17 +227,29 @@ const BatchItem = ({ batch, onClick, cellSize }: { batch: Batch; onClick?: (e: R
         const x = rect.left + rect.width / 2;
         const y = rect.top;
 
-        // Clear any pending hide
+        // Clear any pending unmount/hide
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
 
-        setTooltip({ visible: true, x, y });
+        // Delay show to prevent flickering/accidental popups
+        timeoutRef.current = setTimeout(() => {
+            setTooltip({ visible: true, x, y });
+        }, 500);
     };
 
     const handleMouseLeave = () => {
-        setTooltip(prev => prev ? { ...prev, visible: false } : null);
-        timeoutRef.current = setTimeout(() => {
-            setTooltip(null);
-        }, 200);
+        // Clear pending show if mouse leaves before delay
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+
+        setTooltip(prev => {
+            if (!prev) return null; // If not showing yet, ensure it stays null
+
+            // If it was showing, fade out then unmount
+            timeoutRef.current = setTimeout(() => {
+                setTooltip(null);
+            }, 200);
+
+            return { ...prev, visible: false };
+        });
     };
 
     // Hide details if too small
@@ -200,11 +264,12 @@ const BatchItem = ({ batch, onClick, cellSize }: { batch: Batch; onClick?: (e: R
                 >
                     <div style={{ width: '80%', height: '80%', background: getGeneticColor(batch.genetic?.name || '').bg, borderRadius: '50%' }} />
                 </BatchItemStyled>
-                {tooltip && (
+                {tooltip && createPortal(
                     <TooltipContainer visible={tooltip.visible} x={tooltip.x} y={tooltip.y}>
                         <div style={{ fontWeight: 'bold', color: '#2f855a' }}>{batch.tracking_code}</div>
                         <div style={{ fontSize: '0.8rem', color: '#718096' }}>{batch.genetic?.name}</div>
-                    </TooltipContainer>
+                    </TooltipContainer>,
+                    document.body
                 )}
             </>
         );
@@ -232,20 +297,44 @@ const BatchItem = ({ batch, onClick, cellSize }: { batch: Batch; onClick?: (e: R
                     </span>
                 )}
             </BatchItemStyled>
-            {tooltip && (
-                <div style={{ position: 'fixed', left: 0, top: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 9999 }}>
-                    <TooltipContainer visible={tooltip.visible} x={tooltip.x} y={tooltip.y}>
-                        <div style={{ fontWeight: 'bold', color: '#2f855a', marginBottom: '0.25rem' }}>{batch.tracking_code || batch.name}</div>
-                        <div style={{ fontSize: '0.8rem', color: '#4a5568', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem' }}>
-                            <FaLeaf size={10} color="#48bb78" /> {batch.genetic?.name}
+            {tooltip && createPortal(
+                <TooltipContainer visible={tooltip.visible} x={tooltip.x} y={tooltip.y}>
+                    <div style={{ fontWeight: 'bold', color: '#2f855a', marginBottom: '0.25rem' }}>{batch.tracking_code || batch.name}</div>
+
+                    <div style={{ fontSize: '0.8rem', color: '#4a5568', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem', marginBottom: '0.25rem' }}>
+                        <FaLeaf size={10} color="#48bb78" /> {batch.genetic?.name}
+                    </div>
+
+                    <div style={{ fontSize: '0.75rem', color: '#2d3748', marginBottom: '0.25rem' }}>
+                        Etapa: <strong>{
+                            (() => {
+                                const stageMap: Record<string, string> = {
+                                    'seedling': 'Plántula',
+                                    'vegetation': 'Vegetación',
+                                    'flowering': 'Floración',
+                                    'drying': 'Secado',
+                                    'curing': 'Curado',
+                                    'completed': 'Finalizado',
+                                    'clones': 'Clones/Esquejes'
+                                };
+                                return stageMap[batch.stage] || (batch.stage.charAt(0).toUpperCase() + batch.stage.slice(1));
+                            })()
+                        }</strong>
+                    </div>
+
+                    {batch.notes && (
+                        <div style={{ fontSize: '0.7rem', color: '#718096', marginBottom: '0.25rem', fontStyle: 'italic', maxWidth: '180px', whiteSpace: 'normal', margin: '0 auto' }}>
+                            "{batch.notes.length > 60 ? batch.notes.substring(0, 60) + '...' : batch.notes}"
                         </div>
-                        {batch.start_date && (
-                            <div style={{ fontSize: '0.7rem', color: '#a0aec0', marginTop: '0.25rem' }}>
-                                {new Date(batch.start_date).toLocaleDateString()}
-                            </div>
-                        )}
-                    </TooltipContainer>
-                </div>
+                    )}
+
+                    {batch.start_date && (
+                        <div style={{ fontSize: '0.7rem', color: '#a0aec0', marginTop: '0.25rem', borderTop: '1px solid #edf2f7', paddingTop: '0.25rem' }}>
+                            {new Date(batch.start_date).toLocaleDateString()}
+                        </div>
+                    )}
+                </TooltipContainer>,
+                document.body
             )}
         </>
     );
@@ -334,9 +423,10 @@ interface EsquejeraGridProps {
     selectionMode?: boolean;
     renderCellActions?: (batch: Batch) => React.ReactNode;
     onSelectionChange?: (selectedIds: Set<string>) => void;
+    onToggleSelectionMode?: (isMode: boolean) => void;
 }
 
-export const EsquejeraGrid: React.FC<EsquejeraGridProps> = ({ rows, cols, batches, onBatchClick, paintingMode = false, selectedBatchIds, selectionMode = false, renderCellActions, onSelectionChange }) => {
+export const EsquejeraGrid: React.FC<EsquejeraGridProps> = ({ rows, cols, batches, onBatchClick, paintingMode = false, selectedBatchIds, selectionMode = false, renderCellActions, onSelectionChange, onToggleSelectionMode }) => {
     // Map batches by position "A1" -> Batch
     const batchMap = React.useMemo(() => {
         const map: Record<string, Batch> = {};
@@ -356,35 +446,54 @@ export const EsquejeraGrid: React.FC<EsquejeraGridProps> = ({ rows, cols, batche
         isAdditive,
         handleMouseDown,
         handleMouseEnter,
-        getSelectionRect
+        getSelectionRect,
+        reset
     } = useGridSelection();
 
     // Effect to commit selection
     React.useEffect(() => {
-        if (!isDragging && dragStart && dragEnd && selectionMode) {
+        if (!isDragging && dragStart && dragEnd) {
             const rect = getSelectionRect();
-            if (!rect) return;
+            if (!rect) {
+                reset(); // Reset if no rect
+                return;
+            }
 
             const { startRow, endRow, startCol, endCol } = rect;
-            const selectionInRect = new Set<string>();
 
-            for (let r = startRow; r <= endRow; r++) {
-                for (let c = startCol; c <= endCol; c++) {
-                    const pos = `${getRowLabel(r)}${c + 1}`;
-                    const batch = batchMap[pos];
-                    if (batch) selectionInRect.add(batch.id);
+            // Logic to determine if we should commit the selection
+            const isSingleCell = startRow === endRow && startCol === endCol;
+            const shouldCommit = selectionMode || isAdditive || !isSingleCell;
+
+            if (shouldCommit) {
+                const selectionInRect = new Set<string>();
+
+                for (let r = startRow; r <= endRow; r++) {
+                    for (let c = startCol; c <= endCol; c++) {
+                        const pos = `${getRowLabel(r)}${c + 1}`;
+                        const batch = batchMap[pos];
+                        if (batch) selectionInRect.add(batch.id);
+                    }
+                }
+
+                if (isAdditive && selectedBatchIds) {
+                    const combined = new Set(selectedBatchIds);
+                    selectionInRect.forEach(id => combined.add(id));
+                    onSelectionChange?.(combined);
+                } else {
+                    onSelectionChange?.(selectionInRect);
+                }
+
+                // If we committed a drag selection effectively, ensure selection mode is ON
+                if (!selectionMode && onToggleSelectionMode) {
+                    onToggleSelectionMode(true);
                 }
             }
 
-            if (isAdditive && selectedBatchIds) {
-                const combined = new Set(selectedBatchIds);
-                selectionInRect.forEach(id => combined.add(id));
-                onSelectionChange?.(combined);
-            } else {
-                onSelectionChange?.(selectionInRect);
-            }
+            // CRITICAL: Reset selection state to prevent infinite loop
+            reset();
         }
-    }, [isDragging, dragStart, dragEnd, isAdditive, selectedBatchIds, batchMap, onSelectionChange, selectionMode, getSelectionRect]);
+    }, [isDragging, dragStart, dragEnd, isAdditive, selectedBatchIds, batchMap, onSelectionChange, selectionMode, getSelectionRect, onToggleSelectionMode, reset]);
 
     // Calculate Selection Box Style using CSS Grid Area
     const getSelectionBoxStyle = () => {
@@ -435,13 +544,23 @@ export const EsquejeraGrid: React.FC<EsquejeraGridProps> = ({ rows, cols, batche
 
     return (
         <div>
+            {/* Print Debug Indicator */}
+            <div className="print-debug-indicator" style={{ display: 'none', color: 'red', fontWeight: 'bold', fontSize: '20px', padding: '10px' }}>
+                DEBUG: ESQUEJERA GRID RENDERED ({rows}x{cols})
+            </div>
+            <style>{`
+                @media print {
+                    .print-debug-indicator { display: block !important; }
+                }
+            `}</style>
+
             <ControlsContainer>
                 <ZoomButton onClick={handleZoomOut} title="Alejar"><FaSearchMinus /></ZoomButton>
                 <ZoomLabel>{cellSize}px</ZoomLabel>
                 <ZoomButton onClick={handleZoomIn} title="Acercar"><FaSearchPlus /></ZoomButton>
             </ControlsContainer>
 
-            <GridContainer rows={rows} cols={cols} cellSize={cellSize} style={{ position: 'relative' }} className="noselect">
+            <GridContainer rows={Number(rows)} cols={Number(cols)} cellSize={cellSize} style={{ position: 'relative' }} className="noselect">
                 {/* Selection Box Overlay */}
                 {isDragging && dragStart && dragEnd && (
                     <div style={getSelectionBoxStyle() || {}} />
@@ -475,13 +594,15 @@ export const EsquejeraGrid: React.FC<EsquejeraGridProps> = ({ rows, cols, batche
                             return (
                                 <div
                                     key={pos}
-                                    onMouseDown={(e) => selectionMode && handleMouseDown(rIndex, cIndex, e)}
-                                    onMouseEnter={() => selectionMode && handleMouseEnter(rIndex, cIndex)}
+                                    onMouseDown={(e) => handleMouseDown(rIndex, cIndex, e)}
+                                    onMouseEnter={() => handleMouseEnter(rIndex, cIndex)}
                                     style={{
                                         width: '100%',
                                         height: '100%',
                                         gridRow: rIndex + 2,
-                                        gridColumn: cIndex + 2
+                                        gridColumn: cIndex + 2,
+                                        // Debug border for print to verify grid cell placement
+                                        // border: '1px dotted red' 
                                     }}
                                 >
                                     <GridCell
@@ -490,7 +611,7 @@ export const EsquejeraGrid: React.FC<EsquejeraGridProps> = ({ rows, cols, batche
                                         batch={batch}
                                         onClick={(batch) => onBatchClick(batch, pos)}
                                         // Highlight if selected OR if in drag area (visual feedback)
-                                        isSelected={isSel || (inDrag && selectionMode)}
+                                        isSelected={isSel || inDrag}
                                         renderActions={renderCellActions}
                                         cellSize={cellSize}
                                     />

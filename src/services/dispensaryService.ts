@@ -138,6 +138,46 @@ export const dispensaryService = {
         return true;
     },
 
+    async deleteBatchesWithReason(batchIds: string[], reason: string): Promise<boolean> {
+        if (!supabase || batchIds.length === 0) return false;
+
+        // 1. Get current data for logs
+        const { data: batches } = await supabase
+            .from('chakra_dispensary_batches')
+            .select('*')
+            .in('id', batchIds);
+
+        if (!batches || batches.length === 0) return false;
+
+        // 2. Bulk Soft Delete
+        const { error } = await supabase
+            .from('chakra_dispensary_batches')
+            .update({ status: 'depleted', current_weight: 0 })
+            .in('id', batchIds);
+
+        if (error) {
+            console.error('Error deleting batches:', error);
+            return false;
+        }
+
+        // 3. Bulk Log
+        const { data: { user } } = await supabase.auth.getUser();
+        const movements = batches.map(batch => ({
+            batch_id: batch.id,
+            type: 'adjustment', // Using 'adjustment' to fit enum if 'disposal' not present, user requested it. Logic follows deleteBatchWithReason.
+            amount: -(batch.current_weight),
+            reason: `Baja Masiva: ${reason}`,
+            performed_by: user?.id,
+            previous_weight: batch.current_weight,
+            new_weight: 0
+        }));
+
+        const { error: logError } = await supabase.from('chakra_dispensary_movements').insert(movements);
+        if (logError) console.error('Error logging movements:', logError);
+
+        return true;
+    },
+
     // REPLACED deleteBatch with Soft Delete to preserve history
     async deleteBatchWithReason(batchId: string, reason: string): Promise<boolean> {
         if (!supabase) return false;

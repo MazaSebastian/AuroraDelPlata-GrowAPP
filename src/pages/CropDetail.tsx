@@ -900,7 +900,7 @@ const CropDetail: React.FC = () => {
   };
   const [roomForm, setRoomForm] = useState<{
     name: string;
-    type: 'vegetation' | 'flowering' | 'drying' | 'curing' | 'clones' | 'germination' | 'mother' | 'living_soil';
+    type: 'vegetation' | 'flowering' | 'drying' | 'curing' | 'clones' | 'germination' | 'mother' | 'living_soil' | '';
     medium?: 'maceta' | 'bandeja' | 'bunker';
     totalMacetas?: number;
     macetaGeneticId?: string;
@@ -909,7 +909,7 @@ const CropDetail: React.FC = () => {
     tablesList?: { id: string; name: string }[]; // For Esquejera/Clones if complex
   }>({
     name: '',
-    type: 'vegetation',
+    type: '',
     medium: 'maceta', // default
     totalMacetas: 0,
     macetaGeneticId: '',
@@ -1151,9 +1151,13 @@ const CropDetail: React.FC = () => {
 
     if (isCreatingRoom) return;
 
-    if (!roomForm.name || !id || (!roomForm.operationalDays && roomForm.type !== 'living_soil')) {
-      console.error("Missing name, ID, or operational days");
-      showToast("Por favor completa el nombre de la sala y los días de funcionamiento.", 'error');
+    if (!roomForm.name || !id || !roomForm.type || (!roomForm.operationalDays && roomForm.type !== 'living_soil')) {
+      console.error("Missing name, ID, type, or operational days");
+      if (!roomForm.type) {
+        showToast("Por favor selecciona una Fase de Cultivo.", 'error');
+        return;
+      }
+      showToast("Por favor completa todos los campos requeridos.", 'error');
       return;
     }
 
@@ -2009,7 +2013,7 @@ const CropDetail: React.FC = () => {
                               )}
 
                               {/* ESQUEJERA SUMMARY */}
-                              {geneticBreakdown && (
+                              {geneticBreakdown && room.type !== 'clones' && (
                                 <div style={{ marginTop: '0.5rem', padding: '0.5rem', background: '#ebf8ff', borderRadius: '0.5rem', border: '1px solid #bee3f8' }}>
                                   <strong style={{ display: 'block', fontSize: '0.8rem', color: '#2b6cb0', marginBottom: '0.25rem' }}>Resumen por Genética:</strong>
                                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
@@ -2022,124 +2026,60 @@ const CropDetail: React.FC = () => {
                                 </div>
                               )}
 
-                              {/* Assigned Batch Info - SMART GROUPING REPLACEMENT */}
-                              {room.batches && room.batches.length > 0 && (
-                                <div
-                                  onClick={(e) => e.stopPropagation()} // Stop navigation when clicking in batch area
-                                  style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.25rem', fontSize: '0.9rem', color: '#4a5568', background: '#f7fafc', padding: '0.5rem', borderRadius: '0.5rem' }}
-                                >
-                                  {(() => {
-                                    // Smart Grouping Logic
-                                    const groupedBatches = groupBatchesByGeneticDateRoom(room.batches);
-                                    const visibleGroups = expandedRooms[room.id] ? groupedBatches : groupedBatches.slice(0, 5);
+                              {/* Summary Info: Plants & Genetics/Batches */}
+                              {room.batches && room.batches.length > 0 && (() => {
+                                const isDrying = room.type === 'drying' || room.type === 'drying_room' || room.type === 'curing'; // Check both just in case
+                                // For drying, we count all batches in the room (assuming active). For others, only those assigned to a map position.
+                                const activeBatches = isDrying
+                                  ? room.batches
+                                  : room.batches.filter((b: any) => b.clone_map_id);
 
-                                    return (
-                                      <>
-                                        {visibleGroups.map((group: any) => (
-                                          <BatchGroupRow
-                                            key={group.root.id}
-                                            group={group}
-                                            expanded={expandedBatchGroups.has(group.root.id)}
-                                            onToggleExpand={() => toggleBatchGroupExpansion(group.root.id)}
-                                            childrenRender={(batch: any) => (
-                                              <DraggableBatchRow
-                                                key={batch.id}
-                                                batch={batch}
-                                                isSelected={selectedBatchIds.has(batch.id)}
-                                                onToggleSelect={toggleBatchSelection}
-                                              >
-                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px dashed #e2e8f0', paddingBottom: '0.25rem', marginBottom: '0.25rem' }}>
-                                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                    <FaBarcode color="#4a5568" size={12} />
-                                                    <span style={{ display: 'flex', alignItems: 'center', gap: '5px', minWidth: 0, flex: 1 }}>
-                                                      <strong style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{batch.name}</strong> <span style={{ color: '#718096', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>({batch.quantity}u)</span>
-                                                    </span>
-                                                  </div>
-                                                  <div style={{ display: 'flex', gap: '5px' }}>
-                                                    <Tooltip text="Editar Datos del Lote">
-                                                      <button
-                                                        onPointerDown={(e) => e.stopPropagation()} // Prevent Drag
-                                                        onClick={(e) => handleEditBatchClick(e, batch)}
-                                                        style={{
-                                                          background: 'white', border: '1px solid #e2e8f0', borderRadius: '4px',
-                                                          color: '#3182ce', cursor: 'pointer', fontSize: '0.8rem', padding: '0.2rem',
-                                                          display: 'flex', alignItems: 'center'
-                                                        }}
-                                                      >
-                                                        <FaEdit size={12} />
-                                                      </button>
-                                                    </Tooltip>
-                                                    <Tooltip text="Eliminar Lote">
-                                                      <button
-                                                        onPointerDown={(e) => e.stopPropagation()} // Prevent Drag
-                                                        onClick={(e) => handleDeleteBatchClick(e, batch)}
-                                                        style={{
-                                                          background: 'white', border: '1px solid #fed7d7', borderRadius: '4px',
-                                                          color: '#e53e3e', cursor: 'pointer', fontSize: '0.8rem', padding: '0.2rem',
-                                                          display: 'flex', alignItems: 'center'
-                                                        }}
-                                                      >
-                                                        <FaTrash size={12} />
-                                                      </button>
-                                                    </Tooltip>
-                                                    <Tooltip text="Ver Código QR / Pasaporte">
-                                                      <button
-                                                        onPointerDown={(e) => e.stopPropagation()} // Prevent Drag
-                                                        onClick={(e) => {
-                                                          e.stopPropagation();
-                                                          const passportUrl = `${window.location.origin}/passport/${batch.id}`;
-                                                          setQrValue(passportUrl);
-                                                          setQrTitle(`QR: ${batch.name}`);
-                                                          setQrModalOpen(true);
-                                                        }}
-                                                        style={{
-                                                          background: 'white',
-                                                          border: '1px solid #e2e8f0',
-                                                          borderRadius: '4px',
-                                                          color: '#4a5568',
-                                                          cursor: 'pointer',
-                                                          fontSize: '0.7rem',
-                                                          padding: '0.1rem 0.4rem',
-                                                          fontWeight: 600
-                                                        }}
-                                                      >
-                                                        QR
-                                                      </button>
-                                                    </Tooltip>
-                                                  </div>
-                                                </div>
-                                              </DraggableBatchRow>
-                                            )}
-                                          />
-                                        ))}
+                                const totalPlants = activeBatches.reduce((acc: number, b: any) => acc + (b.quantity || 0), 0);
 
-                                        {/* Show "Ver todos" based on GROUPS count, not batches */}
-                                        {groupedBatches.length > 5 && (
-                                          <button
-                                            onClick={(e) => toggleRoomExpansion(room.id, e)}
-                                            style={{
-                                              border: 'none',
-                                              background: 'none',
-                                              color: '#3182ce',
-                                              fontSize: '0.8rem',
-                                              fontWeight: 600,
-                                              cursor: 'pointer',
-                                              marginTop: '0.25rem',
-                                              display: 'flex',
-                                              alignItems: 'center',
-                                              justifyContent: 'center',
-                                              width: '100%',
-                                              padding: '0.25rem'
-                                            }}
-                                          >
-                                            {expandedRooms[room.id] ? 'Ver menos' : `Ver todos (${groupedBatches.length} lotes)`}
-                                          </button>
-                                        )}
-                                      </>
-                                    );
-                                  })()}
-                                </div>
-                              )}
+                                const secondMetricValue = isDrying
+                                  ? (() => {
+                                    const uniqueBatches = new Set();
+                                    activeBatches.forEach((b: any) => {
+                                      const date = b.created_at ? new Date(b.created_at).toISOString().slice(0, 16) : 'unknown';
+                                      uniqueBatches.add(`${b.genetic?.id || b.name}-${date}`);
+                                    });
+                                    return uniqueBatches.size;
+                                  })()
+                                  : new Set(activeBatches.map((b: any) => b.genetic?.name || b.genetic_name || 'Desconocida')).size;
+
+                                const secondMetricLabel = isDrying ? 'Lotes' : 'Variedades';
+
+                                return (
+                                  <div style={{
+                                    marginTop: '0.75rem',
+                                    padding: '0.75rem',
+                                    background: '#f7fafc',
+                                    borderRadius: '0.5rem',
+                                    display: 'flex',
+                                    justifyContent: 'space-around',
+                                    alignItems: 'center',
+                                    border: '1px solid #edf2f7'
+                                  }}>
+                                    {/* Total Plants */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                      <span style={{ fontSize: '1.25rem', fontWeight: 800, color: '#2f855a' }}>
+                                        {totalPlants}
+                                      </span>
+                                      <span style={{ fontSize: '0.75rem', color: '#718096', fontWeight: 600, textTransform: 'uppercase' }}>Plantas</span>
+                                    </div>
+
+                                    <div style={{ width: '1px', height: '24px', background: '#cbd5e0' }}></div>
+
+                                    {/* Total Varieties or Batches */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                      <span style={{ fontSize: '1.25rem', fontWeight: 800, color: '#dd6b20' }}>
+                                        {secondMetricValue}
+                                      </span>
+                                      <span style={{ fontSize: '0.75rem', color: '#718096', fontWeight: 600, textTransform: 'uppercase' }}>{secondMetricLabel}</span>
+                                    </div>
+                                  </div>
+                                );
+                              })()}
 
                               {/* Environmental Data (Placeholders for TUYA API) */}
                               <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px dashed #e2e8f0', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -2153,54 +2093,7 @@ const CropDetail: React.FC = () => {
                                 </div>
                               </div>
 
-                              {/* Countdown To Flora */}
-                              {daysToFlip !== null && (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#4a5568', fontSize: '0.9rem', marginTop: '0.25rem' }}>
-                                  <FaClock size={14} color="#ed8936" />
-                                  <span>
-                                    {daysToFlip > 0
-                                      ? <span>Pasa a Flora en: <strong>{daysToFlip} días</strong></span>
-                                      : <span style={{ color: '#e53e3e', fontWeight: 600 }}>¡Listo para pasar a Flora!</span>
-                                    }
-                                  </span>
-                                </div>
-                              )}
-                              {/* We could add Sensor data here if available */}
-
-                              {/* LIFE CYCLE PROGRESS BAR */}
-                              {(room.type === 'vegetation' || room.type === 'flowering') && activeBatchForCycle && (
-                                <div style={{ marginTop: '0.5rem' }}>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: '#718096', marginBottom: '2px' }}>
-                                    <span>Inicio</span>
-                                    <span>Cosecha Est.</span>
-                                  </div>
-                                  <div style={{ position: 'relative', height: '10px', width: '100%', background: '#edf2f7', borderRadius: '5px', overflow: 'hidden' }}>
-                                    {/* Vege Segment */}
-                                    <div style={{
-                                      position: 'absolute', left: 0, top: 0, bottom: 0,
-                                      width: `${vegeWidth}%`, background: '#c6f6d5',
-                                      borderRight: '1px solid white'
-                                    }} title="Fase Vegetativa Estimada" />
-
-                                    {/* Flora Segment */}
-                                    <div style={{
-                                      position: 'absolute', left: `${vegeWidth}%`, top: 0, bottom: 0,
-                                      width: `${floraWidth}%`, background: '#fbd38d'
-                                    }} title="Fase de Floración Estimada" />
-
-                                    {/* Current Progress Indicator */}
-                                    <div style={{
-                                      position: 'absolute',
-                                      left: 0, top: 0, bottom: 0,
-                                      width: `${currentStageProgress}%`,
-                                      background: 'rgba(0,0,0,0.15)', // Shadow overlay to show progress
-                                      borderRight: '2px solid #2d3748',
-                                      transition: 'width 0.5s ease-out'
-                                    }} />
-                                  </div>
-
-                                </div>
-                              )}
+                              {/* Countdown and Progress Bar hidden per user request */}
 
                               {/* Footer Actions: Stage Controls + Utility Buttons */}
                               <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px dashed #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>

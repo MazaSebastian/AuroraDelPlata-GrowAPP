@@ -1,3 +1,5 @@
+import { Genetic } from './genetics';
+
 export type RoomType = 'vegetation' | 'flowering' | 'drying' | 'curing' | 'mother' | 'clones' | 'general' | 'germination' | 'living_soil';
 export type BatchStage = 'seedling' | 'vegetation' | 'flowering' | 'drying' | 'curing' | 'completed';
 
@@ -31,8 +33,6 @@ export interface CloneMap {
     position_y?: number; // For Freestyle Layout (Vegetation)
     created_at?: string;
 }
-
-import { Genetic } from './genetics';
 
 export interface Batch {
     id: string;

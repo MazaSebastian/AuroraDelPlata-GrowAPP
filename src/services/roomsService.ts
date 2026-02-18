@@ -23,7 +23,7 @@ export const roomsService = {
     async getRooms(spotId?: string): Promise<Room[]> {
         let query = getClient()
             .from('rooms')
-            .select('*, batches(*, genetic:genetics(*), parent_batch:batches!parent_batch_id(name)), spot:chakra_crops(name), clone_maps(*)')
+            .select('*, batches:batches!current_room_id(*, genetic:genetics(*), parent_batch:batches!parent_batch_id(name)), spot:chakra_crops(name), clone_maps(*)')
             .order('order_index', { ascending: true })
             .order('name', { ascending: true });
 
@@ -197,6 +197,17 @@ export const roomsService = {
     },
 
     async deleteCloneMap(id: string): Promise<void> {
+        // 1. Soft delete associated batches (set discarded_at) to prevent them from appearing as orphans
+        const { error: batchError } = await getClient()
+            .from('batches')
+            .update({ discarded_at: new Date().toISOString() })
+            .eq('clone_map_id', id);
+
+        if (batchError) {
+            console.error('Error discarding batches for map:', batchError);
+        }
+
+        // 2. Delete the map
         const { error } = await getClient()
             .from('clone_maps')
             .delete()
@@ -443,7 +454,7 @@ export const roomsService = {
         for (let i = 0; i < batchIds.length; i += CHUNK_SIZE) {
             const chunk = batchIds.slice(i, i + CHUNK_SIZE);
 
-            const { error } = await getClient()
+            const { data: updatedData, error } = await getClient()
                 .from('batches')
                 .update({
                     discarded_at: new Date().toISOString(),
@@ -452,11 +463,17 @@ export const roomsService = {
                     clone_map_id: null,
                     grid_position: null
                 })
-                .in('id', chunk);
+                .in('id', chunk)
+                .select();
 
             if (error) {
                 console.error(`Error soft deleting batches chunk ${i} - ${i + CHUNK_SIZE}:`, error);
                 hasError = true;
+            } else {
+                console.log(`Chunk ${i}: Requested ${chunk.length} deletions. Updated ${updatedData?.length || 0} rows.`);
+                if (!updatedData || updatedData.length === 0) {
+                    console.warn("WARNING: Update returned 0 rows. Check RLS or IDs.", chunk);
+                }
             }
         }
 

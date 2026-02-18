@@ -9,6 +9,24 @@ import { useGridSelection } from '../../hooks/useGridSelection';
 
 // --- Styled Components ---
 
+const GridWrapper = styled.div`
+  position: relative;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100%;
+
+  @media print {
+    display: block !important;
+    position: static !important;
+    height: auto !important;
+    min-height: 0 !important;
+    width: 100% !important;
+    overflow: visible !important;
+  }
+`;
+
 const ControlsContainer = styled.div`
   display: flex;
   align-items: center;
@@ -52,7 +70,9 @@ const GridContainer = styled.div<{ rows: number; cols: number; cellSize: number 
   grid-auto-rows: ${p => Number(p.cellSize)}px; 
   gap: ${p => p.cellSize < 40 ? '1px' : '4px'}; /* Pixel Perfect Gap */
   overflow: auto;
+  overscroll-behavior: contain; /* Prevent chaining to parent */
   max-width: 100%;
+  max-height: 75vh; /* Restricted height for internal scrolling */
   padding: 1rem;
   background: #f8fafc;
   border-radius: 1rem;
@@ -80,8 +100,14 @@ const GridContainer = styled.div<{ rows: number; cols: number; cellSize: number 
     overflow: visible !important;
     border: none;
     box-shadow: none;
-    max-width: none;
+    max-width: none !important;
+    max-height: none !important;
     display: grid !important;
+    height: auto !important;
+    width: 100% !important; /* Reverted max-content to 100% to avoid overflow issues */
+    margin: 0 auto !important;
+    background: transparent !important;
+    padding: 0 !important;
   }
 `;
 
@@ -96,7 +122,35 @@ const HeaderCell = styled.div<{ cellSize: number }>`
   font-size: ${p => p.cellSize < 40 ? '0.6rem' : '0.85rem'};
   width: 100%;
   height: 100%;
+  position: sticky;
+  z-index: 10;
+  
   /* No margin needed with real grid-gap */
+
+  @media print {
+    border: 1px solid #000;
+    color: #000;
+    background: #f0f0f0 !important;
+    -webkit-print-color-adjust: exact;
+  }
+`;
+
+const RowHeaderCell = styled(HeaderCell)`
+  left: 0;
+  z-index: 20; /* Higher than content */
+`;
+
+const ColHeaderCell = styled(HeaderCell)`
+  top: 0;
+  z-index: 20;
+`;
+
+const CornerCell = styled(HeaderCell)`
+  position: sticky;
+  top: 0;
+  left: 0;
+  z-index: 30; /* Highest priority */
+  background: #e2e8f0;
 `;
 
 const getStageBorderColor = (stage: BatchStage | undefined) => {
@@ -175,6 +229,19 @@ const CellStyled = styled.div<{ $isOver?: boolean; $isOccupied?: boolean; $stage
     transform: ${p => p.cellSize < 40 ? 'none' : 'translateY(-2px)'};
     box-shadow: ${p => p.cellSize < 40 ? 'none' : '0 4px 6px rgba(0,0,0,0.1)'};
     border-color: ${p => p.$isSelected ? '#276749' : '#3182ce'};
+  }
+
+  @media print {
+    border: 1px solid #000 !important;
+    color: #000 !important;
+    background: ${p => p.$isOccupied ? (p.$geneticColor || '#ffffff') : 'transparent'} !important;
+    -webkit-print-color-adjust: exact;
+    
+    /* Ensure content inside doesn't disappear */
+    * {
+      color: #000 !important;
+      text-shadow: none !important;
+    }
   }
 `;
 
@@ -452,6 +519,10 @@ interface LivingSoilGridProps {
 }
 
 export const LivingSoilGrid: React.FC<LivingSoilGridProps> = ({ rows, cols, batches, onBatchClick, selectedBatchIds, onSelectionChange, isSelectionMode, onToggleSelectionMode, mapId }) => {
+
+    // Create Ref for internal grid scrolling
+    const gridContainerRef = React.useRef<HTMLDivElement>(null);
+
     // Helper to calculate zoom based on grid size
     const calculateZoom = (c: number, r: number) => {
         if (c > 25) return 20; // High Density
@@ -529,7 +600,7 @@ export const LivingSoilGrid: React.FC<LivingSoilGridProps> = ({ rows, cols, batc
         handleMouseEnter,
         getSelectionRect,
         reset
-    } = useGridSelection();
+    } = useGridSelection(gridContainerRef);
 
     // Reset internal selection state when mode changes
     useEffect(() => {
@@ -741,8 +812,10 @@ export const LivingSoilGrid: React.FC<LivingSoilGridProps> = ({ rows, cols, batc
             } else {
                 onSelectionChange?.(selectionInRect);
             }
+
+            reset();
         }
-    }, [isDragging, dragStart, dragEnd, isAdditive, selectedBatchIds, getBatchIdAt, onSelectionChange, getSelectionRect]);
+    }, [isDragging, dragStart, dragEnd, isAdditive, selectedBatchIds, getBatchIdAt, onSelectionChange, getSelectionRect, reset]);
 
     // --- Auto-Selection Trigger on Drag (Desktop Style) ---
     const [potentialDragStart, setPotentialDragStart] = useState<{ x: number, y: number, clientX: number, clientY: number } | null>(null);
@@ -901,15 +974,7 @@ export const LivingSoilGrid: React.FC<LivingSoilGridProps> = ({ rows, cols, batc
     }, [rows, cols, cellSize, batchesMap, selectedBatchIds, isSelectionMode, dragStartPx, handleCellClick, handleCellEnter, handleCellLeave]);
 
     return (
-        <div
-            style={{
-                position: 'relative',
-                width: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                minHeight: '100%' // Ensure it takes height for click area
-            }}
+        <GridWrapper
             onClick={(e) => {
                 // Expanded Background Click Logic
                 // If not clicking on a button or interactive element (handled by stopPropagation there),
@@ -930,7 +995,7 @@ export const LivingSoilGrid: React.FC<LivingSoilGridProps> = ({ rows, cols, batc
             {/* Tooltip Portal */}
             {hoveredBatch && <FloatingTooltip batch={hoveredBatch.batch} x={hoveredBatch.x} y={hoveredBatch.y} isVisible={tooltipVisible} />}
 
-            <ControlsContainer onClick={e => e.stopPropagation()}>
+            <ControlsContainer className="no-print-map-controls" onClick={e => e.stopPropagation()}>
                 <ZoomButton onClick={handleZoomOut} title="Alejar"><FaSearchMinus /></ZoomButton>
                 <ZoomLabel>{cellSize}px</ZoomLabel>
                 <ZoomButton onClick={handleZoomIn} title="Acercar"><FaSearchPlus /></ZoomButton>
@@ -963,6 +1028,6 @@ export const LivingSoilGrid: React.FC<LivingSoilGridProps> = ({ rows, cols, batc
                 )}
                 {grid}
             </GridContainer>
-        </div>
+        </GridWrapper>
     );
 };

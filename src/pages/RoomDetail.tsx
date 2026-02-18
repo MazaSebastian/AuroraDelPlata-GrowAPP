@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import { useAuth } from '../context/AuthContext';
-import { FaArrowLeft, FaThermometerHalf, FaPlus, FaCalendarAlt, FaSeedling, FaMapMarkedAlt, FaExchangeAlt, FaExpandArrowsAlt, FaStickyNote, FaTrash, FaHistory, FaDna, FaClock, FaCheck, FaExclamationTriangle, FaPrint, FaCut, FaPen, FaEdit, FaChevronDown, FaTasks, FaTimes, FaSpinner, FaChevronLeft, FaChevronRight, FaCircleNotch } from 'react-icons/fa';
+import { FaArrowLeft, FaThermometerHalf, FaPlus, FaCalendarAlt, FaSeedling, FaMapMarkedAlt, FaExchangeAlt, FaExpandArrowsAlt, FaStickyNote, FaTrash, FaHistory, FaDna, FaClock, FaCheck, FaExclamationTriangle, FaPrint, FaCut, FaPen, FaEdit, FaChevronDown, FaTasks, FaTimes, FaSpinner, FaChevronLeft, FaChevronRight, FaCircleNotch, FaLeaf, FaSpa } from 'react-icons/fa';
 // FaExclamationTriangle, FaTint, FaCut, FaSkull, FaLeaf, FaFlask, FaBroom
 import {
     format, startOfWeek, endOfWeek, startOfMonth, endOfMonth,
@@ -23,14 +23,16 @@ import { Task, StickyNote, RecurrenceConfig } from '../types';
 import { GroupDetailModal } from '../components/GroupDetailModal';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 
-// import { EsquejeraGrid } from '../components/Esquejera/EsquejeraGrid';
+import { EsquejeraGrid } from '../components/Esquejera/EsquejeraGrid';
 import { LivingSoilGrid } from '../components/LivingSoil/LivingSoilGrid';
 import { LivingSoilBatchModal } from '../components/LivingSoil/LivingSoilBatchModal';
 import { StageSelectionModal } from '../components/LivingSoil/StageSelectionModal';
 import { DndContext, DragEndEvent, useSensor, useSensors, MouseSensor, TouchSensor, pointerWithin, useDraggable, useDroppable, DragOverlay } from '@dnd-kit/core';
 import { getGeneticColor } from '../utils/geneticColors';
-import { Batch, CloneMap } from '../types/rooms';
+import { Batch, CloneMap, BatchStage } from '../types/rooms';
 import { Genetic } from '../types/genetics';
+
+
 
 import { ConfirmationModal } from '../components/ConfirmationModal';
 
@@ -46,126 +48,35 @@ import { createGlobalStyle } from 'styled-components';
 // Handles hiding the report on screen, and hiding everything ELSE on print.
 const GlobalPrintStyles = createGlobalStyle`
 @media screen {
-    .printable-area {
-        display: none!important;
-    }
-    .printable-map-details {
-        display: none !important;
-    }
+    .printable-area { display: none!important; }
+    .printable-map-details { display: none !important; }
+    .printable-report { display: none; }
 }
 
 @media print {
     @page { size: landscape; margin: 10mm; }
 
-    /* Hide everything by default using a class-based approach + broad selectors */
-    .no-print, nav, aside, header, footer,
-    /* Also hide direct children of root that aren't the print area if needed, 
-       but here we rely on the extensive use of .no-print class */
-    .Toastify {
-        display: none!important;
-    }
-
+    /* RESET */
     body {
+        margin: 0; padding: 0;
         background: white;
-        margin: 0;
-        padding: 0;
         -webkit-print-color-adjust: exact;
     }
-
-    .printable-area {
-        display: block!important;
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        z-index: 9999;
-        background: white;
-    }
-
-    /* SPECIFIC MAP PRINT STYLES */
-    /* Use visibility to hide everything but keep the active map */
-    body.printing-map {
-        visibility: hidden;
-    }
-
-    body.printing-map .active-map-container {
-        visibility: visible;
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        background: white;
-        z-index: 10000;
-        padding: 20px;
-        /* SCALING TO FIT PAGE */
-        zoom: 60%; /* Simple zoom for browsers that support it */
-        transform-origin: top left;
-        display: block;
-    }
     
-    /* Ensure all children of the map are visible */
-    body.printing-map .active-map-container * {
-        visibility: visible;
-    }
-
-    /* Hide specific controls even if they are inside the visible container */
-    body.printing-map .no-print-map-controls {
+    /* Hide common non-print elements */
+    .no-print, nav, aside, header, footer, .Toastify, .no-print-map-header, .no-print-map-controls {
         display: none !important;
     }
-    
-    body.printing-map .map-grid-item {
-        break-inside: avoid;
-        border: 1px solid #000 !important;
-        color: black !important;
-    }
 
-    body.printing-map .printable-map-grid {
-        overflow: visible !important;
-        width: 100% !important;
-        display: block !important;
-    }
-    
-    body.printing-map .printable-map-grid > div {
-         overflow: visible !important;
-         width: 100% !important;
-    }
-
-    /* PRINT DETAIL TABLE STYLES */
-    body.printing-map .printable-map-details {
-        display: block !important;
-        margin-top: 2rem;
-        page-break-before: auto;
-    }
-
-    body.printing-map .printable-map-details table {
-        width: 100%;
-        page-break-inside: auto;
-    }
-
-    body.printing-map .printable-map-details tr {
-        page-break-inside: avoid;
-        page-break-after: auto;
-    }
-    
-    body.printing-map .printable-map-details th,
-    body.printing-map .printable-map-details td {
-        color: black !important;
-        border-color: #000 !important;
-    }
-
-    /* NEW PRINTABLE REPORT STYLES */
-    .printable-report {
-        display: none;
-    }
-}
-@media print {
-    /* Hide EVERYTHING by default */
+    /* DEFAULT: HIDE EVERYTHING to start clean */
     body * {
         visibility: hidden;
     }
-    
-    /* Show only our report and its children */
+
+    /* ==========================================================================
+       CASE 1: DEFAULT PRINT (Cmd+P or Room Report)
+       Show .printable-report
+       ========================================================================== */
     .printable-report, .printable-report * {
         visibility: visible;
     }
@@ -181,13 +92,89 @@ const GlobalPrintStyles = createGlobalStyle`
         z-index: 20000;
         background: white;
     }
+
+    /* ==========================================================================
+       CASE 2: MAP PRINT (Triggered by "Imprimir Mapa" button -> class .printing-map)
+       ========================================================================== */
     
-    /* Reset body margin/padding for print */
-    @page { margin: 10mm; }
-    body {
-        margin: 0;
-        padding: 0;
-        overflow: visible !important; /* Allow scroll if content is long */
+    /* 1. AGGRESSIVELY HIDE REPORT when printing map */
+    body.printing-map .printable-report {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        width: 0 !important;
+        height: 0 !important;
+        overflow: hidden !important;
+        position: static !important; /* Break absolute positioning */
+        z-index: -1000 !important;
+    }
+
+    /* 2. SHOW ACTIVE MAP CONTAINER */
+    body.printing-map .active-map-container {
+        visibility: visible !important;
+        display: block !important;
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: white;
+        z-index: 10000;
+    }
+
+    /* Show all children of active map container */
+    body.printing-map .active-map-container * {
+        visibility: visible !important;
+    }
+
+    /* Except controls that are inside it */
+    body.printing-map .active-map-container .no-print,
+    body.printing-map .active-map-container button {
+        display: none !important;
+    }
+
+    /* Map Grid Styles */
+    body.printing-map .printable-map-grid {
+        visibility: visible !important;
+        display: block !important;
+        width: 100% !important;
+        border: 2px solid #000 !important;
+        page-break-after: always;
+        margin-bottom: 2rem;
+    }
+
+    body.printing-map .printable-map-grid * {
+        visibility: visible !important;
+        color: #000 !important;
+        border-color: #000 !important;
+    }
+    
+    body.printing-map .map-grid-item {
+        break-inside: avoid;
+        border: 1px solid #000 !important;
+    }
+
+    /* Map Details Table Styles */
+    body.printing-map .printable-map-details {
+        display: block !important;
+        visibility: visible !important;
+        margin-top: 1rem;
+    }
+    
+    body.printing-map .printable-map-details * {
+        visibility: visible !important;
+        color: black !important;
+    }
+    
+    body.printing-map .printable-map-details table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    
+    body.printing-map .printable-map-details th,
+    body.printing-map .printable-map-details td {
+        border: 1px solid #000 !important;
     }
 }
 `;
@@ -452,6 +439,66 @@ flex-direction: column;
 @media(max-width: 768px) {
     padding: 1rem;
 }
+`;
+
+// New Styled Components for Interactive Elements
+const StageButton = styled.button<{ isActive: boolean }>`
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 1rem 0.5rem;
+    background: ${p => p.isActive ? '#48bb78' : 'white'};
+    color: ${p => p.isActive ? 'white' : '#718096'};
+    border: ${p => p.isActive ? '1px solid #48bb78' : '1px solid #e2e8f0'};
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 600;
+    font-size: 0.9rem;
+    box-shadow: ${p => p.isActive ? '0 4px 6px rgba(72, 187, 120, 0.2)' : 'none'};
+
+    &:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        border-color: ${p => p.isActive ? '#48bb78' : '#cbd5e0'};
+    }
+`;
+
+const spin = keyframes`
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+`;
+
+const ButtonSpinner = styled.div`
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top: 2px solid white;
+  border-radius: 50%;
+  width: 1rem;
+  height: 1rem;
+  animation: ${spin} 1s linear infinite;
+`;
+
+const ModalActionButton = styled.button<{ variant?: 'primary' | 'danger' | 'secondary', disabled?: boolean }>`
+    background: ${p => p.variant === 'primary' ? '#48bb78' : p.variant === 'danger' ? 'white' : 'white'};
+    color: ${p => p.variant === 'primary' ? 'white' : p.variant === 'danger' ? '#e53e3e' : '#4a5568'};
+    border: ${p => p.variant === 'danger' ? '1px solid #feb2b2' : p.variant === 'secondary' ? '1px solid #e2e8f0' : 'none'};
+    padding: 0.5rem 1.5rem;
+    border-radius: 0.5rem;
+    font-weight: 600;
+    cursor: ${p => p.disabled ? 'not-allowed' : 'pointer'};
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.2s;
+    opacity: ${p => p.disabled ? 0.7 : 1};
+
+    &:hover {
+        background: ${p => p.disabled ? (p.variant === 'primary' ? '#48bb78' : 'white') : p.variant === 'primary' ? '#38a169' : p.variant === 'danger' ? '#fff5f5' : '#f7fafc'};
+        transform: ${p => p.disabled ? 'none' : 'translateY(-1px)'};
+        box-shadow: ${p => p.disabled ? 'none' : '0 2px 4px rgba(0,0,0,0.1)'};
+    }
 `;
 
 
@@ -726,8 +773,14 @@ const DraggableStockBatch = ({ batch, onClick }: { batch: Batch, onClick?: () =>
         >
             <div>
                 <div style={{ fontWeight: 'bold', fontSize: '0.8rem', color: '#2d3748' }}>{geneticName}</div>
+                {batch.tracking_code && (
+                    <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#2f855a' }}>
+                        {batch.tracking_code}
+                    </div>
+                )}
                 <div style={{ fontSize: '0.7rem', color: '#718096' }}>
-                    {batch.start_date ? format(new Date(batch.start_date), 'dd/MM/yyyy') : (batch.tracking_code || batch.name)}
+                    {/* Prefer batch.name as it contains the "burned" date string which is correct, avoiding timezone shifts */}
+                    {batch.name || (batch.start_date ? format(new Date(batch.start_date), 'dd/MM/yy HH:mm') : '')}
                 </div>
             </div>
             <div style={{
@@ -774,7 +827,7 @@ const DraggableGenetic = ({ genetic }: { genetic: Genetic }) => {
 
 
 // --- SIDEBAR GROUPING UTILS ---
-const groupBatchesByGeneticDate = (batches: Batch[]) => {
+const groupBatchesByGeneticDate = (batches: Batch[], groupByGenetic: boolean = false) => {
     // 1. Identify Roots & Orphans
     const batchMap = new Map();
     batches.forEach(b => batchMap.set(b.id, { ...b, children: [] }));
@@ -813,16 +866,26 @@ const groupBatchesByGeneticDate = (batches: Batch[]) => {
         if (groupMatch) {
             // Priority Grouping by "Grupo: X"
             const groupName = groupMatch[1].trim();
-            const key = `GROUP | ${groupName} `;
+            const key = `GROUP|${groupName}`;
+            if (!groupMap.has(key)) {
+                groupMap.set(key, []);
+            }
+            groupMap.get(key)!.push(group);
+        } else if (groupByGenetic) {
+            // Automatic Grouping by GENETIC (for Drying Rooms)
+            const geneticName = root.genetic?.name || root.name || 'Desconocida';
+            // Use genetic name + TIME (Minute) as key to separate batches created same day but different runs
+            const timeStr = new Date(root.created_at).toISOString().slice(0, 16);
+            const key = `GENETIC|${geneticName}|${timeStr}`;
+
             if (!groupMap.has(key)) {
                 groupMap.set(key, []);
             }
             groupMap.get(key)!.push(group);
         } else {
-            // Default Grouping
-            const dateKey = new Date(root.start_date || root.created_at).toLocaleDateString();
-            // Key: GeneticID | Date
-            const key = `${root.genetic_id || 'unk'}| ${dateKey} `;
+            // Default Grouping - DISABLED to prevent unwanted merging.
+            // Treat each batch as unique unless explicitly grouped via notes.
+            const key = `UNIQUE|${root.id}`;
 
             if (!groupMap.has(key)) {
                 groupMap.set(key, []);
@@ -832,10 +895,8 @@ const groupBatchesByGeneticDate = (batches: Batch[]) => {
     });
 
     groupMap.forEach((bundledGroups, key) => {
-        // If it's a Custom Group, we merge EVERYTHING under that name
-        if (key.startsWith('GROUP|')) {
-            const groupName = key.split('|')[1];
-
+        // If it's a Custom Group or Genetic, we merge
+        if (key.startsWith('GROUP|') || key.startsWith('GENETIC|')) {
             // Sort by name inside the group for consistency?
             bundledGroups.sort((a, b) => a.root.name.localeCompare(b.root.name));
 
@@ -843,32 +904,22 @@ const groupBatchesByGeneticDate = (batches: Batch[]) => {
             const rest = bundledGroups.slice(1);
             const mergedChildren = [...primary.children];
 
+            // Only force name for Custom Groups. For Genetic groups, let the view decide (Lote #...)
+            if (key.startsWith('GROUP|')) {
+                const groupName = key.split('|')[1];
+                primary.root._virtualGroupName = groupName;
+            }
+
             rest.forEach(g => {
                 mergedChildren.push(g.root);
                 mergedChildren.push(...g.children);
             });
 
-            // We need a "Fake Root" or use the primary one but Override the Name display?
-            // Let's attach a special property to the root or handle it in the renderer?
-            // The renderer uses `root.name` or smart logic. 
-            // Let's modify the root's `displayName` property if we could, but these are raw objects.
-            // Best way: The SidebarBatchGroup component logic needs to be aware of this scope.
-            // OR we attach a "virtual name" to the root object here.
-
-            // Important: Use the first batch as root, but we must signal that this is a "Named Group"
-            // We can inject a property into the root object (it's a copy effectively in usage or we mutate it carefully)
-            // Actually `roots` are references to objects in memory. Mutating them might be risky if reused.
-            // But valid for this render cycle.
-
-            // Let's create a proxy root for the group?
-            // Currently `SidebarBatchGroup` takes `{ root, children } `.
-            // We can pass `{ root: { ...primary.root, _virtualGroupName: groupName }, children: mergedChildren } `
-
+            // Push merged group
             smartGroups.push({
-                root: { ...primary.root, _virtualGroupName: groupName },
+                root: primary.root, // _virtualGroupName already set if applicable
                 children: mergedChildren
             });
-
         } else {
             // Standard Logic
             if (bundledGroups.length === 1) {
@@ -901,20 +952,16 @@ const SidebarBatchGroup = ({ group, expanded, onToggleExpand, childrenRender, on
 
 
     const totalQty = root.quantity + children.reduce((acc: number, c: any) => acc + c.quantity, 0);
-    const displayDate = new Date(root.start_date || root.created_at).toLocaleDateString();
-
     // Custom Name Logic
     let displayName = root.name;
 
-    // Check for Virtual Group Name (Custom Grouping from Transplant)
+    // Check for Virtual Group Name
     if (root._virtualGroupName) {
         displayName = root._virtualGroupName;
     } else {
-        if (true) { // Default Smart Naming
-            const geneticName = root.genetic?.name || root.name || 'Desconocida';
-            const prefix = geneticName.substring(0, 6).toUpperCase();
-            displayName = `Lote ${prefix} ${displayDate} `;
-        }
+        // Use the saved name (which has the correct time string) and prepend the code
+        const codePart = root.tracking_code ? `Lote ${root.tracking_code} - ` : '';
+        displayName = `${codePart}${root.name}`;
     }
 
     const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
@@ -1168,7 +1215,7 @@ const RoomDetail: React.FC = () => {
     const [newBatch, setNewBatch] = useState({
         geneticId: '',
         quantity: '',
-        date: new Date().toISOString().split('T')[0]
+        date: new Date().toISOString()
     });
     const [genetics, setGenetics] = useState<any[]>([]);
 
@@ -1335,6 +1382,67 @@ const RoomDetail: React.FC = () => {
     const [bulkEditForm, setBulkEditForm] = useState({ stage: '', notes: '' });
     const [isUpdatingMap, setIsUpdatingMap] = useState(false);
 
+    // --- Change Phase Modal State (New) ---
+    const [isChangePhaseModalOpen, setIsChangePhaseModalOpen] = useState(false);
+    const [changePhaseForm, setChangePhaseForm] = useState({ stage: '' as BatchStage | '', notes: '' });
+
+    // Handle Change Phase Submit (Adapter for Bulk Edit Logic)
+    const handleChangePhaseSubmit = async () => {
+        if (!room) return;
+        setIsUpdatingMap(true); // Reuse loading state
+        try {
+            const updates = Array.from(selectedBatchIds).map(async (batchId) => {
+                const currentBatch = room.batches?.find(b => b.id === batchId);
+                if (!currentBatch) return;
+
+                const updates: any = {};
+                // Only update if changed/set
+                if (changePhaseForm.stage) updates.stage = changePhaseForm.stage;
+                // Notes: If empty string, do we clear? Or only if explicit?
+                // For simplicity, always update note if user opened this modal
+                updates.notes = changePhaseForm.notes;
+
+                const { error } = await supabase
+                    .from('batches')
+                    .update(updates)
+                    .eq('id', batchId);
+
+                if (error) throw error;
+
+                // Log History
+                await supabase.from('room_history').insert({
+                    room_id: room.id,
+                    batch_id: batchId,
+                    user_id: user?.id, // Assuming user context is available
+                    action: 'update',
+                    notes: `Cambio de fase a ${changePhaseForm.stage || 'sin cambio'}: ${changePhaseForm.notes}`
+                });
+            });
+
+            await Promise.all(updates);
+
+            // Refresh
+            const { data: updatedRoom } = await supabase
+                .from('rooms')
+                .select('*, batches(*, genetic:genetics(*))')
+                .eq('id', room.id)
+                .single();
+
+            if (updatedRoom) setRoom(updatedRoom);
+
+            // Close
+            setIsChangePhaseModalOpen(false);
+            setIsSelectionMode(false);
+            setSelectedBatchIds(new Set());
+
+        } catch (error) {
+            console.error("Error updating phase:", error);
+            alert("Error al actualizar la fase");
+        } finally {
+            setIsUpdatingMap(false);
+        }
+    };
+
     const closeEditMapModal = () => {
         setIsClosingEditMap(true);
         setTimeout(() => {
@@ -1460,6 +1568,18 @@ const RoomDetail: React.FC = () => {
     });
     const [isUpdatingBatch, setIsUpdatingBatch] = useState(false);
 
+    // Print State Control
+    const [isPrintingMap, setIsPrintingMap] = useState(false);
+
+    // Ref for detecting clicks outside map for deselection
+    const mapContainerRef = useRef<HTMLDivElement>(null);
+    const toolbarRef = useRef<HTMLDivElement>(null);
+
+
+
+
+
+    const [isRelocatingSelection, setIsRelocatingSelection] = useState(false);
     const [isClosingEditBatch, setIsClosingEditBatch] = useState(false);
 
     const closeEditBatchModal = () => {
@@ -1563,12 +1683,10 @@ const RoomDetail: React.FC = () => {
     // HARVEST CONFIRM HANDLER
     const handleHarvestConfirm = async (selectedBatchIds: string[], targetRoomId?: string) => {
         try {
-            // Use dedicated harvest service
             await roomsService.harvestBatches(selectedBatchIds, targetRoomId);
-
             showToast('Cosecha registrada correctamente', 'success');
-            if (id) await loadData(id);
-            setHarvestTargetMapId(null);
+
+            // Reload data after delay
             if (id) await loadData(id);
 
         } catch (error) {
@@ -1703,7 +1821,7 @@ const RoomDetail: React.FC = () => {
 
                                 await roomsService.updateBatch(batchId, {
                                     stage: 'vegetation',
-                                    notes: '', // CLEAR: Ensure batch has no label ("LIMPIO")
+                                    notes: `[Grupo: ${group.name}]`, // Tag for grouping in destination room based on Transplant Wizard
                                     current_room_id: destinationRoomId,
                                     clone_map_id: null,
                                     grid_position: null
@@ -1877,8 +1995,8 @@ const RoomDetail: React.FC = () => {
                 return { roomData, tasksData, usersData, stickiesData, mapsData, metricsResult, geneticsData };
             };
 
-            const minTimePromise = isInitial
-                ? new Promise(resolve => setTimeout(resolve, 1500))
+            const minTimePromise = (showLoading || isInitial)
+                ? new Promise(resolve => setTimeout(resolve, 3000))
                 : Promise.resolve();
 
             const [results] = await Promise.all([
@@ -1988,42 +2106,134 @@ const RoomDetail: React.FC = () => {
     });
 
     // ... existing handleBatchClick ...
+
+
     const handleBatchClick = async (batch: Batch | null, position?: string) => {
-        // 1. Relocation Logic (If actively moving a batch)
+        // 1. RELOCATION LOGIC (Selection)
+        if (isRelocatingSelection) {
+            if (!position || !room || !activeMapId) return;
+
+            // Execute Bulk Move
+            const activeMap = cloneMaps.find(m => m.id === activeMapId);
+            if (!activeMap) return;
+
+            // Get selected batches objects
+            const batchesToMove = room.batches?.filter(b => selectedBatchIds.has(b.id)) || [];
+            if (batchesToMove.length === 0) return;
+
+            // 1. Find Anchor (Top-Left)
+            let minR = Infinity;
+            let minC = Infinity;
+
+            // Helper to parse "A1" -> r, c
+            const parsePos = (posStr: string) => {
+                const match = posStr.match(/^([A-Z]+)(\d+)$/);
+                if (!match) return { r: 0, c: 0 };
+                // Assume single letter row for now or use getRowIndex logic
+                const r = match[1].charCodeAt(0) - 65;
+                const c = parseInt(match[2], 10) - 1;
+                return { r, c };
+            };
+
+            batchesToMove.forEach(b => {
+                if (b.grid_position) {
+                    const { r, c } = parsePos(b.grid_position);
+                    if (r < minR) minR = r;
+                    if (c < minC) minC = c;
+                }
+            });
+
+            // Target Position
+            const { r: targetR, c: targetC } = parsePos(position);
+
+            const rowDelta = targetR - minR;
+            const colDelta = targetC - minC;
+
+            // 2. Calculate New Positions and Validate
+            const updates: { id: string, newPos: string }[] = [];
+            const occupiedPositions = new Set(
+                room.batches?.filter(b => b.clone_map_id === activeMapId && !selectedBatchIds.has(b.id))
+                    .map(b => b.grid_position)
+            );
+
+            for (const b of batchesToMove) {
+                if (!b.grid_position) continue;
+                const { r, c } = parsePos(b.grid_position);
+                const newR = r + rowDelta;
+                const newC = c + colDelta;
+
+                // Check Bounds
+                if (newR < 0 || newR >= activeMap.grid_rows || newC < 0 || newC >= activeMap.grid_columns) {
+                    showToast("La reubicación excede los límites del mapa.", 'error');
+                    return;
+                }
+
+                const newPosStr = `${String.fromCharCode(65 + newR)}${newC + 1}`;
+
+                // Check Collisions
+                if (occupiedPositions.has(newPosStr)) {
+                    showToast(`Conflicto en la posición ${newPosStr}. La celda está ocupada.`, 'error');
+                    return;
+                }
+
+                updates.push({ id: b.id, newPos: newPosStr });
+            }
+
+            // 3. Execute
+            setLoading(true);
+            try {
+                const promises = updates.map(u =>
+                    roomsService.updateBatch(u.id, { grid_position: u.newPos }, user?.id, 'Reubicación en mapa')
+                );
+                await Promise.all(promises);
+
+                showToast(`Se reubicaron ${updates.length} lotes corrextamente.`, 'success');
+                setIsRelocatingSelection(false);
+                setSelectedBatchIds(new Set()); // Clear selection? Or keep it? Clearing is safer visually.
+                if (id) await loadData(id);
+
+            } catch (error) {
+                console.error("Relocation error", error);
+                showToast("Error al reubicar lotes.", 'error');
+            } finally {
+                setLoading(false);
+            }
+            return;
+        }
+
+        // 2. Relocation Logic (Legacy Single Batch Moving)
         if (movingBatch) {
             if (batch) {
                 showToast("La celda destino está ocupada. Selecciona una celda vacía.", 'error');
                 return;
             }
-            // ... move logic ...
             if (position && activeMapId) {
-                // Execute Move
-                // ...
-                // Implementation details for move needing context, not changing now.
+                setMoveConfirm({ isOpen: true, position });
             }
-        } else {
-            // Normal Click
-            if (!batch) {
-                // Empty cell click
-                if (position && activeMapId && (room?.type === 'living_soil' || room?.type === 'clones')) {
-                    setSowingPosition(position);
-                    setIsSowingModalOpen(true);
-                }
-                return;
-            }
-
-            // Bulk Edit Trigger
-            if (isSelectionMode && selectedBatchIds.has(batch.id) && selectedBatchIds.size > 1) {
-                // Open Bulk Edit Modal
-                setBulkEditForm({ stage: '', notes: '' }); // Reset
-                setIsBulkEditModalOpen(true);
-                return;
-            }
-
-            // Standard Single Batch Click
-            setSelectedBatchId(batch.id);
-            setPlantDetailModal({ isOpen: true, batch });
+            return;
         }
+
+        // 3. Normal Selection/Click Interaction
+        if (!batch) {
+            // Empty cell click
+            // ... Sowing Logic ...
+            if (position && activeMapId && (room?.type === 'living_soil' || room?.type === 'clones')) {
+                setSowingPosition(position);
+                setIsSowingModalOpen(true);
+            }
+            return;
+        }
+
+        // Bulk Edit Trigger (Only if NOT relocating)
+        if (isSelectionMode && selectedBatchIds.has(batch.id) && selectedBatchIds.size > 1) {
+            setBulkEditForm({ stage: '', notes: '' });
+            setIsBulkEditModalOpen(true);
+            return;
+        }
+
+        // Standard Single Batch Click
+        setSelectedBatchId(batch.id);
+        setPlantDetailModal({ isOpen: true, batch });
     };
 
     const handleBulkEditSubmit = async () => {
@@ -2126,7 +2336,8 @@ const RoomDetail: React.FC = () => {
                 current_room_id: room.id,
                 clone_map_id: activeMapId,
                 grid_position: sowingPosition,
-                notes: newSowingBatch.notes
+                notes: newSowingBatch.notes,
+                tracking_code: Math.floor(1000 + Math.random() * 9000).toString()
             }, user?.id);
 
             await loadData(room.id);
@@ -2496,7 +2707,8 @@ const RoomDetail: React.FC = () => {
                         current_room_id: room?.id,
                         clone_map_id: activeMapId || undefined,
                         grid_position: position,
-                        notes: 'Creado desde Genetica'
+                        notes: 'Creado desde Genetica',
+                        tracking_code: Math.floor(1000 + Math.random() * 9000).toString()
                     });
                     if (id) await loadData(id);
                 } catch (err) {
@@ -2836,6 +3048,7 @@ const RoomDetail: React.FC = () => {
             if (id) await loadData(id);
 
             closeCreateMapFromGroupModal();
+            setIsCreatingMapFromGroup(false);
             setPendingMapGroup(null);
 
         } catch (e) {
@@ -2994,7 +3207,10 @@ const RoomDetail: React.FC = () => {
         // Prefix logic
         const prefix = (selectedGenetic?.name || 'GEN').substring(0, 3).toUpperCase().replace(/[^A-Z]/g, '');
 
-        let batchName = `${prefix} - ${format(new Date(), 'dd/MM/yy')}`;
+        // Use the selected date (or current time if not changed) for consistency
+        const dateObj = newBatch.date ? new Date(newBatch.date) : new Date();
+        const formattedDate = format(dateObj, 'dd/MM/yy HH:mm');
+        let batchName = `${prefix} - ${formattedDate}`;
 
         // Determine Stage based on Room Type
         let stage: 'seedling' | 'vegetation' | 'flowering' | 'drying' | 'curing' = 'vegetation';
@@ -3002,7 +3218,7 @@ const RoomDetail: React.FC = () => {
         const rType = (room?.type || '').toLowerCase();
         if (['germinacion', 'germinación', 'germination', 'semillero'].includes(rType)) {
             stage = 'seedling';
-            batchName = `SEM - ${prefix} - ${format(new Date(), 'dd/MM/yy')}`;
+            batchName = `SEM - ${prefix} - ${formattedDate}`;
         } else if (['clones', 'esquejes', 'esquejera'].includes(rType)) {
             stage = 'vegetation';
         }
@@ -3013,8 +3229,9 @@ const RoomDetail: React.FC = () => {
             stage: stage,
             current_room_id: room.id,
             genetic_id: newBatch.geneticId,
-            start_date: newBatch.date,
-            parent_batch_id: undefined
+            start_date: newBatch.date, // This matches dateObj
+            parent_batch_id: undefined,
+            tracking_code: Math.floor(1000 + Math.random() * 9000).toString()
         };
 
         try {
@@ -3175,6 +3392,74 @@ const RoomDetail: React.FC = () => {
         }
     }, [id, loadData]);
 
+    // Handle click outside map/toolbar to deselect (Moved here to access all modal states)
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            // Do not deselect if we are in relocation mode
+            if (isRelocatingSelection) return;
+
+            // Do not deselect if any modal is open
+            if (
+                isChangePhaseModalOpen ||
+                isBulkEditModalOpen ||
+                isEditBatchModalOpen ||
+                isObservationModalOpen ||
+                isDeleteMapModalOpen ||
+                isHistoryModalOpen ||
+                isCreateMapFromGroupConfirmOpen ||
+                isDeleteConfirmOpen ||
+                isTaskModalOpen ||
+                isBulkDeleteConfirmOpen ||
+                isSowingModalOpen ||
+                plantDetailModal.isOpen ||
+                isEditModalOpen ||
+                isMapModalOpen ||
+                isEditMapModalOpen ||
+                isCreateBatchModalOpen ||
+                isMetricsModalOpen ||
+                isGroupDetailModalOpen
+            ) return;
+
+            const isOutsideMap = mapContainerRef.current && !mapContainerRef.current.contains(event.target as Node);
+            const isOutsideToolbar = toolbarRef.current && !toolbarRef.current.contains(event.target as Node);
+
+            if (isOutsideMap && isOutsideToolbar) {
+                // If clicking outside map container AND toolbar, clear selection
+                if (selectedBatchIds.size > 0 || isSelectionMode) {
+                    setSelectedBatchIds(new Set());
+                    setIsSelectionMode(false);
+                }
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [
+        selectedBatchIds,
+        isSelectionMode,
+        isRelocatingSelection,
+        isChangePhaseModalOpen,
+        isBulkEditModalOpen,
+        isEditBatchModalOpen,
+        isObservationModalOpen,
+        isDeleteMapModalOpen,
+        isHistoryModalOpen,
+        isCreateMapFromGroupConfirmOpen,
+        isDeleteConfirmOpen,
+        isTaskModalOpen,
+        isBulkDeleteConfirmOpen,
+        isSowingModalOpen,
+        plantDetailModal.isOpen,
+        isEditModalOpen,
+        isMapModalOpen,
+        isEditMapModalOpen,
+        isCreateBatchModalOpen,
+        isMetricsModalOpen,
+        isGroupDetailModalOpen
+    ]);
+
     // Memoized selection for Transplant Modal to prevent infinite loops
     // We must declare this at the top level, not conditionally
     const memoizedTransplantBatchIds = useMemo(() => {
@@ -3186,7 +3471,7 @@ const RoomDetail: React.FC = () => {
 
     // Tables calc removed
 
-    if (loading) return <LoadingSpinner fullScreen text={activeMapId ? "Cargando Mapa..." : "Cargando sala..."} duration={1500} />
+    if (loading) return <LoadingSpinner fullScreen text={activeMapId ? "Cargando Mapa..." : "Cargando sala..."} duration={3000} />
 
     return (
         <Container>
@@ -3221,9 +3506,9 @@ const RoomDetail: React.FC = () => {
                                 const uniqueBatches = new Set();
                                 room.batches.forEach(b => {
                                     if (b.quantity > 0) {
-                                        // Group by Genetic + Date (YYYY-MM-DD) to count logical batches
-                                        const date = b.created_at ? new Date(b.created_at).toISOString().split('T')[0] : 'unknown';
-                                        const key = `${b.genetic_id || b.name} -${date} `;
+                                        // Group by Genetic + Date (Minute Precision) to match visual list
+                                        const date = b.created_at ? new Date(b.created_at).toISOString().slice(0, 16) : 'unknown';
+                                        const key = `${b.genetic_id || b.name}-${date}`;
                                         uniqueBatches.add(key);
                                     }
                                 });
@@ -3392,23 +3677,25 @@ const RoomDetail: React.FC = () => {
                                 >
                                     <FaHistory /> Historial
                                 </StyledActionButton>
-                                <StyledActionButton
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (room) {
-                                            if (room.type === 'flowering') {
-                                                setIsHarvestModalOpen(true);
-                                            } else {
-                                                setTransplantForm({ batchId: '', quantity: 1 }); // Reset form
-                                                handleOpenTransplant(e, room, null); // Open without specific batch
+                                {room?.type !== 'living_soil' && (
+                                    <StyledActionButton
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (room) {
+                                                if (room.type === 'flowering') {
+                                                    setIsHarvestModalOpen(true);
+                                                } else {
+                                                    setTransplantForm({ batchId: '', quantity: 1 }); // Reset form
+                                                    handleOpenTransplant(e, room, null); // Open without specific batch
+                                                }
                                             }
-                                        }
-                                    }}
-                                    $variant={room?.type === 'flowering' ? 'gold' : 'primary'}
-                                >
-                                    {room?.type === 'flowering' ? <FaCut /> : <FaExchangeAlt />}
-                                    {room?.type === 'flowering' ? 'Cosechar' : 'Transplantar'}
-                                </StyledActionButton>
+                                        }}
+                                        $variant={room?.type === 'flowering' ? 'gold' : 'primary'}
+                                    >
+                                        {room?.type === 'flowering' ? <FaCut /> : <FaExchangeAlt />}
+                                        {room?.type === 'flowering' ? 'Cosechar' : 'Transplantar'}
+                                    </StyledActionButton>
+                                )}
                                 <StyledActionButton
                                     onClick={() => setIsEditModalOpen(true)}
                                     $variant="secondary"
@@ -3422,7 +3709,7 @@ const RoomDetail: React.FC = () => {
                         {/* Moved Map Header (Toolbar) Here for Full Width */}
                         {
                             activeMapId && activeMap && (
-                                <div className="no-print-map-header" style={{
+                                <div className="no-print-map-header" ref={toolbarRef} style={{
                                     display: 'flex',
                                     justifyContent: 'space-between',
                                     alignItems: 'center',
@@ -3469,8 +3756,10 @@ const RoomDetail: React.FC = () => {
                                     {/* RIGHT: Actions Toolbar */}
                                     <div className="no-print-map-controls" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 1, height: '100%', justifyContent: 'flex-end' }}>
 
+
+
                                         {/* 1. SELECTION ACTIONS */}
-                                        {isSelectionMode && selectedBatchIds.size > 0 && (
+                                        {selectedBatchIds.size > 0 && (
                                             <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '0.5rem', paddingRight: '0.5rem', borderRight: '1px solid #e2e8f0', flexShrink: 0 }}>
 
                                                 {/* BULK ACTIONS DROPDOWN */}
@@ -3534,20 +3823,47 @@ const RoomDetail: React.FC = () => {
                                                                 <span>Editar</span>
                                                             </button>
 
+                                                            {/* 1.5. CAMBIAR FASE (New) */}
+                                                            <button
+                                                                onClick={() => {
+                                                                    setIsBulkActionsOpen(false);
+                                                                    // Pre-fill logic
+                                                                    let initialStage = '';
+                                                                    let initialNotes = '';
+                                                                    if (selectedBatchIds.size === 1) {
+                                                                        const batchId = Array.from(selectedBatchIds)[0];
+                                                                        const batch = room?.batches?.find(b => b.id === batchId);
+                                                                        if (batch) {
+                                                                            initialStage = batch.stage || '';
+                                                                            initialNotes = batch.notes || '';
+                                                                        }
+                                                                    }
+                                                                    setChangePhaseForm({ stage: initialStage as BatchStage, notes: initialNotes });
+                                                                    setIsChangePhaseModalOpen(true);
+                                                                }}
+                                                                style={{ width: '100%', textAlign: 'left', padding: '0.75rem 1rem', background: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#2d3748', fontSize: '0.9rem', transition: 'background 0.1s' }}
+                                                                onMouseEnter={e => e.currentTarget.style.background = '#f0fff4'}
+                                                                onMouseLeave={e => e.currentTarget.style.background = 'white'}
+                                                            >
+                                                                <div style={{ background: '#c6f6d5', padding: '0.4rem', borderRadius: '0.375rem', color: '#2f855a', display: 'flex' }}><FaLeaf size={12} /></div>
+                                                                <span>Cambiar Fase de Cultivo</span>
+                                                            </button>
+
                                                             {/* 2. REUBICAR */}
                                                             <button
                                                                 onClick={() => {
                                                                     setIsBulkActionsOpen(false);
-                                                                    // Reset form for fresh bulk move
-                                                                    setTransplantForm({ batchId: '', quantity: 1 });
-                                                                    setIsTransplantModalOpen(true);
+                                                                    // In-Map Relocation Logic
+                                                                    if (selectedBatchIds.size > 0) {
+                                                                        setIsRelocatingSelection(true);
+                                                                    }
                                                                 }}
                                                                 style={{ width: '100%', textAlign: 'left', padding: '0.75rem 1rem', background: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#2d3748', fontSize: '0.9rem', transition: 'background 0.1s' }}
                                                                 onMouseEnter={e => e.currentTarget.style.background = '#ebf8ff'}
                                                                 onMouseLeave={e => e.currentTarget.style.background = 'white'}
                                                             >
                                                                 <div style={{ background: '#bee3f8', padding: '0.4rem', borderRadius: '0.375rem', color: '#3182ce', display: 'flex' }}><FaExchangeAlt size={12} /></div>
-                                                                <span>Reubicar</span>
+                                                                <span>Reubicar en Mapa</span>
                                                             </button>
 
                                                             {/* 3. OBSERVACION */}
@@ -3594,30 +3910,47 @@ const RoomDetail: React.FC = () => {
 
                                         {/* 2. PERSISTENT ACTIONS */}
                                         <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                            {isSelectionMode && (
+                                            {selectedBatchIds.size > 0 && (
                                                 <button
-                                                    onClick={() => handleToggleSelectionMode()}
-                                                    title="Cancelar Selección"
+                                                    onClick={() => {
+                                                        setSelectedBatchIds(new Set());
+                                                        setIsSelectionMode(false);
+                                                    }}
+                                                    title="Deseleccionar todo"
                                                     style={{
-                                                        background: 'white',
-                                                        border: '1px solid #e2e8f0',
+                                                        background: '#e53e3e',
+                                                        color: 'white',
+                                                        border: 'none',
                                                         borderRadius: '0.375rem',
-                                                        padding: '0.5rem',
+                                                        padding: '0.5rem 0.75rem',
+                                                        fontSize: '0.85rem',
                                                         cursor: 'pointer',
-                                                        color: '#718096',
-                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                        transition: 'all 0.2s',
+                                                        display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                                        fontWeight: 600,
+                                                        whiteSpace: 'nowrap'
                                                     }}
                                                 >
-                                                    <FaTimes />
+                                                    <FaTimes /> Deseleccionar ({selectedBatchIds.size})
                                                 </button>
                                             )}
 
                                             <button
                                                 onClick={() => {
                                                     document.body.classList.add('printing-map');
-                                                    window.print();
-                                                    document.body.classList.remove('printing-map');
+
+                                                    // Cleanup after print dialog closes
+                                                    window.onafterprint = () => {
+                                                        document.body.classList.remove('printing-map');
+                                                        window.onafterprint = null; // Clean up listener
+                                                    };
+
+                                                    // Use timeout to ensure class is applied and style is recalculated before print
+                                                    setTimeout(() => {
+                                                        window.print();
+                                                    }, 100);
+
+                                                    // Fallback for browsers that don't block or support onafterprint consistently
+                                                    // (Optional: set a timeout just in case, but onafterprint is better)
                                                 }}
                                                 title="Imprimir Mapa"
                                                 style={{
@@ -3811,31 +4144,95 @@ const RoomDetail: React.FC = () => {
                                                 </div>
                                             );
                                             return (
-                                                <div className="active-map-container">
+                                                <div className="active-map-container" ref={mapContainerRef}>
+
                                                     {/* Print-only title since toolbar is hidden on print */}
                                                     <div className="printable-map-details" style={{ marginBottom: '1rem', textAlign: 'center' }}>
                                                         <h2>{activeMap?.name}</h2>
                                                         <p>{activeMap?.grid_rows} x {activeMap?.grid_columns}</p>
                                                     </div>
 
-                                                    <div className="printable-map-grid">
-                                                        <LivingSoilGrid
-                                                            rows={(() => {
-                                                                const activeMap = cloneMaps.find(m => m.id === activeMapId);
-                                                                return activeMap?.grid_rows || 20;
-                                                            })()}
-                                                            cols={(() => {
-                                                                const activeMap = cloneMaps.find(m => m.id === activeMapId);
-                                                                return activeMap?.grid_columns || 10;
-                                                            })()}
-                                                            batches={livingSoilBatches}
-                                                            mapId={activeMapId || undefined}
-                                                            onBatchClick={handleBatchClick}
-                                                            selectedBatchIds={selectedBatchIds}
-                                                            isSelectionMode={isSelectionMode}
-                                                            onToggleSelectionMode={setIsSelectionMode}
-                                                            onSelectionChange={(newSet) => setSelectedBatchIds(newSet)}
-                                                        />
+                                                    <div className={`printable-map-grid ${room?.type === 'living_soil' ? 'hide-on-map-print' : ''}`}>
+                                                        <div
+                                                            className="print-debug"
+                                                            style={{ display: 'none', color: 'red', fontWeight: 'bold', fontSize: '14px', border: '1px solid red', padding: '5px', marginBottom: '10px' }}
+                                                        >
+                                                            DEBUG INFO:<br />
+                                                            Room Type: {room?.type}<br />
+                                                            Map ID: {activeMapId}<br />
+                                                            Rows: {cloneMaps.find(m => m.id === activeMapId)?.grid_rows}<br />
+                                                            Cols: {cloneMaps.find(m => m.id === activeMapId)?.grid_columns}<br />
+                                                            Batches: {livingSoilBatches.filter(b => b.clone_map_id === activeMapId).length}
+                                                        </div>
+                                                        {isRelocatingSelection && (
+                                                            <div style={{
+                                                                background: '#ebf8ff',
+                                                                border: '2px dashed #4299e1',
+                                                                borderRadius: '0.5rem',
+                                                                padding: '1rem',
+                                                                marginBottom: '1rem',
+                                                                textAlign: 'center',
+                                                                color: '#2b6cb0',
+                                                                fontWeight: 'bold',
+                                                                display: 'flex',
+                                                                justifyContent: 'center',
+                                                                alignItems: 'center',
+                                                                gap: '1rem',
+                                                                boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                                                            }}>
+                                                                <FaExchangeAlt />
+                                                                <span>MODO REUBICACIÓN: Selecciona la nueva posición (celda vacía) para los {selectedBatchIds.size} lotes seleccionados.</span>
+                                                                <button
+                                                                    onClick={() => setIsRelocatingSelection(false)}
+                                                                    style={{
+                                                                        background: 'white',
+                                                                        border: '1px solid #4299e1',
+                                                                        color: '#4299e1',
+                                                                        padding: '0.25rem 0.75rem',
+                                                                        borderRadius: '0.25rem',
+                                                                        cursor: 'pointer',
+                                                                        fontSize: '0.9rem'
+                                                                    }}
+                                                                >
+                                                                    Cancelar
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                        {room?.type === 'living_soil' ? (
+                                                            <LivingSoilGrid
+                                                                rows={(() => {
+                                                                    const activeMap = cloneMaps.find(m => m.id === activeMapId);
+                                                                    return activeMap?.grid_rows || 20;
+                                                                })()}
+                                                                cols={(() => {
+                                                                    const activeMap = cloneMaps.find(m => m.id === activeMapId);
+                                                                    return activeMap?.grid_columns || 10;
+                                                                })()}
+                                                                batches={livingSoilBatches}
+                                                                mapId={activeMapId || undefined}
+                                                                onBatchClick={handleBatchClick}
+                                                                selectedBatchIds={selectedBatchIds}
+                                                                isSelectionMode={isSelectionMode}
+                                                                onToggleSelectionMode={setIsSelectionMode}
+                                                                onSelectionChange={(newSet) => { if (!isRelocatingSelection) setSelectedBatchIds(newSet); }}
+                                                            />
+                                                        ) : (
+                                                            <EsquejeraGrid
+                                                                rows={(() => {
+                                                                    const activeMap = cloneMaps.find(m => m.id === activeMapId);
+                                                                    return activeMap?.grid_rows || 20;
+                                                                })()}
+                                                                cols={(() => {
+                                                                    const activeMap = cloneMaps.find(m => m.id === activeMapId);
+                                                                    return activeMap?.grid_columns || 10;
+                                                                })()}
+                                                                batches={livingSoilBatches.filter(b => b.clone_map_id === activeMapId)}
+                                                                onBatchClick={handleBatchClick}
+                                                                selectedBatchIds={selectedBatchIds}
+                                                                selectionMode={isSelectionMode}
+                                                                onSelectionChange={(newSet) => { if (!isRelocatingSelection) setSelectedBatchIds(newSet); }}
+                                                            />
+                                                        )}
 
                                                         {/* SOWING MODAL */}
                                                         {isSowingModalOpen && (
@@ -3932,13 +4329,20 @@ const RoomDetail: React.FC = () => {
                                 }}>
                                     <div style={{ flexShrink: 0 }}>
                                         <h4 style={{ margin: '0 0 1rem 0', color: '#4a5568', fontSize: '1rem' }}>Lotes Disponibles</h4>
-                                        <ActionButton onClick={() => setIsCreateBatchModalOpen(true)} $variant="success" style={{ width: '100%', marginBottom: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                                        <ActionButton onClick={() => {
+                                            setNewBatch({
+                                                geneticId: '',
+                                                quantity: '',
+                                                date: new Date().toISOString()
+                                            });
+                                            setIsCreateBatchModalOpen(true);
+                                        }} $variant="success" style={{ width: '100%', marginBottom: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
                                             <FaPlus /> Nuevo Lote
                                         </ActionButton>
                                     </div>
                                     <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
                                         {(() => {
-                                            const available = room?.batches?.filter(b => !b.clone_map_id && b.quantity > 0 && b.current_room_id === room.id) || [];
+                                            const available = room?.batches?.filter(b => !b.clone_map_id && b.quantity > 0 && b.current_room_id === room.id && !b.discarded_at) || [];
                                             const grouped = groupBatchesByGeneticDate(available);
                                             if (grouped.length === 0) return <div style={{ fontSize: '0.85rem', color: '#a0aec0', padding: '1rem', textAlign: 'center' }}>No hay lotes en espera.</div>;
                                             return grouped.map(group => (
@@ -4006,7 +4410,7 @@ const RoomDetail: React.FC = () => {
                     /* DRYING ROOM VIEW */
                     <div className="no-print">
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                            {groupBatchesByGeneticDate(room?.batches || []).map(group => {
+                            {groupBatchesByGeneticDate(room?.batches || [], true).map(group => {
                                 const { root, children } = group;
                                 const isExpanded = expandedDryingGroups.has(root.id);
                                 const totalQty = root.quantity + children.reduce((acc: number, c: any) => acc + c.quantity, 0);
@@ -4015,13 +4419,11 @@ const RoomDetail: React.FC = () => {
                                 // Specific display name for the group header
                                 let displayName = groupName;
                                 if (root._virtualGroupName) displayName = root._virtualGroupName;
-                                else if (true) { // Default Smart Naming
+                                else {
                                     const geneticName = root.genetic?.name || root.name || 'Desconocida';
-                                    const prefix = geneticName.substring(0, 6).toUpperCase();
-                                    const dateStr = new Date(root.start_date || root.created_at).toLocaleDateString();
-                                    displayName = `Lote ${prefix} ${dateStr} `;
-                                    // Override if name is simple
-                                    if (root.name && !root.name.includes('Lote')) displayName = `Lote ${root.name} `;
+                                    // Use ID prefix as 6-digit code
+                                    const code = root.id.substring(0, 6).toUpperCase();
+                                    displayName = `Lote ${geneticName} #${code}`;
                                 }
 
                                 return (
@@ -5504,6 +5906,116 @@ const RoomDetail: React.FC = () => {
                 )
             }
 
+            {/* Change Phase Modal (New) */}
+            {
+                isChangePhaseModalOpen && (
+                    <PortalModalOverlay>
+                        <ModalContent style={{ width: '500px', maxWidth: '95%' }}>
+                            {/* Header */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
+                                <div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                        <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#9F7AEA' }}></div> {/* Generic Dot */}
+                                        <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', margin: 0, color: '#2d3748' }}>
+                                            {selectedBatchIds.size === 1
+                                                ? (room?.batches?.find(b => b.id === Array.from(selectedBatchIds)[0])?.name || 'Lote')
+                                                : `${selectedBatchIds.size} Lotes Seleccionados`
+                                            }
+                                        </h2>
+                                    </div>
+                                    {selectedBatchIds.size === 1 && (() => {
+                                        const b = room?.batches?.find(bat => bat.id === Array.from(selectedBatchIds)[0]);
+                                        // Calculate Position Label if possible, or just ignore for now
+                                        // const pos = ... 
+                                        return (
+                                            <div style={{ marginTop: '0.25rem', fontSize: '0.9rem', color: '#718096', display: 'flex', gap: '1rem' }}>
+                                                {/* <span>Posición: <strong>{b?.position}</strong></span> */}
+                                                <span>Código: <strong>{b?.tracking_code || '-'}</strong></span>
+                                            </div>
+                                        )
+                                    })()}
+                                </div>
+                                <button onClick={() => setIsChangePhaseModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.25rem', color: '#a0aec0' }}>✕</button>
+                            </div>
+
+                            {/* Stage Selector */}
+                            <div style={{ marginBottom: '1.5rem' }}>
+                                <label style={{ display: 'block', marginBottom: '0.75rem', fontWeight: 600, color: '#4a5568' }}>Etapa Actual</label>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '0.75rem' }}>
+                                    {[
+                                        { id: 'seedling', label: 'Plántula', icon: <FaSeedling /> },
+                                        { id: 'vegetation', label: 'Vege', icon: <FaLeaf /> }, // Leaf/Cannabis
+                                        { id: 'flowering', label: 'Flora', icon: <FaSpa /> }, // Flower
+                                        { id: 'completed', label: 'Fin', icon: <FaCheck /> }
+                                    ].map(option => (
+                                        <StageButton
+                                            key={option.id}
+                                            onClick={() => setChangePhaseForm({ ...changePhaseForm, stage: option.id as BatchStage })}
+                                            isActive={changePhaseForm.stage === option.id}
+                                        >
+                                            <div style={{ fontSize: '1.25rem' }}>{option.icon}</div>
+                                            {option.label}
+                                        </StageButton>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Notes */}
+                            <div style={{ marginBottom: '2rem' }}>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, color: '#4a5568' }}>Notas / Bitácora</label>
+                                <textarea
+                                    value={changePhaseForm.notes}
+                                    onChange={e => setChangePhaseForm({ ...changePhaseForm, notes: e.target.value })}
+                                    placeholder={selectedBatchIds.size > 1 ? "Escribe una nota para aplicar a todos..." : "Registrar eventos, altura, poda..."}
+                                    style={{ width: '100%', minHeight: '100px', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0', resize: 'vertical' }}
+                                />
+                                <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: '#a0aec0', fontStyle: 'italic' }}>
+                                    (Elimina esta nota por completo para desactivar la alerta de observación)
+                                </div>
+                            </div>
+
+                            {/* Footer */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '1rem', borderTop: '1px solid #edf2f7' }}>
+                                {/* Delete Button (Left aligned) */}
+                                {/* Delete Button (Left aligned) */}
+                                <ModalActionButton
+                                    variant="danger"
+                                    onClick={() => {
+                                        setIsChangePhaseModalOpen(false);
+                                        // Trigger existing delete flow
+                                        if (selectedBatchIds.size === 1) {
+                                            const b = room?.batches?.find(bat => bat.id === Array.from(selectedBatchIds)[0]);
+                                            if (b) {
+                                                setDeleteConfirm({ isOpen: true, batch: b });
+                                            }
+                                        } else {
+                                            handleBulkDeleteFirstStep();
+                                        }
+                                    }}
+                                >
+                                    <FaTrash size={12} /> Eliminar
+                                </ModalActionButton>
+
+                                {/* Action Buttons (Right aligned) */}
+                                <div style={{ display: 'flex', gap: '1rem' }}>
+                                    <ModalActionButton
+                                        variant="primary"
+                                        onClick={handleChangePhaseSubmit}
+                                        disabled={isUpdatingMap}
+                                    >
+                                        {isUpdatingMap ? (
+                                            <>
+                                                <ButtonSpinner /> Guardando...
+                                            </>
+                                        ) : 'Guardar y Cerrar'}
+                                    </ModalActionButton>
+                                </div>
+                            </div>
+                        </ModalContent>
+                    </PortalModalOverlay>
+                )
+            }
+
             {/* History Modal */}
             {
                 (isHistoryModalOpen || isClosingHistory) && (
@@ -6164,7 +6676,10 @@ const RoomDetail: React.FC = () => {
                                     selected={newBatch.date ? new Date(newBatch.date) : new Date()}
                                     onChange={(date) => {
                                         if (date) {
-                                            setNewBatch({ ...newBatch, date: format(date, 'yyyy-MM-dd') });
+                                            const now = new Date();
+                                            // Preserve current time
+                                            date.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
+                                            setNewBatch({ ...newBatch, date: date.toISOString() });
                                         }
                                     }}
                                 />
@@ -6208,10 +6723,11 @@ const RoomDetail: React.FC = () => {
                 currentStage={undefined}
                 count={selectedBatchIds.size}
             />
-            {/* PRINTABLE REPORT SECTION (VISIBLE ONLY ON PRINT) */}
-            <div className="printable-report">
-                <style>
-                    {`
+            {/* PRINTABLE REPORT SECTION (VISIBLE ONLY ON PRINT, HIDDEN IF PRINTING MAP) */}
+            {!isPrintingMap && (
+                <div className="printable-report">
+                    <style>
+                        {`
 @media print {
                         .printable-report table { page -break-inside: auto; }
                         .printable-report tr { page -break-inside: avoid; page -break-after: auto; }
@@ -6219,61 +6735,62 @@ const RoomDetail: React.FC = () => {
                         .printable-report tfoot { display: table-footer-group; }
 }
 `}
-                </style>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '2px solid #000', paddingBottom: '0.5rem' }}>
-                    <h2 style={{ margin: 0 }}>Reporte: {room?.name}</h2>
-                    <div><strong>Fecha:</strong> {new Date().toLocaleDateString()}</div>
+                    </style>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '2px solid #000', paddingBottom: '0.5rem' }}>
+                        <h2 style={{ margin: 0 }}>Reporte: {room?.name}</h2>
+                        <div><strong>Fecha:</strong> {new Date().toLocaleDateString()}</div>
+                    </div>
+
+
+
+                    {/* DATA GRID */}
+                    <div>
+                        <h3 style={{ fontSize: '1rem', borderBottom: '1px solid #000', paddingBottom: '0.25rem', marginTop: 0 }}>Detalle de Lotes Activos</h3>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9pt' }}>
+                            <thead>
+                                <tr style={{ background: '#f0f0f0', borderBottom: '1px solid #000' }}>
+                                    <th style={{ padding: '4px', textAlign: 'left', border: '1px solid #ccc' }}>Pos</th>
+                                    <th style={{ padding: '4px', textAlign: 'left', border: '1px solid #ccc' }}>Genética / Lote</th>
+                                    <th style={{ padding: '4px', textAlign: 'center', border: '1px solid #ccc' }}>Cant.</th>
+                                    <th style={{ padding: '4px', textAlign: 'center', border: '1px solid #ccc' }}>Fase</th>
+                                    <th style={{ padding: '4px', textAlign: 'center', border: '1px solid #ccc' }}>Estado</th>
+                                    <th style={{ padding: '4px', textAlign: 'left', border: '1px solid #ccc' }}>Notas / Observaciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {(room?.batches || [])
+                                    .filter(b => b.quantity > 0 && (!activeMapId || b.clone_map_id === activeMapId))
+                                    .sort((a, b) => {
+                                        const posA = a.grid_position || "";
+                                        const posB = b.grid_position || "";
+                                        return posA.localeCompare(posB, undefined, { numeric: true, sensitivity: 'base' });
+                                    })
+                                    .map((b, idx) => (
+                                        <tr key={b.id} style={{ borderBottom: '1px solid #eee', background: idx % 2 === 0 ? 'white' : '#f9f9f9' }}>
+                                            <td style={{ padding: '4px', border: '1px solid #ccc', fontWeight: 'bold' }}>{b.grid_position}</td>
+                                            <td style={{ padding: '4px', border: '1px solid #ccc' }}>
+                                                <div style={{ fontWeight: '600' }}>{b.genetic?.name || b.name}</div>
+                                                {b.tracking_code && <div style={{ fontSize: '0.85em', color: '#666' }}>{b.tracking_code}</div>}
+                                            </td>
+                                            <td style={{ padding: '4px', textAlign: 'center', border: '1px solid #ccc' }}>
+                                                {b.quantity}
+                                            </td>
+                                            <td style={{ padding: '4px', textAlign: 'center', border: '1px solid #ccc' }}>
+                                                {b.stage === 'vegetation' ? 'VEG' : 'FLOR'}
+                                            </td>
+                                            <td style={{ padding: '4px', textAlign: 'center', border: '1px solid #ccc' }}>
+                                                {b.has_alert ? '⚠️' : 'OK'}
+                                            </td>
+                                            <td style={{ padding: '4px', border: '1px solid #ccc', maxWidth: '300px', wordWrap: 'break-word' }}>
+                                                {b.notes || ''}
+                                            </td>
+                                        </tr>
+                                    ))}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-
-
-
-                {/* DATA GRID */}
-                <div>
-                    <h3 style={{ fontSize: '1rem', borderBottom: '1px solid #000', paddingBottom: '0.25rem', marginTop: 0 }}>Detalle de Lotes Activos</h3>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9pt' }}>
-                        <thead>
-                            <tr style={{ background: '#f0f0f0', borderBottom: '1px solid #000' }}>
-                                <th style={{ padding: '4px', textAlign: 'left', border: '1px solid #ccc' }}>Pos</th>
-                                <th style={{ padding: '4px', textAlign: 'left', border: '1px solid #ccc' }}>Genética / Lote</th>
-                                <th style={{ padding: '4px', textAlign: 'center', border: '1px solid #ccc' }}>Cant.</th>
-                                <th style={{ padding: '4px', textAlign: 'center', border: '1px solid #ccc' }}>Fase</th>
-                                <th style={{ padding: '4px', textAlign: 'center', border: '1px solid #ccc' }}>Estado</th>
-                                <th style={{ padding: '4px', textAlign: 'left', border: '1px solid #ccc' }}>Notas / Observaciones</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {(room?.batches || [])
-                                .filter(b => b.quantity > 0 && (!activeMapId || b.clone_map_id === activeMapId))
-                                .sort((a, b) => {
-                                    const posA = a.grid_position || "";
-                                    const posB = b.grid_position || "";
-                                    return posA.localeCompare(posB, undefined, { numeric: true, sensitivity: 'base' });
-                                })
-                                .map((b, idx) => (
-                                    <tr key={b.id} style={{ borderBottom: '1px solid #eee', background: idx % 2 === 0 ? 'white' : '#f9f9f9' }}>
-                                        <td style={{ padding: '4px', border: '1px solid #ccc', fontWeight: 'bold' }}>{b.grid_position}</td>
-                                        <td style={{ padding: '4px', border: '1px solid #ccc' }}>
-                                            <div style={{ fontWeight: '600' }}>{b.genetic?.name || b.name}</div>
-                                            {b.tracking_code && <div style={{ fontSize: '0.85em', color: '#666' }}>{b.tracking_code}</div>}
-                                        </td>
-                                        <td style={{ padding: '4px', textAlign: 'center', border: '1px solid #ccc' }}>
-                                            {b.quantity}
-                                        </td>
-                                        <td style={{ padding: '4px', textAlign: 'center', border: '1px solid #ccc' }}>
-                                            {b.stage === 'vegetation' ? 'VEG' : 'FLOR'}
-                                        </td>
-                                        <td style={{ padding: '4px', textAlign: 'center', border: '1px solid #ccc' }}>
-                                            {b.has_alert ? '⚠️' : 'OK'}
-                                        </td>
-                                        <td style={{ padding: '4px', border: '1px solid #ccc', maxWidth: '300px', wordWrap: 'break-word' }}>
-                                            {b.notes || ''}
-                                        </td>
-                                    </tr>
-                                ))}
-                        </tbody>
-                    </table>
-                </div>
-            </div >
+            )}
 
         </Container >
     );

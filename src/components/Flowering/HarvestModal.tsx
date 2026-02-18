@@ -158,10 +158,12 @@ export const HarvestModal: React.FC<HarvestModalProps> = ({ isOpen, isClosing, o
     // Prepare Options for CustomSelect
     const roomOptions = useMemo(() => {
         return [
-            { value: "", label: "-- Mantener en sala actual (Solo cambiar estado) --" },
-            ...dryingRooms.map(r => ({ value: r.id, label: `${r.name} (Capacidad: ${r.capacity})` }))
+            { value: "", label: "Seleccione Sala de Secado de destino" },
+            ...dryingRooms.map(r => ({ value: r.id, label: r.name }))
         ];
     }, [dryingRooms]);
+
+
 
     // Group batches by Lote (Parent Batch) -> Genetic
     const groupedBatches = useMemo(() => {
@@ -341,7 +343,7 @@ export const HarvestModal: React.FC<HarvestModalProps> = ({ isOpen, isClosing, o
                     <Button $variant="secondary" onClick={onClose} disabled={loading}>
                         Cancelar
                     </Button>
-                    <Button $variant="primary" onClick={handleConfirm} disabled={loading || selectedIds.size === 0}>
+                    <Button $variant="primary" onClick={handleConfirm} disabled={loading || selectedIds.size === 0 || !targetRoomId}>
                         {loading ? 'Procesando...' : `Confirmar Cosecha (${selectedIds.size})`}
                     </Button>
                 </Footer>

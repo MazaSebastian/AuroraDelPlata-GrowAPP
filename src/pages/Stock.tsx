@@ -524,14 +524,11 @@ const Stock: React.FC = () => {
       const strainName = (deleteData.batch as any).strain_name;
       const targetBatches = aggregatedStock.find(item => item.strain === strainName)?.batches || [];
 
-      let successCount = 0;
-      for (const batch of targetBatches) {
-        const ok = await dispensaryService.deleteBatchWithReason(batch.id, `Eliminación Masiva: ${deleteData.reason}`);
-        if (ok) successCount++;
-      }
+      const batchIds = targetBatches.map(b => b.id);
+      const success = await dispensaryService.deleteBatchesWithReason(batchIds, deleteData.reason);
 
-      if (successCount > 0) {
-        showToast(`Se eliminaron ${successCount} lotes de ${strainName}.`, 'success');
+      if (success) {
+        showToast(`Se eliminaron todos los lotes de ${strainName}.`, 'success');
         loadData();
         setIsDeleteOpen(false);
         setDeleteData(null);

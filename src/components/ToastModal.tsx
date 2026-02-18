@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import styled, { keyframes, css } from 'styled-components';
 import { FaCheckCircle, FaExclamationCircle, FaInfoCircle } from 'react-icons/fa';
 
@@ -126,7 +127,7 @@ export const ToastModal: React.FC<ToastModalProps> = ({
 
   if (!isOpen && !isClosing) return null;
 
-  return (
+  return createPortal(
     <Overlay onClick={handleClose} $animate={animateOverlay} $isClosing={isClosing}>
       <Content onClick={e => e.stopPropagation()} $isClosing={isClosing}>
         <IconWrapper type={type}>
@@ -139,7 +140,8 @@ export const ToastModal: React.FC<ToastModalProps> = ({
           Aceptar
         </Button>
       </Content>
-    </Overlay>
+    </Overlay>,
+    document.body
   );
 };
 
